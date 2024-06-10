@@ -1,17 +1,29 @@
+
+
 #include <Servo.h>
 #include <AccelStepper.h>
 #include <MultiStepper.h>
 
 AccelStepper stepper1(AccelStepper::FULL4WIRE, 2, 4, 3, 5);
-AccelStepper stepper2(AccelStepper::FULL4WIRE, 6, 8, 7, 9);
+AccelStepper stepper2(AccelStepper::FULL4WIRE, 17, 19, 18, 22);
 MultiStepper steppers;
 
+
+
+#define X_Limit 9
+#define Y_Limit 14
+#define LED 28
+
+
+
 #define LINE_BUFFER_LENGTH 1024
+
+
 
 const int penZUp = 40;
 const int penZDown = 80;
 
-const int penServoPin = 15;
+const int penServoPin = 16;
 
 const int stepsPerRevolution = 2048;
 
@@ -28,15 +40,15 @@ struct point actuatorPos;
 float StepInc = 1;
 int StepDelay = 0;
 int LineDelay = 10;
-int penDelay = 50;
+int penDelay = 10;
 
-float StepsPerMillimeterX = 18.6;
-float StepsPerMillimeterY = 18.6;
+float StepsPerMillimeterX = 21.55;
+float StepsPerMillimeterY = 21.55;
 
 float Xmin = 0;
-float Xmax = 150;
+float Xmax = 210;
 float Ymin = 0;
-float Ymax = 150;
+float Ymax = 300;
 float Zmin = 0;
 float Zmax = 1;
 
@@ -45,10 +57,14 @@ float Ypos = Ymin;
 float Zpos = Zmax;
 
 boolean verbose = true;
-long positions[2]; // Array of desired stepper positions
+long positions[2];
 
 void setup() {
   Serial.begin(115200);
+
+  pinMode(X_Limit, INPUT_PULLUP);
+  pinMode(Y_Limit, INPUT_PULLUP);
+  pinMode(LED, OUTPUT);
 
   // Configure each stepper
   stepper1.setMaxSpeed(300);
@@ -60,11 +76,13 @@ void setup() {
   steppers.addStepper(stepper1);
   steppers.addStepper(stepper2);
 
+
+
   penServo.attach(penServoPin);
   penServo.write(penZUp);
   delay(100);
 
-  Serial.println(" Fab Plotter alive and kicking!");
+  Serial.println(" Fab Plotter is Ready");
   Serial.print("X range is from ");
   Serial.print(Xmin);
   Serial.print(" to ");
@@ -75,9 +93,23 @@ void setup() {
   Serial.print(" to ");
   Serial.print(Ymax);
   Serial.println(" mm.");
+
+
+  // positions[0] = Xmax * StepsPerMillimeterX;
+  // positions[1] = Ymax * StepsPerMillimeterY;
+  // steppers.moveTo(positions);
+
+
+  home();
 }
 
 void loop() {
+
+  processCommands();
+}
+
+void processCommands() {
+
   delay(200);
   char line[LINE_BUFFER_LENGTH];
   char c;
@@ -104,7 +136,7 @@ void loop() {
         }
         lineIsComment = false;
         lineSemiColon = false;
-        Serial.println("ok");
+        Serial.println("OK");
       } else {
         if ((lineIsComment) || (lineSemiColon)) {
           if (c == ')')
@@ -139,14 +171,12 @@ void processIncomingLine(char *line, int charNB) {
   newPos.x = 0.0;
   newPos.y = 0.0;
 
+
+  char *indexX;
+  char *indexY;
+
   while (currentIndex < charNB) {
     switch (line[currentIndex++]) {
-      case 'U':
-        penUp();
-        break;
-      case 'D':
-        penDown();
-        break;
       case 'G':
         buffer[0] = line[currentIndex++];
         buffer[1] = line[currentIndex++];
@@ -155,8 +185,8 @@ void processIncomingLine(char *line, int charNB) {
         switch (atoi(buffer)) {
           case 00:
           case 01:
-            char *indexX = strchr(line + currentIndex++, 'X');
-            char *indexY = strchr(line + currentIndex++, 'Y');
+            indexX = strchr(line + currentIndex++, 'X');
+            indexY = strchr(line + currentIndex++, 'Y');
             if (indexY <= 0) {
               newPos.x = atof(indexX + 1);
               newPos.y = actuatorPos.y;
@@ -172,12 +202,15 @@ void processIncomingLine(char *line, int charNB) {
             actuatorPos.x = newPos.x;
             actuatorPos.y = newPos.y;
             break;
+
+          case 28:
+            home();
+            break;
         }
         break;
       case 'M':
         buffer[0] = line[currentIndex++];
         buffer[1] = line[currentIndex++];
-        //buffer[2] = line[currentIndex++];
         buffer[2] = '\0';
         switch (atoi(buffer)) {
           case 03:
@@ -192,12 +225,7 @@ void processIncomingLine(char *line, int charNB) {
               }
               break;
             }
-          case 114:
-            Serial.print("Absolute position : X = ");
-            Serial.print(actuatorPos.x);
-            Serial.print("  -  Y = ");
-            Serial.println(actuatorPos.y);
-            break;
+
           default:
             Serial.print("Command not recognized : M");
             Serial.println(buffer);
@@ -207,14 +235,6 @@ void processIncomingLine(char *line, int charNB) {
 }
 
 void drawLine(float x1, float y1) {
-  if (verbose) {
-    Serial.print("fx1, fy1: ");
-    Serial.print(x1);
-    Serial.print(",");
-    Serial.print(y1);
-    Serial.println("");
-  }
-
   if (x1 >= Xmax) {
     x1 = Xmax;
   }
@@ -228,26 +248,12 @@ void drawLine(float x1, float y1) {
     y1 = Ymin;
   }
 
-  if (verbose) {
-    Serial.print("Xpos, Ypos: ");
-    Serial.print(Xpos);
-    Serial.print(",");
-    Serial.print(Ypos);
-    Serial.println("");
-  }
-
-  if (verbose) {
-    Serial.print("x1, y1: ");
-    Serial.print(x1);
-    Serial.print(",");
-    Serial.print(y1);
-    Serial.println("");
-  }
-
   x1 = (int)(x1 * StepsPerMillimeterX);
   y1 = (int)(y1 * StepsPerMillimeterY);
 
   mov(x1, y1);
+
+
 
   float x0 = Xpos;
   float y0 = Ypos;
@@ -278,22 +284,6 @@ void drawLine(float x1, float y1) {
     }
   }
 
-  if (verbose) {
-    Serial.print("dx, dy:");
-    Serial.print(dx);
-    Serial.print(",");
-    Serial.print(dy);
-    Serial.println("");
-  }
-
-  if (verbose) {
-    Serial.print("Going to (");
-    Serial.print(x0);
-    Serial.print(",");
-    Serial.print(y0);
-    Serial.println(")");
-  }
-
   delay(LineDelay);
 
   Xpos = x1;
@@ -319,8 +309,45 @@ void penDown() {
 }
 
 void mov(long x, long y) {
-  positions[0] = x + y;
-  positions[1] = x - y;
+  positions[0] = -(x + y);
+  positions[1] = -(x - y);
   steppers.moveTo(positions);
   steppers.runSpeedToPosition();
+}
+
+// void homingRoutine() {
+
+//   mov(Xmax, Ymax);
+//   mov(HOME_X, HOME_Y);
+
+//   Serial.println("Homing complete !");
+// }
+
+
+void home() {
+
+  positions[1] = Xmax * StepsPerMillimeterX;
+  positions[0] = Xmax * StepsPerMillimeterX;
+  steppers.moveTo(positions);
+
+
+  while (!digitalRead(X_Limit)) {
+    //digitalWrite(LED, HIGH);
+    steppers.run();
+  }
+
+
+  positions[0] = Ymax * StepsPerMillimeterY;
+  positions[1] = -(Ymax * StepsPerMillimeterY);
+  steppers.moveTo(positions);
+
+
+  while (!digitalRead(Y_Limit)) {
+    //digitalWrite(LED, HIGH);
+    steppers.run();
+  }
+
+
+  positions[0] = 0;
+  positions[1] = 0;
 }

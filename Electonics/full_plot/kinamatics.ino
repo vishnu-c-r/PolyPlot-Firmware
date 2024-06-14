@@ -1,8 +1,8 @@
 #include "kinamatics.h"
 #include <Arduino.h>
 
-AccelStepper stepper1(AccelStepper::FULL4WIRE, 2, 4, 3, 5);
-AccelStepper stepper2(AccelStepper::FULL4WIRE, 17, 19, 18, 22);
+AccelStepper stepper1(AccelStepper::FULL4WIRE, 5, 4, 3, 2);
+AccelStepper stepper2(AccelStepper::FULL4WIRE, 22, 19, 18,17);
 MultiStepper steppers;
 
 void setupMovement() {
@@ -79,6 +79,16 @@ void mov(long x, long y) {
 }
 
 void home() {
+  hs = 1;
+   int sensorValue = analogRead(analogPin);
+  
+
+  
+  // Print to the Serial Monitor
+  Serial.print("sensor input: ");
+  Serial.print(sensorValue);
+  Serial.println(" units");
+
     positions[1] = Xmax * StepsPerMillimeterX;
     positions[0] = Xmax * StepsPerMillimeterX;
     steppers.moveTo(positions);
@@ -96,6 +106,7 @@ void home() {
         //digitalWrite(LED, HIGH);
         steppers.run();
     }
+    hs = 0;
 
     positions[0] = 0;
     positions[1] = 0;

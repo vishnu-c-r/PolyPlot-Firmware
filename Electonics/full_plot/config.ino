@@ -3,7 +3,8 @@
 const int penZUp = 40;
 const int penZDown = 80;
 const int penServoPin = 16;
-
+const int analogPin = A0;
+boolean hs = 0;
 const int stepsPerRevolution = 2048;
 
 Servo penServo;

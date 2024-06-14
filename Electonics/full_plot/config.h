@@ -17,7 +17,7 @@
 extern const int penZUp;
 extern const int penZDown;
 extern const int penServoPin;
-
+extern const int analogPin;
 extern const int stepsPerRevolution;
 
 extern Servo penServo;
@@ -52,5 +52,5 @@ extern float Zpos;
 
 extern boolean verbose;
 extern long positions[2];
-
+extern boolean hs;
 #endif // CONFIG_H

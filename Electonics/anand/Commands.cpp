@@ -1,15 +1,7 @@
+#include "Commands.h"
+#include "Plotter.h"
 
-
-
-boolean verbose = true;
-
-long positions[2]; // Array of desired stepper positions
-
-void setup() {
-  
-}
-
-void loop() {
+void processCommands() {
   delay(200);
   char line[LINE_BUFFER_LENGTH];
   char c;
@@ -36,7 +28,7 @@ void loop() {
         }
         lineIsComment = false;
         lineSemiColon = false;
-        Serial.println("ok");
+        Serial.println("OK");
       } else {
         if ((lineIsComment) || (lineSemiColon)) {
           if (c == ')')
@@ -71,14 +63,11 @@ void processIncomingLine(char *line, int charNB) {
   newPos.x = 0.0;
   newPos.y = 0.0;
 
+  char *indexX;
+  char *indexY;
+
   while (currentIndex < charNB) {
     switch (line[currentIndex++]) {
-      case 'U':
-        penUp();
-        break;
-      case 'D':
-        penDown();
-        break;
       case 'G':
         buffer[0] = line[currentIndex++];
         buffer[1] = line[currentIndex++];
@@ -87,8 +76,8 @@ void processIncomingLine(char *line, int charNB) {
         switch (atoi(buffer)) {
           case 00:
           case 01:
-            char *indexX = strchr(line + currentIndex++, 'X');
-            char *indexY = strchr(line + currentIndex++, 'Y');
+            indexX = strchr(line + currentIndex++, 'X');
+            indexY = strchr(line + currentIndex++, 'Y');
             if (indexY <= 0) {
               newPos.x = atof(indexX + 1);
               newPos.y = actuatorPos.y;
@@ -104,12 +93,15 @@ void processIncomingLine(char *line, int charNB) {
             actuatorPos.x = newPos.x;
             actuatorPos.y = newPos.y;
             break;
+
+          case 28:
+            home();
+            break;
         }
         break;
       case 'M':
         buffer[0] = line[currentIndex++];
         buffer[1] = line[currentIndex++];
-        //buffer[2] = line[currentIndex++];
         buffer[2] = '\0';
         switch (atoi(buffer)) {
           case 03:
@@ -124,135 +116,11 @@ void processIncomingLine(char *line, int charNB) {
               }
               break;
             }
-          case 114:
-            Serial.print("Absolute position : X = ");
-            Serial.print(actuatorPos.x);
-            Serial.print("  -  Y = ");
-            Serial.println(actuatorPos.y);
-            break;
+
           default:
             Serial.print("Command not recognized : M");
             Serial.println(buffer);
         }
     }
   }
-}
-
-void drawLine(float x1, float y1) {
-  if (verbose) {
-    Serial.print("fx1, fy1: ");
-    Serial.print(x1);
-    Serial.print(",");
-    Serial.print(y1);
-    Serial.println("");
-  }
-
-  if (x1 >= Xmax) {
-    x1 = Xmax;
-  }
-  if (x1 <= Xmin) {
-    x1 = Xmin;
-  }
-  if (y1 >= Ymax) {
-    y1 = Ymax;
-  }
-  if (y1 <= Ymin) {
-    y1 = Ymin;
-  }
-
-  if (verbose) {
-    Serial.print("Xpos, Ypos: ");
-    Serial.print(Xpos);
-    Serial.print(",");
-    Serial.print(Ypos);
-    Serial.println("");
-  }
-
-  if (verbose) {
-    Serial.print("x1, y1: ");
-    Serial.print(x1);
-    Serial.print(",");
-    Serial.print(y1);
-    Serial.println("");
-  }
-
-  x1 = (int)(x1 * StepsPerMillimeterX);
-  y1 = (int)(y1 * StepsPerMillimeterY);
-
-  mov(x1, y1);
-
-  float x0 = Xpos;
-  float y0 = Ypos;
-
-  long dx = abs(x1 - x0);
-  long dy = abs(y1 - y0);
-  int sx = x0 < x1 ? StepInc : -StepInc;
-  int sy = y0 < y1 ? StepInc : -StepInc;
-
-  long i;
-  long over = 0;
-
-  if (dx > dy) {
-    for (i = 0; i < dx; ++i) {
-      over += dy;
-      if (over >= dx) {
-        over -= dx;
-      }
-      delay(StepDelay);
-    }
-  } else {
-    for (i = 0; i < dy; ++i) {
-      over += dx;
-      if (over >= dy) {
-        over -= dy;
-      }
-      delay(StepDelay);
-    }
-  }
-
-  if (verbose) {
-    Serial.print("dx, dy:");
-    Serial.print(dx);
-    Serial.print(",");
-    Serial.print(dy);
-    Serial.println("");
-  }
-
-  if (verbose) {
-    Serial.print("Going to (");
-    Serial.print(x0);
-    Serial.print(",");
-    Serial.print(y0);
-    Serial.println(")");
-  }
-
-  delay(LineDelay);
-
-  Xpos = x1;
-  Ypos = y1;
-}
-
-void penUp() {
-  penServo.write(penZUp);
-  delay(LineDelay);
-  Zpos = Zmax;
-  if (verbose) {
-    Serial.println("Pen up!");
-  }
-}
-
-void penDown() {
-  penServo.write(penZDown);
-  delay(LineDelay);
-  Zpos = Zmin;
-  if (verbose) {
-    Serial.println("Pen down.");
-  }
-}
-
-void mov(long x, long y) {
-  positions[0] = x + y;
-  positions[1] = x - y;
-  steppers.moveTo(positions);
-  steppers.runSpeedToPosition();
 }

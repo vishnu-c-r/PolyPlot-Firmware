@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "Electonics",
+			"path": "."
+		},
+		{
+			"name": "mini-plotter",
+			"path": "Mini_Plotter/mini-plotter"
+		}
+	],
+	"settings": {}
+}

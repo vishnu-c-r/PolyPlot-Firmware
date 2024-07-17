@@ -42,7 +42,7 @@ void setup() {
   Serial.println("Ready to receive commands.");
 
   // Home the stepper motor at startup
-  // homeStepper();
+ homeStepper();
 }
 
 void loop() {
@@ -94,14 +94,12 @@ void loop() {
 
 void homeStepper() {
   stepper.setSpeed(400);  // Set speed in the positive direction
-  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH) {
+  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH)
     stepper.runSpeed();  // Move stepper motor towards home position
-  }
   stepper.stop();
   stepper.setSpeed(-400);
-  while (digitalRead(LIMIT_SWITCH_PIN) == LOW) {
+  while (digitalRead(LIMIT_SWITCH_PIN) == LOW)
     stepper.runSpeed();
-  }
   stepper.stop();
   stepper.setCurrentPosition(0);  // Set the current position as home
   currentPosition = 0;

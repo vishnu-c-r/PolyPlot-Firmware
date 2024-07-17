@@ -9,7 +9,7 @@
 #define LIMIT_SWITCH_PIN 5
 #define LED_PIN 4
 
-#define GEAR_REDUCTION 5  // Gear reduction ratio
+#define GEAR_RATIO 5  // Gear reduction ratio
 
 bool isAtHome = false;
 int calibrationCounter = 0;
@@ -31,7 +31,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   // Initialize UART communication
-  // Serial.swap(1);
+  Serial.swap(1);
   Serial.begin(9600);
 
   // Set the maximum speed and acceleration for the stepper motor
@@ -51,7 +51,8 @@ void loop() {
     // Read the incoming data
     char incomingChar = Serial.read();
     receivedData += incomingChar;
-
+    Serial.print("Received data: ");
+    Serial.println(receivedData);
     // Check if the incoming data ends with a newline character (indicating the end of a command)
     if (incomingChar == '\n') {
       receivedData.trim();  // Remove any leading or trailing whitespace
@@ -59,74 +60,31 @@ void loop() {
       // Convert to uppercase for easier comparison
       receivedData.toUpperCase();
 
-      if (receivedData == "M03S1") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(1));
-      } else if (receivedData == "M03S2") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(2));
-      } else if (receivedData == "M03S3") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(3));
-      } else if (receivedData == "M03S4") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(4));
-      } else if (receivedData == "M03S5") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(5));
-      } else if (receivedData == "M03S6") {
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(6));
-      } else if (receivedData == "M03S7") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(7));
-      } else if (receivedData == "M03S8") {
-
-        calibrationCounter++;
-        if (calibrationCounter >= calibrationThreshold) {
-          homeStepper();  // Recalibrate the stepper motor
-          calibrationCounter = 0;
-        }
-        moveToPosition(getPenPosition(8));
-      } else if (receivedData == "M28") {
-        homeStepper();  // Run the homing sequence
-      } else {
-        Serial.println("Unknown command");
+      calibrationCounter++;
+      if (calibrationCounter >= calibrationThreshold) {
+        homeStepper();  // Recalibrate the stepper motor
+        calibrationCounter = 0;
       }
+      if (receivedData == "M03S1")
+        moveToPosition(getPenPosition(1));
+      else if (receivedData == "M03S2")
+        moveToPosition(getPenPosition(2));
+      else if (receivedData == "M03S3")
+        moveToPosition(getPenPosition(3));
+      else if (receivedData == "M03S4")
+        moveToPosition(getPenPosition(4));
+      else if (receivedData == "M03S5")
+        moveToPosition(getPenPosition(5));
+      else if (receivedData == "M03S6")
+        moveToPosition(getPenPosition(6));
+      else if (receivedData == "M03S7")
+        moveToPosition(getPenPosition(7));
+      else if (receivedData == "M03S8")
+        moveToPosition(getPenPosition(8));
+      else if (receivedData == "M28")
+        homeStepper();  // Run the homing sequence
+      else
+        Serial.println("Unknown command");
 
       // Clear the received data for the next command
       receivedData = "";
@@ -159,5 +117,5 @@ void moveToPosition(int position) {
 }
 
 int getPenPosition(int penNumber) {
-  return (penNumber - 1) * (stepsPerRevolution / positions) * GEAR_REDUCTION;
+  return (penNumber - 1) * (stepsPerRevolution / positions) * GEAR_RATIO;
 }

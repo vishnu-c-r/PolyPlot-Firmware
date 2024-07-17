@@ -245,6 +245,11 @@ namespace WebUI {
         String path        = "/index.html";
         String contentType = getContentType(path);
         String pathWithGz  = path + ".gz";
+
+        _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+        _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        
         //if have a index.html or gzip version this is default root page
         if ((SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) && !_webserver->hasArg("forcefallback") &&
             _webserver->arg("forcefallback") != "yes") {

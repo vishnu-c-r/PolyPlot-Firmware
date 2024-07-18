@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "grbl32_stripped",
+			"path": "../../.."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"new": "cpp"
+		}
+	}
+}

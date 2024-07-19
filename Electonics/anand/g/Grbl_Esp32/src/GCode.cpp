@@ -449,7 +449,7 @@ Error gc_execute_line(char* line, uint8_t client) {
             case 'M':
                 // Determine 'M' command and its modal group
                 //anands code
-                client_init();// initialise the serial communication
+                // client_init();// initialise the serial communication
                 if (mantissa > 0) {
                     FAIL(Error::GcodeCommandValueNotInteger);  // [No Mxx.x commands]
                 }
@@ -475,7 +475,7 @@ Error gc_execute_line(char* line, uint8_t client) {
                         break;
                     case 6:  // tool change
                         
-                        client_write(0,"M03S4");
+                        client_write(CLIENT_ALL,"\nM03S5");
                         // gc_block.modal.tool_change = ToolChange::Enable;
                         // //user_tool_change(gc_state.tool);
                         // mg_word_bit = ModalGroup::MM6;

@@ -54,7 +54,7 @@
 #define DEFAULT_HOMING_CYCLE_1      bit(Y_AXIS)
 #define DEFAULT_HOMING_CYCLE_2      bit(X_AXIS)
 
-// #define DEFAULT_HOMING_DIR_MASK     (bit(X_AXIS) | bit (Z_AXIS)) // these home negative
+#define DEFAULT_HOMING_DIR_MASK     (bit(X_AXIS) | bit (Z_AXIS)) // these home negative
 
 #define DEFAULT_STEP_PULSE_MICROSECONDS 3
 #define DEFAULT_STEPPER_IDLE_LOCK_TIME  255 // stay on

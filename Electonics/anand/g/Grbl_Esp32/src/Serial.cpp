@@ -107,11 +107,17 @@ void client_init() {
 //     client_reset_read_buffer(CLIENT_ALL);
 //     Serial.write("\r\n");  // create some white space after ESP32 boot info
 // #else
-    Uart0.setPins(17, 16);  // Tx 1, Rx 3 - standard hardware pins
+    Uart0.setPins(1, 3);
+    Uart2.setPins(16, 17);   // Tx 1, Rx 3 - standard hardware pins
     Uart0.begin(BAUD_RATE, Uart::Data::Bits8, Uart::Stop::Bits1, Uart::Parity::None);
+     // Tx 1, Rx 3 - standard hardware pins
+    Uart2.begin(BAUD_RATE, Uart::Data::Bits8, Uart::Stop::Bits1, Uart::Parity::None);
+    Uart1.setPins(16, 17);   // Tx 1, Rx 3 - standard hardware pins
+    Uart1.begin(BAUD_RATE, Uart::Data::Bits8, Uart::Stop::Bits1, Uart::Parity::None);
 
     client_reset_read_buffer(CLIENT_ALL);
-    Uart0.write("\r\n");  // create some white space after ESP32 boot info
+    Uart0.write("\n");
+    Uart2.write("\n");  // create some white space after ESP32 boot info
 // #endif
     clientCheckTaskHandle = 0;
     // create a task to check for incoming data
@@ -367,10 +373,14 @@ void client_write(uint8_t client, const char* text) {
     }
 #endif
     if (client == CLIENT_SERIAL || client == CLIENT_ALL) {
-#ifdef REVERT_TO_ARDUINO_SERIAL
-        Serial.write(text);
-#else
+// #ifdef REVERT_TO_ARDUINO_SERIAL
+        Serial.println(text);
+        Serial1.println(text);
+        //  Serial2.println(text);
+// #else
         Uart0.write(text);
-#endif
+        Uart2.write(text);
+        Uart1.write(text);
+// #endif
     }
 }

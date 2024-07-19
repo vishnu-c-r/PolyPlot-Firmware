@@ -69,5 +69,7 @@ uint8_t Stream::read()
 
 Stream Serial("/dev/serial0");
 Stream Serial1("/dev/serial1");
+Stream Serial2("/dev/serial2");
+
 
 #endif

@@ -96,7 +96,6 @@ void homeStepper() {
   stepper.setSpeed(400);  // Set speed in the positive direction
   while (digitalRead(LIMIT_SWITCH_PIN) == HIGH)
     stepper.runSpeed();  // Move stepper motor towards home position
-  stepper.stop();
   stepper.setSpeed(-400);
   while (digitalRead(LIMIT_SWITCH_PIN) == LOW)
     stepper.runSpeed();

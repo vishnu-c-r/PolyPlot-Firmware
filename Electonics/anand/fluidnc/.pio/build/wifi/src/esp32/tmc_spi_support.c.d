@@ -1,0 +1,23 @@
+.pio/build/wifi/src/esp32/tmc_spi_support.c.o: \
+ FluidNC/esp32/tmc_spi_support.c \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/esp32/include/hal/spi_ll.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_types.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_rom/include/esp32/rom/lldesc.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/include/soc/spi_periph.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/soc.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_assert.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_bit_defs.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/periph_defs.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/soc_caps.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/soc_pins.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/gpio_pins.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/spi_pins.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/sdio_slave_pins.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/sdmmc_pins.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/spi_reg.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/spi_struct.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/soc/esp32/include/soc/gpio_sig_map.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/platform_port/include/hal/misc.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/spi_types.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/platform_port/include/hal/assert.h

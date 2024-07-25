@@ -83,8 +83,7 @@
  FluidNC/src/Channel.h FluidNC/src/RealtimeCmd.h FluidNC/src/UTF8.h \
  /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/cores/esp32/Stream.h \
  /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/cores/esp32/Print.h \
- FluidNC/src/UartChannel.h FluidNC/src/Uart.h \
- FluidNC/src/Configuration/Configurable.h \
+ FluidNC/src/Uart.h FluidNC/src/Configuration/Configurable.h \
  FluidNC/src/Configuration/Generator.h \
  FluidNC/src/Configuration/../Report.h \
  FluidNC/src/Configuration/../Protocol.h \
@@ -100,9 +99,8 @@
  FluidNC/src/Macro.h FluidNC/src/Configuration/Parser.h \
  FluidNC/src/Configuration/Tokenizer.h \
  FluidNC/src/Configuration/TokenState.h \
- FluidNC/src/Configuration/GenericFactory.h FluidNC/src/lineedit.h \
- FluidNC/src/Settings.h FluidNC/src/WebUI/JSONEncoder.h \
- FluidNC/src/WebUI/Authentication.h \
+ FluidNC/src/Configuration/GenericFactory.h FluidNC/src/Settings.h \
+ FluidNC/src/WebUI/JSONEncoder.h FluidNC/src/WebUI/Authentication.h \
  /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/nvs_flash/include/nvs.h \
  FluidNC/src/Jog.h FluidNC/src/Planner.h FluidNC/src/MotionControl.h \
  FluidNC/src/Probe.h FluidNC/src/Machine/UserOutputs.h \
@@ -181,6 +179,7 @@
  /Users/anandkvinu/.platformio/packages/framework-arduinoespressif32/cores/esp32/Arduino.h \
  .pio/libdeps/wifi/ESP8266\ and\ ESP32\ OLED\ driver\ for\ SSD1306\ displays/src/OLEDDisplayFonts.h \
  FluidNC/src/Machine/../Machine/I2CBus.h \
- FluidNC/src/Machine/../Status_outputs.h FluidNC/src/Machine/SPIBus.h \
- FluidNC/src/Machine/I2SOBus.h FluidNC/src/Machine/Macros.h \
- FluidNC/src/Parameters.h
+ FluidNC/src/Machine/../Status_outputs.h \
+ FluidNC/src/Machine/../UartChannel.h FluidNC/src/Machine/../lineedit.h \
+ FluidNC/src/Machine/SPIBus.h FluidNC/src/Machine/I2SOBus.h \
+ FluidNC/src/Machine/Macros.h FluidNC/src/Parameters.h

@@ -126,9 +126,9 @@ namespace WebUI {
         //_web_events->onConnect(handle_onevent_connect);
         //events management
         // _webserver->addHandler(_web_events);
-    // _webserver->sendHeader("Access-Control-Allow-Origin", "*");
-    // _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-    // _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+    _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     //     //Web server handlers
         //trick to catch command line on "/" before file being processed
         _webserver->on("/", HTTP_ANY, handle_root);
@@ -767,6 +767,7 @@ namespace WebUI {
         } else {
             if ((_upload_status != UploadStatus::FAILED) || (upload.status == UPLOAD_FILE_START)) {
                 if (upload.status == UPLOAD_FILE_START) {
+                    _webserver->sendHeader("Access-Control-Allow-Origin", "*");
                     std::string sizeargname(upload.filename.c_str());
                     sizeargname += "S";
                     size_t filesize = _webserver->hasArg(sizeargname.c_str()) ? _webserver->arg(sizeargname.c_str()).toInt() : 0;

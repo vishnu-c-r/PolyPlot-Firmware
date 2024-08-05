@@ -22,7 +22,7 @@ void Uart::begin(unsigned long baud, UartData dataBits, UartStop stopBits, UartP
     //    uart_driver_delete(_uart_num);
     uart_config_t conf;
     conf.source_clk          = UART_SCLK_APB;
-    conf.baud_rate           = 115200;
+    conf.baud_rate           = baud;
     conf.data_bits           = uart_word_length_t(_dataBits);
     conf.parity              = uart_parity_t(_parity);
     conf.stop_bits           = uart_stop_bits_t(_stopBits);
@@ -74,9 +74,9 @@ size_t Uart::write(const uint8_t* buffer, size_t length) {
     return uart_write_bytes(uart_port_t(_uart_num), (const char*)buffer, length);
 }
 
-size_t Uart::write(const char* text) {
-   return uart_write_bytes(_uart_num, text, strlen(text));
-}
+// size_t Uart::write(const char* text) {
+//    return uart_write_bytes(_uart_num, text, strlen(text));
+// }
 
 size_t Uart::timedReadBytes(char* buffer, size_t len, TickType_t timeout) {
     int res = uart_read_bytes(uart_port_t(_uart_num), buffer, len, timeout);

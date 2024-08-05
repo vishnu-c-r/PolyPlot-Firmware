@@ -59,7 +59,6 @@ public:
 
     // Print methods (Stream inherits from Print)
     size_t write(uint8_t data) override;
-    size_t write(const char* text); 
     size_t write(const uint8_t* buffer, size_t length) override;
 
     // Support methods for UartChannel

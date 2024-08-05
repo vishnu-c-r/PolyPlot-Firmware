@@ -16,8 +16,6 @@
 #include "Settings.h"        // coords
 
 #include <cmath>
-#include "../../../../../../../../../Downloads/FluidNC/FluidNC/src/Serial2.h"
-#include "../../../../../../FluidNC/FluidNC/src/Serial2.h"
 
 // M_PI is not defined in standard C/C++ but some compilers
 // support it anyway.  The following suppresses Intellisense
@@ -393,29 +391,4 @@ void mc_critical(ExecAlarm alarm) {
         //        Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
     }
     send_alarm(alarm);
-}
-
-
-void mc_pen_module_controll(plan_line_data_t* pl_data) {
-    plan_reset();
-    plan_sync_position();
-    if (pl_data->pen == 61)
-        sendMessage("M03S1");
-    else if (pl_data->pen == 62)
-        sendMessage("M03S2");
-    else if (pl_data->pen == 63)
-        sendMessage("M03S3");
-    else if (pl_data->pen == 64)
-        sendMessage("M03S4");
-    else if (pl_data->pen == 65)
-        sendMessage("M03S4");
-    else if (pl_data->pen == 66)
-        sendMessage("M03S6");
-    else if (pl_data->pen == 67)
-        sendMessage("M03S7");
-    else if (pl_data->pen == 68)
-        sendMessage("M03S8");
-    else if (pl_data->pen == 69)
-        sendMessage("M28");
-    protocol_buffer_synchronize();
 }

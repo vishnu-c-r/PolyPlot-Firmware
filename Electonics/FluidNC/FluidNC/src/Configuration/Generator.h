@@ -15,7 +15,7 @@ namespace Configuration {
     class Configurable;
 
     class Generator : public HandlerBase {
-        Generator(const Generator&) = delete;
+        Generator(const Generator&)            = delete;
         Generator& operator=(const Generator&) = delete;
 
         int      indent_;
@@ -42,7 +42,15 @@ namespace Configuration {
             }
             s << name;
             s << ": ";
-            s << value;
+
+            // If value contains a colon, wrap text as string
+            if (value.find(':') == std::string::npos) {
+                s << value;
+            } else {
+                s << "'";
+                s << value;
+                s << "'";
+            }
         }
 
         void item(const char* name, int& value, const int32_t minValue, const int32_t maxValue) override {

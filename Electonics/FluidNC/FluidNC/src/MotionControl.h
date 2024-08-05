@@ -55,5 +55,3 @@ void mc_critical(ExecAlarm alarm);
 void mc_cancel_jog();
 
 void mc_init();
-
-void mc_pen_module_controll(plan_line_data_t* pl_data);

@@ -33,10 +33,6 @@ void UartChannel::init(Uart* uart) {
 size_t UartChannel::write(uint8_t c) {
     return _uart->write(c);
 }
-size_t UartChannel::write(const char* text) {
-    return _uart->write((const uint8_t*)text, strlen(text));
-}
-
 
 size_t UartChannel::write(const uint8_t* buffer, size_t length) {
     // Replace \n with \r\n
@@ -133,14 +129,10 @@ void UartChannel::out_acked(const std::string& s, const char* tag) {
     log_stream(*this, "[" << tag << s);
 }
 
-UartChannel Uart0(0, true); 
-// UartChannel Uart2(2, true);  // Primary serial channel with LF to CRLF conversion
+UartChannel Uart0(0, true);  // Primary serial channel with LF to CRLF conversion
 
 void uartInit() {
     auto uart0 = new Uart(0);
     uart0->begin(BAUD_RATE, UartData::Bits8, UartStop::Bits1, UartParity::None);
     Uart0.init(uart0);
-    // auto uart2 = new Uart(2);
-    // uart2->begin(BAUD_RATE, UartData::Bits8, UartStop::Bits1, UartParity::None);
-    // Uart2.init(uart2);
 }

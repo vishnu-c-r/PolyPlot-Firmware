@@ -126,9 +126,9 @@ namespace WebUI {
         //_web_events->onConnect(handle_onevent_connect);
         //events management
         // _webserver->addHandler(_web_events);
-    // _webserver->sendHeader("Access-Control-Allow-Origin", "*");
-    // _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-    // _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+    _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+    _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     //     //Web server handlers
         //trick to catch command line on "/" before file being processed
         _webserver->on("/", HTTP_ANY, handle_root);
@@ -509,6 +509,7 @@ namespace WebUI {
         _webserver->send(hasError ? 500 : 200, "text/plain", hasError ? "WebSocket dead" : "");
     }
     void Web_Server::_handle_web_command(bool silent) {
+        _webserver->sendHeader("Access-Control-Allow-Origin", "*");
         AuthenticationLevel auth_level = is_authenticated();
         if (_webserver->hasArg("cmd")) {  // WebUI3
 
@@ -767,6 +768,7 @@ namespace WebUI {
         } else {
             if ((_upload_status != UploadStatus::FAILED) || (upload.status == UPLOAD_FILE_START)) {
                 if (upload.status == UPLOAD_FILE_START) {
+                    _webserver->sendHeader("Access-Control-Allow-Origin", "*");
                     std::string sizeargname(upload.filename.c_str());
                     sizeargname += "S";
                     size_t filesize = _webserver->hasArg(sizeargname.c_str()) ? _webserver->arg(sizeargname.c_str()).toInt() : 0;

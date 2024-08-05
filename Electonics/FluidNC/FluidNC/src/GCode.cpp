@@ -47,6 +47,7 @@ gc_modal_t modal_defaults = {
     Distance::Absolute,  // G90
     // ArcDistance::Incremental
     Plane::XY,
+    Module::home,
     // CutterCompensation::Disable,
     ToolLengthOffset::Cancel,
     CoordIndex::G54,
@@ -62,8 +63,6 @@ gc_modal_t modal_defaults = {
 #define FAIL(status) return (status);
 
 void gc_init() {
-
-   
     // Reset parser state:
     memset(&gc_state, 0, sizeof(parser_state_t));
 
@@ -262,7 +261,7 @@ Error gc_execute_line(char* line) {
         // been repeated in the g-code block. If ok, update the command or record its value.
         switch (letter) {
             /* 'G' and 'M' Command Words: Parse commands and check for modal group violations.
-           NOTE: Modal group numbers are defined in Table 4 of NIST RS274-NGC v3, pg.20 */
+            NOTE: Modal group numbers are defined in Table 4 of NIST RS274-NGC v3, pg.20 */
             case 'G':
                 // Determine 'G' command and its modal group
                 switch (int_value) {
@@ -310,39 +309,58 @@ Error gc_execute_line(char* line) {
                     case 4:
                         gc_block.non_modal_command = NonModal::Dwell;
                         mg_word_bit                = ModalGroup::MG0;
-                        break;
-                    case 6: 
+                    case 6:
                         switch (mantissa) {
                             case 10:
-                                sendMessage("M03S1");
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen1;
                                 break;
-                            case 20:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S2");
+                            case 20:
+                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command = AxisCommand::Module;
+                                gc_block.modal.module = Module::pen2;
                                 break;
-                            case 30:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S3");
+                            case 30:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen3;
                                 break;
-                            case 40:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S4");
+                            case 40:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen4;
                                 break;
-                            case 50:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S5");
+                            case 50:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen5;
                                 break;
-                            case 60:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S6");
+                            case 60:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen6;
                                 break;
-                            case 70:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S7");
+                            case 70:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen7;
                                 break;
-                            case 80:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S8");
-                                break;   
+                            case 80:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::pen8;
+                                break;
+                            case 90:
+                                axis_command = AxisCommand::Module;
+                                mg_word_bit  = ModalGroup::MG9;
+                                gc_block.modal.module = Module::home;
+                                break;
                             default:
-                                Serial.print("not entered switch"); 
-                                Serial.print(mantissa); 
-
+                                Serial.print("not entered switch");
+                                Serial.print(mantissa);
                         }
-                        break;    
+                        break;
                     case 53:
                         gc_block.non_modal_command = NonModal::AbsoluteOverride;
                         mg_word_bit                = ModalGroup::MG0;
@@ -540,9 +558,9 @@ Error gc_execute_line(char* line) {
                     default:
                         FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported G command]
                 }
-                if (mantissa > 0) {
-                    FAIL(Error::GcodeCommandValueNotInteger);  // [Unsupported or invalid Gxx.x command]
-                }
+                // if (mantissa > 0) {
+                //     FAIL(Error::GcodeCommandValueNotInteger);  // [Unsupported or invalid Gxx.x command]
+                // }
                 // Check for more than one command per modal group violations in the current block
                 // NOTE: Variable 'mg_word_bit' is always assigned, if the command is valid.
                 bitmask = bitnum_to_mask(mg_word_bit);
@@ -597,7 +615,7 @@ Error gc_execute_line(char* line) {
                         }
                         mg_word_bit = ModalGroup::MM7;
                         break;
-                    case 6: 
+                    case 6:
                     //     switch (mantissa) {
                     //         case 10:
                     //             sendMessage("M03S1");
@@ -622,10 +640,10 @@ Error gc_execute_line(char* line) {
                     //             break;
                     //         case 80:  // Supported if the spindle can be reversed or laser mode is on.
                     //            sendMessage("M03S8");
-                    //             break;   
+                    //             break;
                     //         default:
-                    //             Serial.print("not entered switch"); 
-                    //             Serial.print(mantissa); 
+                    //             Serial.print("not entered switch");
+                    //             Serial.print(mantissa);
 
                     //     }
                     //     break; // tool change
@@ -661,13 +679,12 @@ Error gc_execute_line(char* line) {
                                 }
                                 break;
                             case 12:  // Supported if the spindle can be reversed or laser mode is on.
-                               sendMessage("M03S8");
-                                break; 
+                                sendMessage("M03S8");
+                                break;
                             default:
                                 Serial.println(int_value);
                                 Serial.println("not entered switch");
-                                Serial.println(mantissa); 
-                            
+                                Serial.println(mantissa);
                         }
                         mg_word_bit = ModalGroup::MM8;
                         break;
@@ -1021,6 +1038,22 @@ Error gc_execute_line(char* line) {
             }
         }
     }
+
+switch (gc_block.modal.module) {
+    case Module::pen1:
+    case Module::pen2:
+    case Module::pen3:
+    case Module::pen4:
+    case Module::pen5:
+    case Module::pen6:
+    case Module::pen7:
+    case Module::pen8:
+        break;
+    case Module::home:
+        break;
+    default:
+        FAIL(Error::GcodeUnsupportedCommand);  // Undefined command or parameter
+}
 
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED. Error, if enabled while G53 is active.
     // [G40 Errors]: G2/3 arc is programmed after a G40. The linear move after disabling is less than tool diameter.
@@ -1451,6 +1484,22 @@ Error gc_execute_line(char* line) {
     plan_line_data_t  plan_data;
     plan_line_data_t* pl_data = &plan_data;
     memset(pl_data, 0, sizeof(plan_line_data_t));  // Zero pl_data struct
+
+// Check if we have a valid module (pen selection) command
+if (axis_command == AxisCommand::Module) {
+    // Populate plan_data for the pen command
+    pl_data->pen = static_cast<gcodenum_t>(gc_block.modal.module);
+    pl_data->motion.rapidMotion = 1;
+    pl_data->line_number = gc_block.values.n; // Set the line number for reporting
+
+    // Queue the command in the planner if necessary
+    plan_buffer_line(gc_block.values.xyz, pl_data);
+    protocol_buffer_synchronize();
+    // Optionally send the command immediately if required
+    mc_pen_module_controll(pl_data);
+    gc_ovr_changed();
+}
+
     // Intercept jog commands and complete error checking for valid jog commands and execute.
     // NOTE: G-code parser state is not updated, except the position to ensure sequential jog
     // targets are computed correctly. The final parser position after a jog is updated in
@@ -1535,7 +1584,7 @@ Error gc_execute_line(char* line) {
     // NOTE: Pass zero spindle speed for all restricted laser motions.
     if (!disableLaser) {
         pl_data->spindle_speed = gc_state.spindle_speed;  // Record data for planner use.
-    }                                                     // else { pl_data->spindle_speed = 0.0; } // Initialized as zero already.
+    }  // else { pl_data->spindle_speed = 0.0; } // Initialized as zero already.
     // [5. Select tool ]: NOT SUPPORTED. Only tracks tool value.
     //	gc_state.tool = gc_block.values.t;
     // [6. Change tool ]: NOT SUPPORTED

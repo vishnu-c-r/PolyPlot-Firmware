@@ -10,9 +10,9 @@ void initSerial2() {
 
     // Give some time for the serial to initialize
     delay(10000);
-    
+
     Serial.println("initialised");
-    
+
     // Wait for "ok" message from Serial2
     if (waitForModMessage(10000)) { // 5000ms timeout
         Serial.println("Received multipen module from Serial2");
@@ -27,14 +27,15 @@ void sendMessage(const char* message) {
     Serial2.println(message);
 
     // Print the message to the serial monitor for debugging
-    Serial.println("Sent: ");
-    while (waitForOkMessage(20000))
+    Serial.println("Sent");
+    if (message !="M28"){
+    while (waitForOkMessage(10000))
     {
-        Serial.println("waiting"); 
-        delay(1000);  
+        Serial.println("waiting");
     }
     Serial.println("ok recieved");
     return;
+    }
 }
 
 bool waitForOkMessage(unsigned long timeout) {

@@ -63,7 +63,7 @@ static uint8_t plan_prev_block_index(uint8_t block_index) {
                                    +-------------+
                                        time -->
 
-  Recalculates the motion plan according to the following basic guidelines:
+Recalculates the motion plan according to the following basic guidelines:
 
     1. Go over every feasible block sequentially in reverse order and calculate the junction speeds
         (i.e. current->entry_speed) such that:
@@ -308,7 +308,7 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->spindle_speed = pl_data->spindle_speed;
     block->line_number   = pl_data->line_number;
     block->is_jog        = pl_data->is_jog;
-
+    block->pen           = pl_data->pen;
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
     float   unit_vec[MAX_N_AXIS], delta_mm;

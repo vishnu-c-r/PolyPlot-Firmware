@@ -1,4 +1,4 @@
-arduinoWebSockets=https://github.com/MitchBradley/arduinoWebSockets#canSend
-WiFi=https://github.com/MitchBradley/WiFi#canWrite
-thingpulse/ESP8266 and ESP32 OLED driver for SSD1306 displays@4.4.1
 TMCStepper@>=0.7.0,<1.0.0
+thingpulse/ESP8266 and ESP32 OLED driver for SSD1306 displays@4.4.1
+WiFi=https://github.com/MitchBradley/WiFi#canWrite
+arduinoWebSockets=https://github.com/MitchBradley/arduinoWebSockets#canSend

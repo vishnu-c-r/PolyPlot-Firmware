@@ -15,7 +15,7 @@ typedef uint16_t gcodenum_t;
 
 enum class Override : uint8_t {
     ParkingMotion = 0,  // M56 (Default: Must be zero)
-    Disabled      = 1,  // Parking disabled.
+    Disabled      = 0,  // Parking disabled.
 };
 
 // Modal group internal numbers for checking multiple command violations and tracking the
@@ -43,6 +43,7 @@ enum class ModalGroup : uint8_t {
     MM8  = 13,  // [M7,M8,M9] Coolant control
     MM9  = 14,  // [M56] Override control
     MM10 = 15,  // [M62, M63, M64, M65, M67, M68] User Defined http://linuxcnc.org/docs/html/gcode/overview.html#_modal_groups
+    MG9  = 16,  // [G6.1, G6.2, G6.3, G6.4, G6.5, G6.6, G6.7, G6.8, G6.9] Module
 };
 
 // Command actions for within execution-type modal groups (motion, stopping, non-modal). Used
@@ -78,6 +79,19 @@ enum class Motion : gcodenum_t {
     ProbeAway          = 384,  // G38.4
     ProbeAwayNoError   = 385,  // G38.5
     None               = 800,  // G80
+};
+
+enum class Module : gcodenum_t {
+    pen1 = 61,
+    pen2 = 62,
+    pen3 = 63,
+    pen4 = 64,
+    pen5 = 65,
+    pen6 = 66,
+    pen7 = 67,
+    pen8 = 68,
+    home = 69,
+    steps = 60,
 };
 
 // Modal Group G2: Plane select
@@ -202,6 +216,7 @@ enum class GCodeWord : uint8_t {
     B = 16,
     C = 17,
     D = 18,  // For debugging
+    U = 19,  // For module stepes
 };
 
 // GCode parser position updating flags
@@ -245,6 +260,8 @@ struct gc_modal_t {
     Distance distance;   // {G90,G91}
     // ArcDistance distance_arc; // {G91.1} NOTE: Don't track. Only default supported.
     Plane plane_select;  // {G17,G18,G19}
+    Module module;       // {G6.1, G6.2, G6.3, G6.4, G6.5, G6.6, G6.7, G6.8, G6.9}
+
     // CutterCompensation cutter_comp;  // {G40} NOTE: Don't track. Only default supported.
     ToolLengthOffset tool_length;   // {G43.1,G49}
     CoordIndex       coord_select;  // {G54,G55,G56,G57,G58,G59}
@@ -268,6 +285,7 @@ struct gc_values_t {
     float    r;                // Arc radius
     float    s;                // Spindle speed
     uint32_t t;                // Tool selection
+    uint32_t u;                //module steps
     float    xyz[MAX_N_AXIS];  // X,Y,Z Translational axes
 };
 
@@ -302,6 +320,7 @@ enum class AxisCommand : uint8_t {
     NonModal         = 1,
     MotionMode       = 2,
     ToolLengthOffset = 3,
+    Module           = 4,
 };
 
 // Initialize the parser

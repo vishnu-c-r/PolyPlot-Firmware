@@ -134,7 +134,7 @@ void setup() {
     if (!WebUI::bt_config.begin()) {
         WebUI::wifi_config.begin();
     }
-    
+
     allChannels.ready();
     allChannels.deregistration(&startupLog);
     protocol_send_event(&startEvent);

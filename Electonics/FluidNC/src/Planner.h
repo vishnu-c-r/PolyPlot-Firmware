@@ -38,6 +38,8 @@ struct plan_block_t {
     PlMotion     motion;       // Block bitflag motion conditions. Copied from pl_line_data.
     SpindleState spindle;      // Spindle enable state
     CoolantState coolant;      // Coolant state
+    int32_t      pen;          // pen state
+    uint32_t     Module_Axis_steps;// Number of steps to take for the motion of the 4th axis.
     int32_t      line_number;  // Block line number for real-time reporting. Copied from pl_line_data.
 
     // Fields used by the motion planner to manage acceleration. Some of these values may be updated
@@ -60,13 +62,19 @@ struct plan_block_t {
     bool is_jog;
 };
 
+
+extern float last_position[MAX_N_AXIS];
+
+
 // Planner data prototype. Must be used when passing new motions to the planner.
 struct plan_line_data_t {
     float        feed_rate;       // Desired feed rate for line motion. Value is ignored, if rapid motion.
     SpindleSpeed spindle_speed;   // Desired spindle speed through line motion.
     PlMotion     motion;          // Bitflag variable to indicate motion conditions. See defines above.
     SpindleState spindle;         // Spindle enable state
-    CoolantState coolant;         // Coolant state
+    CoolantState coolant;
+    int32_t      pen;     // pen state
+    uint32_t     Axis_step;   // Number of steps to take for this motion. Used for special motion cases.
     int32_t      line_number;     // Desired line number to report when executing.
     bool         is_jog;          // true if this was generated due to a jog command
     bool         limits_checked;  // true if soft limits already checked

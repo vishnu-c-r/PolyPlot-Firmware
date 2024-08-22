@@ -14,6 +14,7 @@
 #include <cstdlib>  // PSoc Required for labs
 #include <cmath>
 
+
 static plan_block_t* block_buffer = nullptr;  // A ring buffer for motion instructions
 static uint8_t       block_buffer_tail;       // Index of the block to process now
 static uint8_t       block_buffer_head;       // Index of the next block to be pushed
@@ -34,6 +35,7 @@ typedef struct {
     // i.e. arcs, canned cycles, and backlash compensation.
     float previous_unit_vec[MAX_N_AXIS];  // Unit vector of previous path line segment
     float previous_nominal_speed;         // Nominal speed of previous path line segment
+    float previous_position[MAX_N_AXIS];  // Previous planner position of the tool in absolute steps.
 } planner_t;
 static planner_t pl;
 
@@ -45,6 +47,9 @@ static uint8_t plan_next_block_index(uint8_t block_index) {
     }
     return block_index;
 }
+
+float last_position[MAX_N_AXIS] = {0};  // Initialize with 0 or any other default position
+  // Stores the last known positions of X, Y, Z, etc.
 
 // Returns the index of the previous block in the ring buffer
 static uint8_t plan_prev_block_index(uint8_t block_index) {
@@ -63,7 +68,7 @@ static uint8_t plan_prev_block_index(uint8_t block_index) {
                                    +-------------+
                                        time -->
 
-  Recalculates the motion plan according to the following basic guidelines:
+Recalculates the motion plan according to the following basic guidelines:
 
     1. Go over every feasible block sequentially in reverse order and calculate the junction speeds
         (i.e. current->entry_speed) such that:
@@ -302,12 +307,14 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     // Prepare and initialize new block. Copy relevant pl_data for block execution.
     plan_block_t* block = &block_buffer[block_buffer_head];
     memset(block, 0, sizeof(plan_block_t));  // Zero all block values.
-    block->motion        = pl_data->motion;
-    block->coolant       = pl_data->coolant;
-    block->spindle       = pl_data->spindle;
-    block->spindle_speed = pl_data->spindle_speed;
-    block->line_number   = pl_data->line_number;
-    block->is_jog        = pl_data->is_jog;
+    block->motion               = pl_data->motion;
+    block->coolant              = pl_data->coolant;
+    block->spindle              = pl_data->spindle;
+    block->spindle_speed        = pl_data->spindle_speed;
+    block->line_number          = pl_data->line_number;
+    block->is_jog               = pl_data->is_jog;
+    block->pen                  = pl_data->pen;
+    block->Module_Axis_steps    = pl_data->Axis_step;
 
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
@@ -323,6 +330,11 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
         }
         copyAxes(position_steps, pl.position);
     }
+
+    for (size_t idx = 0; idx < MAX_N_AXIS; idx++) {
+        last_position[idx] = target[idx];
+    }
+
     auto n_axis = config->_axes->_numberAxis;
     for (size_t idx = 0; idx < n_axis; idx++) {
         // Calculate target position in absolute steps, number of steps for each axis, and determine max step events.
@@ -341,6 +353,10 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     // Bail if this is a zero-length block. Highly unlikely to occur.
     if (block->step_event_count == 0) {
         return false;
+    }
+// for storing the last known position of the axes so that pen can be lifted to change the pen without going to origin
+    for (size_t idx = 0; idx < config->_axes->_numberAxis; idx++) {
+        pl.previous_position[idx] = target[idx];
     }
 
     // Calculate the unit vector of the line move and the block maximum feed rate and acceleration scaled
@@ -427,6 +443,9 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     }
     return true;
 }
+
+
+
 
 // Reset the planner position vectors. Called by the system abort/initialization routine.
 void plan_sync_position() {

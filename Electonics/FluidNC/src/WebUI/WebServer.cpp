@@ -509,6 +509,7 @@ namespace WebUI {
         _webserver->send(hasError ? 500 : 200, "text/plain", hasError ? "WebSocket dead" : "");
     }
     void Web_Server::_handle_web_command(bool silent) {
+        _webserver->sendHeader("Access-Control-Allow-Origin", "*");
         AuthenticationLevel auth_level = is_authenticated();
         if (_webserver->hasArg("cmd")) {  // WebUI3
 

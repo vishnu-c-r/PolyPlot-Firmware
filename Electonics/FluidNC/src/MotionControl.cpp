@@ -16,6 +16,8 @@
 #include "Settings.h"        // coords
 
 #include <cmath>
+#include "../../../../../../../../../Downloads/FluidNC/FluidNC/src/Serial2.h"
+#include "../../../../../../FluidNC/FluidNC/src/Serial2.h"
 
 // M_PI is not defined in standard C/C++ but some compilers
 // support it anyway.  The following suppresses Intellisense
@@ -391,4 +393,32 @@ void mc_critical(ExecAlarm alarm) {
         //        Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
     }
     send_alarm(alarm);
+}
+
+// Function to control the pen module
+void mc_pen_module_controll(plan_line_data_t* pl_data) {
+    plan_reset(); // Reset planner buffer
+    plan_sync_position(); // Sync planner position to current machine position
+
+    // Define an array to store the step counts for each pen position
+    String penStepCounts[8] = {"610", "1925`", "3140", "4450", "5710", "7020", "8300", "9550"};//630,1900,3250,4600,5850,7200,8400,9800
+    char buffer[20];//temporary buffer to store the step count
+    // Check if the pen position is within the valid range
+    if (pl_data->pen >= 61 && pl_data->pen <= 68) {
+        int index = pl_data->pen - 61;
+        String stepCount = penStepCounts[index];
+        sendMessage(stepCount.c_str());
+    }
+    // Check if the pen position is for homing the module
+    if (pl_data->pen == 69) {
+        sendMessage("M28");
+    }
+    //check if the step count is to be sent
+    if (pl_data->pen == 60)
+    {
+        sprintf(buffer, "%d", pl_data->Axis_step);
+        sendMessage(buffer);
+    }
+
+    protocol_buffer_synchronize(); // Synchronize the protocol buffer
 }

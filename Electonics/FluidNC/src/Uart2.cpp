@@ -2,17 +2,15 @@
 #include <Arduino.h>
 
 void initSerial2() {
-    // Start the serial communication with the computer
-    Serial.begin(115200);
 
     // Configure the UART2 port (Serial2)
     Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
     // Give some time for the serial to initialize
     delay(10000);
-    
+
     Serial.println("initialised");
-    
+
     // Wait for "ok" message from Serial2
     if (waitForModMessage(10000)) { // 5000ms timeout
         Serial.println("Received multipen module from Serial2");
@@ -25,16 +23,21 @@ void initSerial2() {
 void sendMessage(const char* message) {
     // Send the message through Serial2
     Serial2.println(message);
-
-    // Print the message to the serial monitor for debugging
-    Serial.println("Sent: ");
-    while (waitForOkMessage(20000))
+    Serial.println(message);
+    while (waitForOkMessage(10000))
     {
-        Serial.println("waiting"); 
-        delay(1000);  
+        Serial.println("waiting");
     }
-    Serial.println("ok recieved");
-    return;
+    // Print the message to the serial monitor for debugging
+    Serial.println("Sent");
+    if (strcmp(message, "M28") != 1) {
+        while (waitForOkMessage(10000))
+        {
+            Serial.println("waiting");
+        }
+        Serial.println("ok received");
+        return;
+    }
 }
 
 bool waitForOkMessage(unsigned long timeout) {

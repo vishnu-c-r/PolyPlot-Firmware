@@ -9,24 +9,11 @@
 #define LIMIT_SWITCH_PIN 5
 #define LED_PIN 4
 
-#define GEAR_RATIO 5  // Gear ratio
-
-bool isAtHome = false;
 bool handshakeComplete = false;
-int calibrationCounter = 0;
-const int calibrationThreshold = 5;
-
 String receivedData = "";
 
 // Create instance of the stepper motor
 AccelStepper stepper(AccelStepper::FULL4WIRE, STEPPER_PIN1, STEPPER_PIN3, STEPPER_PIN2, STEPPER_PIN4);
-
-const int stepsPerRevolution = 2048;  // Change according to your stepper motor
-const int positions = 8;
-const int stepsPerPosition = stepsPerRevolution / positions;
-int currentPosition = 0;
-
-int penOfsets[8] = {350,320,270,280,365,410,485,520};
 
 void setup() {
   // Set pin modes
@@ -41,7 +28,6 @@ void setup() {
   stepper.setAcceleration(500);
   delay(2000);
   homeStepper();  // Home the stepper motor at startup
-  while (isAtHome == false) {}
   
   // Start handshake sequence
   while (!handshakeComplete) {
@@ -70,34 +56,20 @@ void loop() {
 
       // Convert to uppercase for easier comparison
       receivedData.toUpperCase();
-      Serial.print("Received data: ");
-      Serial.println(receivedData);
-      calibrationCounter++;
-      if (calibrationCounter >= calibrationThreshold) {
-        homeStepper();  // Recalibrate the stepper motor
-        calibrationCounter = 0;
+      
+      if (receivedData == "M28") {
+        homeStepper();
+        delay(200);
+        Serial.println("ok");
+      } else {
+        Serial.print("Received step count: ");
+        Serial.println(receivedData);
+        int stepCount = receivedData.toInt();
+        moveToPosition(stepCount);
+        delay(200);
+        Serial.println("ok");
       }
-      if (receivedData == "M03S1")
-        moveToPosition(getPenPosition(1));
-      else if (receivedData == "M03S2")
-        moveToPosition(getPenPosition(2));
-      else if (receivedData == "M03S3")
-        moveToPosition(getPenPosition(3));
-      else if (receivedData == "M03S4")
-        moveToPosition(getPenPosition(4));
-      else if (receivedData == "M03S5")
-        moveToPosition(getPenPosition(5));
-      else if (receivedData == "M03S6")
-        moveToPosition(getPenPosition(6));
-      else if (receivedData == "M03S7")
-        moveToPosition(getPenPosition(7));
-      else if (receivedData == "M03S8")
-        moveToPosition(getPenPosition(8));
-      else if (receivedData == "M28")
-        homeStepper();  // Run the homing sequence
-      else
-        Serial.println("Unknown command");
-
+      
       // Clear the received data for the next command
       receivedData = "";
     }
@@ -105,26 +77,22 @@ void loop() {
 }
 
 void homeStepper() {
-  stepper.setSpeed(600);  // Set speed in the positive direction
-  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH)
+  stepper.setSpeed(400);  // Set speed in the positive direction
+  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH) {
+    digitalWrite(LED_PIN, HIGH);
     stepper.runSpeed();  // Move stepper motor towards home position
-  stepper.setSpeed(-600);
-  while (digitalRead(LIMIT_SWITCH_PIN) == LOW)
+  }
+  stepper.setSpeed(-400);
+  while (digitalRead(LIMIT_SWITCH_PIN) == LOW) {
+    digitalWrite(LED_PIN, LOW);
     stepper.runSpeed();
+  }
   stepper.stop();
-  stepper.setCurrentPosition(0);  // Set the current position as home
-  currentPosition = 0;
-  isAtHome = true;
+  stepper.setCurrentPosition(0);
 }
 
 void moveToPosition(int position) {
   stepper.moveTo(position);  // Move to the specified physical position
   stepper.runToPosition();   // Blocking call to move to the target position
-  currentPosition = position;
-  isAtHome = false;
   Serial.println("ok");
-}
-
-int getPenPosition(int penNumber) {
-  return ((penNumber - 1) * (stepsPerRevolution / positions) * GEAR_RATIO) + penOfsets[penNumber - 1];
 }

@@ -1,0 +1,93 @@
+name: miniZund
+board: esp32
+start:
+  must_home: true
+stepping:
+  engine: RMT
+  idle_ms: 250
+  dir_delay_us: 1
+  pulse_us: 2
+  disable_delay_us: 0
+kinematics: 
+  corexy:
+axes:
+  shared_stepper_disable_pin: gpio.15
+  x:
+    steps_per_mm: 160
+    max_rate_mm_per_min: 8000
+    acceleration_mm_per_sec2: 400
+    max_travel_mm: 750
+    soft_limits: true
+    homing:
+      cycle: 3
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 500
+      seek_mm_per_min: 4000
+      settle_ms: 250
+    motor0:
+      limit_neg_pin: gpio.35:low
+      hard_limits: true
+      pulloff_mm: 5
+      stepstick:
+        step_pin: gpio.27
+        direction_pin: gpio.14
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+  y:
+    steps_per_mm: 160
+    max_rate_mm_per_min: 8000
+    acceleration_mm_per_sec2: 400
+    max_travel_mm: 550
+    soft_limits: true
+    homing:
+      cycle: 2
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 500
+      seek_mm_per_min: 4000
+      settle_ms: 250
+    motor0:
+      limit_pos_pin: gpio.34:low
+      hard_limits: true
+      pulloff_mm: 5
+      stepstick:
+        step_pin: gpio.25
+        direction_pin: gpio.26:low
+      limit_neg_pin: NO_PIN
+      limit_all_pin: NO_PIN
+  z:
+    steps_per_mm: 1600
+    max_rate_mm_per_min: 1000
+    acceleration_mm_per_sec2: 200
+    max_travel_mm: 100
+    soft_limits: true
+    homing:
+      cycle: 1
+      positive_direction: false
+      mpos_mm: 0
+      feed_mm_per_min: 250
+      seek_mm_per_min: 500
+      settle_ms: 250
+    motor0:
+      limit_neg_pin: gpio.36:low
+      hard_limits: true
+      pulloff_mm: 6
+      stepstick:
+        step_pin: gpio.32
+        direction_pin: gpio.33
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+  a:
+    steps_per_mm: 80
+    max_rate_mm_per_min: 1000
+    acceleration_mm_per_sec2: 25
+    max_travel_mm: 1000
+spi:
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+sdcard:
+  cs_pin: gpio.5
+  card_detect_pin: NO_PIN
+  frequency_hz: 10000000

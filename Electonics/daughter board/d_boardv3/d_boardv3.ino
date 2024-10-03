@@ -10,7 +10,6 @@
 #define LED_PIN 4
 
 bool handshakeComplete = false;
-
 String receivedData = "";
 
 // Create instance of the stepper motor
@@ -57,15 +56,20 @@ void loop() {
 
       // Convert to uppercase for easier comparison
       receivedData.toUpperCase();
-      if (receivedData=="M28")
-      homeStepper();
-      Serial.print("Received step count: ");
-      Serial.println(receivedData);
-
-      int stepCount = receivedData.toInt();
-      moveToPosition(stepCount);
-      delay(200);
-      Serial.println("ok");
+      
+      if (receivedData == "M28") {
+        homeStepper();
+        delay(200);
+        Serial.println("ok");
+      } else {
+        Serial.print("Received step count: ");
+        Serial.println(receivedData);
+        int stepCount = receivedData.toInt();
+        moveToPosition(stepCount);
+        delay(200);
+        Serial.println("ok");
+      }
+      
       // Clear the received data for the next command
       receivedData = "";
     }
@@ -74,11 +78,15 @@ void loop() {
 
 void homeStepper() {
   stepper.setSpeed(400);  // Set speed in the positive direction
-  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH)
+  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH) {
+    digitalWrite(LED_PIN, HIGH);
     stepper.runSpeed();  // Move stepper motor towards home position
+  }
   stepper.setSpeed(-400);
-  while (digitalRead(LIMIT_SWITCH_PIN) == LOW)
+  while (digitalRead(LIMIT_SWITCH_PIN) == LOW) {
+    digitalWrite(LED_PIN, LOW);
     stepper.runSpeed();
+  }
   stepper.stop();
   stepper.setCurrentPosition(0);
 }

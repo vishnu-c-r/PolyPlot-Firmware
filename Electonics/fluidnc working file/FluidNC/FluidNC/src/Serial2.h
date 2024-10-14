@@ -2,8 +2,8 @@
 #pragma once
 
 // Define UART2 pins
-#define RXD2 22//new 21
-#define TXD2 21//new 22
+#define RXD2 21//new 21
+#define TXD2 22//new 22
 
 // Function declarations
 void initSerial2();

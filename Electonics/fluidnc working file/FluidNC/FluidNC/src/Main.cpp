@@ -5,7 +5,6 @@
 #ifndef UNIT_TEST
 
 #    include "Main.h"
-#    include "Serial2.h"
 #    include "Machine/MachineConfig.h"
 
 #    include "Config.h"
@@ -132,7 +131,6 @@ void setup() {
     allChannels.ready();
     allChannels.deregistration(&startupLog);
     protocol_send_event(&startEvent);
-    initSerial2();
     
 }
 

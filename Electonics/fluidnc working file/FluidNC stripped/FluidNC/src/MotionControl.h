@@ -60,3 +60,11 @@ void mc_cancel_jog();
 void mc_init();
 
 void mc_pen_module_controll(plan_line_data_t* pl_data);
+
+void mc_atc_pen_change(uint8_t old_pen, uint8_t new_pen);
+
+void get_pen_position(uint8_t pen_number, float* position);
+
+bool attach_pen(int pen);
+
+bool detach_pen(int pen);

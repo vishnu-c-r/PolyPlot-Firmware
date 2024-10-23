@@ -16,7 +16,7 @@
 #include "Settings.h"        // coords
 
 #include <cmath>
-#include "Serial2.h"
+
 
 
 #define PROBE_POSITION_X 100.0f  // Example X-axis probing position
@@ -648,30 +648,30 @@ void mc_critical(ExecAlarm alarm) {
     send_alarm(alarm);
 }
 
-// Function to control the pen module
-void mc_pen_module_controll(plan_line_data_t* pl_data) {
-    plan_reset(); // Reset planner buffer
-    plan_sync_position(); // Sync planner position to current machine position
+// // Function to control the pen module
+// void mc_pen_module_controll(plan_line_data_t* pl_data) {
+//     plan_reset(); // Reset planner buffer
+//     plan_sync_position(); // Sync planner position to current machine position
 
-    // Define an array to store the step counts for each pen position
-    String penStepCounts[8] = {"440", "1690", "2970", "4280" , "5510", "6800", "8030", "9320"};//red 1-11 pink 2-9.5 yellow 3-9.5 green 4-9.5 blue 5-9.8 6-9.8 orange 7-9.5 black 8-9 brwn
-    char buffer[20];//temporary buffer to store the step count
-    // Check if the pen position is within the valid range
-    if (pl_data->pen >= 61 && pl_data->pen <= 68) {
-        int index = pl_data->pen - 61;
-        String stepCount = penStepCounts[index];
-        sendMessage(stepCount.c_str());
-    }
-    // Check if the pen position is for homing the module
-    if (pl_data->pen == 69) {
-        sendMessage("M28");
-    }
-    //check if the step count is to be sent
-    if (pl_data->pen == 60)
-    {
-        sprintf(buffer, "%d", pl_data->Axis_step);
-        sendMessage(buffer);
-    }
+//     // Define an array to store the step counts for each pen position
+//     String penStepCounts[8] = {"440", "1690", "2970", "4280" , "5510", "6800", "8030", "9320"};//red 1-11 pink 2-9.5 yellow 3-9.5 green 4-9.5 blue 5-9.8 6-9.8 orange 7-9.5 black 8-9 brwn
+//     char buffer[20];//temporary buffer to store the step count
+//     // Check if the pen position is within the valid range
+//     if (pl_data->pen >= 61 && pl_data->pen <= 68) {
+//         int index = pl_data->pen - 61;
+//         String stepCount = penStepCounts[index];
+//         sendMessage(stepCount.c_str());
+//     }
+//     // Check if the pen position is for homing the module
+//     if (pl_data->pen == 69) {
+//         sendMessage("M28");
+//     }
+//     //check if the step count is to be sent
+//     if (pl_data->pen == 60)
+//     {
+//         sprintf(buffer, "%d", pl_data->Axis_step);
+//         sendMessage(buffer);
+//     }
 
-    protocol_buffer_synchronize(); // Synchronize the protocol buffer
-}
+//     protocol_buffer_synchronize(); // Synchronize the protocol buffer
+// }

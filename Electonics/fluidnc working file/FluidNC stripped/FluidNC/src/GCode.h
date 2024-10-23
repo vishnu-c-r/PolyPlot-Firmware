@@ -10,6 +10,7 @@
 
 
 #include <cstdint>
+#include <optional>
 
 typedef uint16_t gcodenum_t;
 
@@ -172,6 +173,7 @@ enum class IoControl : gcodenum_t {
     DigitalOffSync      = 2,  // M63
     DigitalOnImmediate  = 3,  // M64
     DigitalOffImmediate = 4,  // M65
+    WaitOnInput         = 5,  // M66    
     SetAnalogSync       = 5,  // M67
     SetAnalogImmediate  = 6,  // M68
 };
@@ -191,6 +193,12 @@ enum class ToolChange : bool {
     Disable = 0,
     Enable  = 1,
 };
+
+enum class SetToolNumber : bool {
+    Disable = 0,
+    Enable  = 1,
+};
+
 
 // Modal Group G12: Active work coordinate system
 // N/A: Stores coordinate system value (54-59) to change to.
@@ -268,7 +276,8 @@ struct gc_modal_t {
     // uint8_t control;      // {G61} NOTE: Don't track. Only default supported.
     ProgramFlow  program_flow;  // {M0,M1,M2,M30}
     CoolantState coolant;       // {M7,M8,M9}
-    ToolChange   tool_change;   // {M6}
+    ToolChange    tool_change;   // {M6}
+    SetToolNumber set_tool_number;
     IoControl    io_control;    // {M62, M63, M67}
     Override     override;      // {M56}
 };
@@ -292,6 +301,7 @@ struct parser_state_t {
 
     float    feed_rate;      // Millimeters/min
     uint32_t tool;           // Tracks tool number
+    uint32_t selected_tool;  // tool from T value
     int32_t  line_number;    // Last line number sent
 
     float position[MAX_N_AXIS];  // Where the interpreter considers the tool to be at this point in the code
@@ -301,6 +311,7 @@ struct parser_state_t {
     float coord_offset[MAX_N_AXIS];  // Retains the G92 coordinate offset (work coordinates) relative to
     // machine zero in mm. Non-persistent. Cleared upon reset and boot.
     float tool_length_offset;  // Tracks tool length offset value when enabled.
+    bool  skip_blocks;         // Skipping due to flow control
 };
 
 extern parser_state_t gc_state;
@@ -329,7 +340,6 @@ Error gc_execute_line(char* line);
 // Set g-code parser position. Input in steps.
 void gc_sync_position();
 
-void user_tool_change(uint32_t new_tool);
 void user_m30();
 
 void gc_ngc_changed(CoordIndex coord);

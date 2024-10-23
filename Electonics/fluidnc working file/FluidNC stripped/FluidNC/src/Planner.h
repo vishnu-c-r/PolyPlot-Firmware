@@ -40,6 +40,9 @@ struct plan_block_t {
     uint32_t     Module_Axis_steps;// Number of steps to take for the motion of the 4th axis.
     int32_t      line_number;  // Block line number for real-time reporting. Copied from pl_line_data.
 
+    uint32_t     current_pen;  // Current pen state
+    uint32_t     next_pen;     // Next pen state
+
     // Fields used by the motion planner to manage acceleration. Some of these values may be updated
     // by the stepper module during execution of special motion cases for replanning purposes.
     float entry_speed_sqr;      // The current planned entry speed at block junction in (mm/min)^2

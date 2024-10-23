@@ -10,6 +10,7 @@
 
 #include "Planner.h"
 #include "Machine/MachineConfig.h"
+#include "PenPositions.h"
 
 #include <cstdlib>  // PSoc Required for labs
 #include <cmath>
@@ -311,8 +312,10 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->coolant              = pl_data->coolant;
     block->line_number          = pl_data->line_number;
     block->is_jog               = pl_data->is_jog;
-    block->pen                  = pl_data->pen;
-    block->Module_Axis_steps    = pl_data->Axis_step;
+    // block->pen                  = pl_data->pen;
+    // block->Module_Axis_steps    = pl_data->Axis_step;
+    block->next_pen              = pl_data->pen;
+    
 
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
@@ -332,6 +335,9 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     for (size_t idx = 0; idx < MAX_N_AXIS; idx++) {
         last_position[idx] = target[idx];
     }
+
+
+
 
     auto n_axis = config->_axes->_numberAxis;
     for (size_t idx = 0; idx < n_axis; idx++) {

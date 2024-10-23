@@ -14,9 +14,9 @@
 #include "I2SOut.h"          // i2s_out_reset
 #include "Platform.h"        // WEAK_LINK
 #include "Settings.h"        // coords
+#include "PenPositions.h"    // pen_position_valid
 
 #include <cmath>
-#include "Serial2.h"
 
 
 #define PROBE_POSITION_X 100.0f  // Example X-axis probing position
@@ -384,115 +384,6 @@ GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, 
     }
 }
 
-// Perform a new probe cycle that oscillates the probe to find the offset of the pen. Requires probe switch.
-// NOTE: Upon probe failure, the program will be stopped and placed into ALARM state.
-// GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset) {
-//     if (!config->_probe->exists()) {
-//         log_error("Probe pin is not configured");
-//         return GCUpdatePos::None;
-//     }
-
-//     if (state_is(State::CheckMode)) {
-//         return config->_probe->_check_mode_start ? GCUpdatePos::None : GCUpdatePos::Target;
-//     }
-
-//     protocol_buffer_synchronize();
-//     if (sys.abort) {
-//         return GCUpdatePos::None;  // Abort if reset is triggered.
-//     }
-
-//     config->_stepping->beginLowLatency();
-//     probe_succeeded = false;  // Re-initialize probe state.
-//     config->_probe->set_direction(away);
-
-//     // Check if the probe is already triggered before starting.
-//     if (config->_probe->tripped()) {
-//         send_alarm(ExecAlarm::ProbeFailInitial);
-//         protocol_execute_realtime();
-//         config->_stepping->endLowLatency();
-//         return GCUpdatePos::None;
-//     }
-
-//     // Setup probing movement and target position
-//     float original_target[MAX_N_AXIS];
-//     memcpy(original_target, target, sizeof(original_target));
-
-//     // Setup oscillation parameters
-//     float oscillation_amplitude = 2.0f;  // Adjust amplitude of the oscillation
-//     int oscillation_count = 10;          // Number of oscillations
-
-//     // Perform the probing cycle
-//     probing = true;
-//     for (int i = 0; i < oscillation_count; ++i) {
-//         // Move the X or Y axis back and forth while probing down
-//         target[X_AXIS] = original_target[X_AXIS] + ((i % 2 == 0) ? oscillation_amplitude : -oscillation_amplitude);
-//         mc_linear(target, pl_data, gc_state.position);  // Execute the movement
-
-//         protocol_send_event(&cycleStartEvent);  // Start the cycle
-//         do {
-//             protocol_execute_realtime();
-//             if (sys.abort) {
-//                 config->_stepping->endLowLatency();
-//                 return GCUpdatePos::None;
-//             }
-//         } while (!state_is(State::Idle));
-//     }
-
-//     // Continue the probing motion towards the target
-//     target[X_AXIS] = original_target[X_AXIS];  // Reset X-axis to the original position
-//     mc_linear(target, pl_data, gc_state.position);
-
-//     protocol_buffer_synchronize();
-//     probing = false;
-
-//     config->_stepping->endLowLatency();
-
-//     // Probing complete! Check if probing was successful
-//     if (probing) {
-//         if (no_error) {
-//             // Retrieve motor steps of probe position
-//             get_motor_steps(probe_steps);
-//         } else {
-//             send_alarm(ExecAlarm::ProbeFailContact);
-//         }
-//     } else {
-//         probe_succeeded = true;
-//     }
-
-//     probing = false;  // Ensure probe state monitor is disabled.
-//     protocol_execute_realtime();  // Check and execute run-time commands
-
-//     // Store and apply probed position if successful
-//     if (probe_succeeded) {
-//         if (offset != __FLT_MAX__) {
-//             float coord_data[MAX_N_AXIS];
-//             float probe_contact[MAX_N_AXIS];
-
-//             motor_steps_to_mpos(probe_contact, probe_steps);  // Convert motor steps to machine coordinates
-//             coords[gc_state.modal.coord_select]->get(coord_data);  // Get current coordinate offsets
-
-//             auto n_axis = config->_axes->_numberAxis;
-//             for (int axis = 0; axis < n_axis; axis++) {
-//                 if (offsetAxis & (1 << axis)) {
-//                     coord_data[axis] = probe_contact[axis] - offset;  // Apply offset
-//                     break;
-//                 }
-//             }
-
-//             log_info("Probe offset applied:");
-//             coords[gc_state.modal.coord_select]->set(coord_data);  // Save updated coordinates
-//             copyAxes(gc_state.coord_system, coord_data);
-
-//             report_wco_counter = 0;  // Force reporting of the updated position
-//         }
-
-//         return GCUpdatePos::System;  // Successful probe cycle
-//     } else {
-//         return GCUpdatePos::Target;  // Failed to trigger probe within travel
-//     }
-// }
-
-
 GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset) {
     if (!config->_probe->exists()) {
         log_error("Probe pin is not configured");
@@ -649,29 +540,77 @@ void mc_critical(ExecAlarm alarm) {
 }
 
 // Function to control the pen module
-void mc_pen_module_controll(plan_line_data_t* pl_data) {
-    plan_reset(); // Reset planner buffer
-    plan_sync_position(); // Sync planner position to current machine position
+// void mc_pen_module_controll(plan_line_data_t* pl_data) {
+//     plan_reset(); // Reset planner buffer
+//     plan_sync_position(); // Sync planner position to current machine position
 
-    // Define an array to store the step counts for each pen position
-    String penStepCounts[8] = {"440", "1690", "2970", "4280" , "5510", "6800", "8030", "9320"};//red 1-11 pink 2-9.5 yellow 3-9.5 green 4-9.5 blue 5-9.8 6-9.8 orange 7-9.5 black 8-9 brwn
-    char buffer[20];//temporary buffer to store the step count
-    // Check if the pen position is within the valid range
-    if (pl_data->pen >= 61 && pl_data->pen <= 68) {
-        int index = pl_data->pen - 61;
-        String stepCount = penStepCounts[index];
-        sendMessage(stepCount.c_str());
-    }
-    // Check if the pen position is for homing the module
-    if (pl_data->pen == 69) {
-        sendMessage("M28");
-    }
-    //check if the step count is to be sent
-    if (pl_data->pen == 60)
-    {
-        sprintf(buffer, "%d", pl_data->Axis_step);
-        sendMessage(buffer);
-    }
+//     // Define an array to store the step counts for each pen position
+//     String penStepCounts[8] = {"440", "1690", "2970", "4280" , "5510", "6800", "8030", "9320"};//red 1-11 pink 2-9.5 yellow 3-9.5 green 4-9.5 blue 5-9.8 6-9.8 orange 7-9.5 black 8-9 brwn
+//     char buffer[20];//temporary buffer to store the step count
+//     // Check if the pen position is within the valid range
+//     if (pl_data->pen >= 61 && pl_data->pen <= 68) {
+//         int index = pl_data->pen - 61;
+//         String stepCount = penStepCounts[index];
+//         sendMessage(stepCount.c_str());
+//     }
+//     // Check if the pen position is for homing the module
+//     if (pl_data->pen == 69) {
+//         sendMessage("M28");
+//     }
+//     //check if the step count is to be sent
+//     if (pl_data->pen == 60)
+//     {
+//         sprintf(buffer, "%d", pl_data->Axis_step);
+//         sendMessage(buffer);
+//     }
 
-    protocol_buffer_synchronize(); // Synchronize the protocol buffer
+//     protocol_buffer_synchronize(); // Synchronize the protocol buffer
+// }
+
+void perform_pen_change(plan_line_data_t* pl_data) {
+    float current_pen_position[MAX_N_AXIS];  // Array to store the current pen position
+    float new_pen_position[MAX_N_AXIS];      // Array to store the new pen position
+
+    float PEN_Z_OFFSET = 5.0f;  // Offset for lowering the pen into the holder
+    float PEN_Y_OFFSET = 30.0f;   // Offset for detaching the pen
+
+    // Step 1: Retrieve and move to the current pen position to place it back in the holder
+    current_pen_position->get_pen_position(pl_data->pen); // Get the current pen's position
+    mc_linear(current_pen_position, nullptr, gc_state.position);  // Move to current pen's position
+    protocol_buffer_synchronize();  // Ensure motion is complete
+
+    // Step 2: Lower the Z-axis to insert the pen into the holder
+    current_pen_position[Z_AXIS] -= PEN_Z_OFFSET;  // Define the offset for the Z-axis to lower the pen
+    mc_linear(current_pen_position, nullptr, gc_state.position);  // Lower the head
+    protocol_buffer_synchronize();
+
+    // Step 3: Move back along the X or Y axis to detach the pen from the head
+    current_pen_position[X_AXIS] -= PEN_Y_OFFSET;  // Move the head back to release the pen
+    mc_linear(current_pen_position, nullptr, gc_state.position);  // Move back to detach the pen
+    protocol_buffer_synchronize();
+
+    // Step 4: Lift the Z-axis after detaching the pen
+    current_pen_position[Z_AXIS] += PEN_Z_OFFSET;  // Lift the head up after detaching
+    mc_linear(current_pen_position, nullptr, gc_state.position);
+    protocol_buffer_synchronize();
+
+    // Step 5: Move to the new pen's position to pick it up
+    get_pen_position(next_pen, new_pen_position);  // Get the new pen's position
+    mc_linear(new_pen_position, nullptr, gc_state.position);  // Move to the new pen position
+    protocol_buffer_synchronize();
+
+    // Step 6: Lower the Z-axis to pick up the new pen
+    new_pen_position[Z_AXIS] -= PEN_Z_OFFSET;  // Define the Z-axis offset to attach the new pen
+    mc_linear(new_pen_position, nullptr, gc_state.position);  // Lower the head to pick up the pen
+    protocol_buffer_synchronize();
+
+    // Step 7: Move back along the X or Y axis to pull the pen out of the holder
+    new_pen_position[X_AXIS] += PEN_Y_OFFSET;  // Move the head back to pull the pen out of the holder
+    mc_linear(new_pen_position, nullptr, gc_state.position);  // Move back to pick up the pen
+    protocol_buffer_synchronize();
+
+    // Step 8: Lift the pen by raising the Z-axis
+    new_pen_position[Z_AXIS] += PEN_Z_OFFSET;  // Lift the pen
+    mc_linear(new_pen_position, nullptr, gc_state.position);
+    protocol_buffer_synchronize();
 }

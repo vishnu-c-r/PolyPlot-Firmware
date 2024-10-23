@@ -342,19 +342,16 @@ namespace WebUI {
 
     void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
-
         if (path == "/admin") {
-            if (myStreamFile("admin.html")) {
+            if (myStreamFile("admin.html"))
                 return;
-            }
+        } else if (path == "/tab") {
+            if (myStreamFile("tab.html"))
+                return;
         } else if (path == "/") {
-            if (myStreamFile("index.html")) {
+            if (myStreamFile("index.html"))
                 return;
-            }
-        } else {
-            // Handle other paths if needed
         }
-
         // If we did not send any HTML, send the default content
         _webserver->sendHeader("Content-Encoding", "gzip");
         _webserver->send_P(200, "text/html", PAGE_NOFILES, PAGE_NOFILES_SIZE);

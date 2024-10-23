@@ -7,7 +7,6 @@
 
 #include "GCode.h"
 #include "Serial.h"
-#include "Serial2.h"
 #include "Settings.h"
 #include "Config.h"
 #include "Report.h"
@@ -17,7 +16,7 @@
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
 #include "Job.h"                  // Job::active() and Job::channel()
-
+#include "PenPositions.h"         // pen_position_valid
 
 #include "Machine/MachineConfig.h"
 #include "Parameters.h"
@@ -55,8 +54,7 @@ gc_modal_t modal_defaults = {
     ProgramFlow::Running,
     {}, // 0, // CoolantState::M7,
     ToolChange::Disable,
-    IoControl::None,
-    Override::ParkingMotion
+    SetToolNumber::Disable,
 };
 // clang-format on
 
@@ -604,6 +602,10 @@ Error gc_execute_line(char* line) {
                         }
                         mg_word_bit = ModalGroup::MM7;
                         break;
+                    case 6:  // tool change
+                        gc_block.modal.tool_change = ToolChange::Enable;
+                        mg_word_bit                = ModalGroup::MM6;
+                        break;        
                     case 7:
                     case 8:
                     case 9:
@@ -984,9 +986,7 @@ switch (gc_block.modal.module) {
     case Module::pen6:
     case Module::pen7:
     case Module::pen8:
-        break;
     case Module::home:
-        break;
     case Module::steps:
         break;
     default:
@@ -1424,20 +1424,20 @@ switch (gc_block.modal.module) {
     plan_line_data_t* pl_data = &plan_data;
     memset(pl_data, 0, sizeof(plan_line_data_t));  // Zero pl_data struct
 
-// Check if we have a valid module (pen selection) command
-if (axis_command == AxisCommand::Module) {
-    // Populate plan_data for the pen command
-    pl_data->pen = static_cast<gcodenum_t>(gc_block.modal.module);
-    pl_data->motion.rapidMotion = 1;
-    pl_data->line_number = gc_block.values.n; // Set the line number for reporting
-    pl_data->Axis_step = gc_block.values.u; // Set the number of steps for the module command
-    // Queue the command in the planner if necessary
-    plan_buffer_line(last_position, pl_data);
-    protocol_buffer_synchronize();
-    // Optionally send the command immediately if required
-    mc_pen_module_controll(pl_data);
-    gc_ovr_changed();
-}
+// // Check if we have a valid module (pen selection) command
+// if (axis_command == AxisCommand::Module) {
+//     // Populate plan_data for the pen command
+//     pl_data->pen = static_cast<gcodenum_t>(gc_block.modal.module);
+//     pl_data->motion.rapidMotion = 1;
+//     pl_data->line_number = gc_block.values.n; // Set the line number for reporting
+//     pl_data->Axis_step = gc_block.values.u; // Set the number of steps for the module command
+//     // Queue the command in the planner if necessary
+//     plan_buffer_line(last_position, pl_data);
+//     protocol_buffer_synchronize();
+//     // Optionally send the command immediately if required
+//     mc_pen_module_controll(pl_data);
+//     gc_ovr_changed();
+// }
 
     // Intercept jog commands and complete error checking for valid jog commands and execute.
     // NOTE: G-code parser state is not updated, except the position to ensure sequential jog
@@ -1476,6 +1476,22 @@ if (axis_command == AxisCommand::Module) {
     // [3. Set feed rate ]:
     gc_state.feed_rate = gc_block.values.f;   // Always copy this value. See feed rate error-checking.
     pl_data->feed_rate = gc_state.feed_rate;  // Record data for planner use.
+
+
+if (gc_block.modal.tool_change == ToolChange::Enable) {
+
+    pl_data->pen = static_cast<gcodenum_t>(gc_block.values.t);  // Set the pen number in the planner data
+    pl_data->motion.rapidMotion = 1;
+    pl_data->line_number = gc_block.values.n; // Set the line number for reporting
+    // If the pen change is needed
+    plan_buffer_line(last_position, pl_data);
+    protocol_buffer_synchronize();
+    // Optionally send the command immediately if required
+    mc_pen_module_controll(pl_data);
+    // Optionally, you could report the tool change here
+    report_ovr_counter = 0;  // Set to report change immediately
+    gc_ovr_changed();  // Trigger override update
+}
 
     // [8. Coolant control ]:
     // At most one of M7, M8, M9 can appear in a GCode block, but the overall coolant

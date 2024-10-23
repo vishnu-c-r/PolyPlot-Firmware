@@ -351,7 +351,10 @@ namespace WebUI {
             if (myStreamFile("index.html")) {
                 return;
             }
-        } else {
+        } else if (path == "/tablet") {
+            if (myStreamFile("tablet.html")){
+                return;
+            }
             // Handle other paths if needed
         }
 

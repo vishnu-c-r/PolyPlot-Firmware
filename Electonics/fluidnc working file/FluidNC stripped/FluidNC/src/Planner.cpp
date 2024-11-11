@@ -10,7 +10,6 @@
 
 #include "Planner.h"
 #include "Machine/MachineConfig.h"
-#include "PenPositions.h"
 
 #include <cstdlib>  // PSoc Required for labs
 #include <cmath>

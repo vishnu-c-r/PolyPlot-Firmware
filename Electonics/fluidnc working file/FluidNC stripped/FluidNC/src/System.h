@@ -46,6 +46,7 @@ struct system_t {
     Percent        f_override;         // Feed rate override value in percent
     Percent        r_override;         // Rapids override value in percent
     Override       override_ctrl;      // Tracks override control states.
+    bool           rtCancelJob;        // Real-time job cancel flag.
 };
 extern system_t sys;
 

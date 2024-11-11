@@ -20,6 +20,7 @@
 #include "SettingsDefinitions.h"  // gcode_echo
 #include "Machine/LimitPin.h"
 #include "Job.h"
+#include "Config.h"
 
 volatile ExecAlarm lastAlarm;  // The most recent alarm code
 
@@ -49,6 +50,8 @@ const char* alarmString(ExecAlarm alarmNumber) {
 }
 
 static volatile bool rtSafetyDoor;
+
+static volatile bool rtCancelJob;
 
 volatile bool runLimitLoop;  // Interface to show_limits()
 
@@ -553,6 +556,67 @@ static void protocol_do_feedhold() {
     }
     set_state(State::Hold);
 }
+static void move_to_safe_position() {
+    // Set the safe coordinates to move after job cancellation
+    float safe_x = 600.0f;
+    float safe_y = 600.0f;
+    float safe_z = 0.0f;  // Optionally, lift Z-axis to a safe height
+
+    // Create a target position array
+    float target[MAX_N_AXIS] = { safe_x, safe_y, safe_z };
+
+    // Prepare motion parameters
+    plan_line_data_t pl_data;
+    memset(&pl_data, 0, sizeof(plan_line_data_t));
+    pl_data.feed_rate = 5000.0f;  // Set an appropriate feed rate
+
+    // Plan the movement to the safe position
+    plan_buffer_line(target, &pl_data);
+
+    // Wait for the movement to complete
+    protocol_buffer_synchronize();
+}
+static void protocol_do_cancel_job() {
+    // Step 1: Initiate a Hold
+    if (!(sys.suspend.bit.motionCancel || sys.suspend.bit.jogCancel)) {
+        protocol_start_holding();  // Gracefully start a hold before canceling
+    }
+
+    // Step 2: Handle Specific States
+    switch (sys.state) {
+        case State::ConfigAlarm:
+        case State::Alarm:
+        case State::CheckMode:
+        case State::SafetyDoor:
+        case State::Sleep:
+            return;  // Do not proceed if in these conditions
+        case State::Homing:
+            log_info("Cancel job ignored during homing; use Reset instead");
+            return;
+        case State::Cycle:
+        case State::Hold:
+            protocol_start_holding();  // Ensure the machine is in a hold state
+            break;
+        case State::Jog:
+            protocol_cancel_jogging();  // Cancel jogging safely
+            break;
+        case State::Idle:
+            return;  // No action needed if the machine is idle
+        default:
+            break;
+    }
+    // Step 3: Disable Stepper Motors
+    Stepper::go_idle();  // Disables all stepper motors
+
+    // Step 4: Reset G-code Parser and Clear Buffers
+    protocol_reset();  // Clear all G-code commands in the buffer
+
+    // Step 5: Move to Safe Position
+    move_to_safe_position();  // Move to a safe coordinate (e.g., X600, Y600, Z50)
+
+    // Step 6: Set System State to Idle
+    set_state(State::Idle);  // Transition to Idle state after the cancellation
+}
 
 static void protocol_do_safety_door() {
     // log_debug("protocol_do_safety_door " << int(sys.state));
@@ -820,6 +884,10 @@ void protocol_exec_rt_system() {
     if (rtSafetyDoor) {
         protocol_do_safety_door();
     }
+    if (sys.rtCancelJob) {
+        sys.rtCancelJob = false;  // Reset the flag
+        protocol_do_cancel_job(); // Call the cancel job function
+    }
 
     protocol_handle_events();
 
@@ -1009,6 +1077,7 @@ const ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
 
 const NoArgEvent safetyDoorEvent { request_safety_door };
 const NoArgEvent feedHoldEvent { protocol_do_feedhold };
+const NoArgEvent CancelJobEvent{ protocol_do_cancel_job };
 const NoArgEvent cycleStartEvent { protocol_do_cycle_start };
 const NoArgEvent cycleStopEvent { protocol_do_cycle_stop };
 const NoArgEvent motionCancelEvent { protocol_do_motion_cancel };

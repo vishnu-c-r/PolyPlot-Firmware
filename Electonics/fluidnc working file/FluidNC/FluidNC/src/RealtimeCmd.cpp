@@ -22,6 +22,9 @@ void execute_realtime_command(Cmd command, Channel& channel) {
         case Cmd::FeedHold:
             protocol_send_event(&feedHoldEvent);
             break;
+        case Cmd::CancelJob:
+            protocol_send_event(&CancelJobEvent);
+            break;
         case Cmd::SafetyDoor:
             protocol_send_event(&safetyDoorEvent);
             break;

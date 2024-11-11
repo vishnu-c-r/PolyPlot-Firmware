@@ -16,7 +16,6 @@
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
 #include "Job.h"                  // Job::active() and Job::channel()
-#include "PenPositions.h"         // pen_position_valid
 
 #include "Machine/MachineConfig.h"
 #include "Parameters.h"
@@ -1487,7 +1486,7 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
     plan_buffer_line(last_position, pl_data);
     protocol_buffer_synchronize();
     // Optionally send the command immediately if required
-    mc_pen_module_controll(pl_data);
+    // mc_pen_module_controll(pl_data);
     // Optionally, you could report the tool change here
     report_ovr_counter = 0;  // Set to report change immediately
     gc_ovr_changed();  // Trigger override update

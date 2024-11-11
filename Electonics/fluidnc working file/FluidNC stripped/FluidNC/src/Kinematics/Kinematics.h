@@ -25,7 +25,7 @@ Surround all the code in both files with
 Add a #define to this file for your kinematic
 #define my_delta_kinematics
 
-You will be ablr to add your kinematic using the config file.
+You will be able to add your kinematic using the config file.
 
 */
 

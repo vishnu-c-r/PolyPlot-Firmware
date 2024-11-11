@@ -14,7 +14,7 @@
 #include "I2SOut.h"          // i2s_out_reset
 #include "Platform.h"        // WEAK_LINK
 #include "Settings.h"        // coords
-#include "PenPositions.h"    // pen_position_valid
+
 
 #include <cmath>
 
@@ -567,50 +567,50 @@ void mc_critical(ExecAlarm alarm) {
 //     protocol_buffer_synchronize(); // Synchronize the protocol buffer
 // }
 
-void perform_pen_change(plan_line_data_t* pl_data) {
-    float current_pen_position[MAX_N_AXIS];  // Array to store the current pen position
-    float new_pen_position[MAX_N_AXIS];      // Array to store the new pen position
+// void perform_pen_change(plan_line_data_t* pl_data) {
+//     float current_pen_position[MAX_N_AXIS];  // Array to store the current pen position
+//     float new_pen_position[MAX_N_AXIS];      // Array to store the new pen position
 
-    float PEN_Z_OFFSET = 5.0f;  // Offset for lowering the pen into the holder
-    float PEN_Y_OFFSET = 30.0f;   // Offset for detaching the pen
+//     float PEN_Z_OFFSET = 5.0f;  // Offset for lowering the pen into the holder
+//     float PEN_Y_OFFSET = 30.0f;   // Offset for detaching the pen
 
-    // Step 1: Retrieve and move to the current pen position to place it back in the holder
-    current_pen_position->get_pen_position(pl_data->pen); // Get the current pen's position
-    mc_linear(current_pen_position, nullptr, gc_state.position);  // Move to current pen's position
-    protocol_buffer_synchronize();  // Ensure motion is complete
+//     // Step 1: Retrieve and move to the current pen position to place it back in the holder
+//     current_pen_position->get_pen_position(pl_data->pen); // Get the current pen's position
+//     mc_linear(current_pen_position, nullptr, gc_state.position);  // Move to current pen's position
+//     protocol_buffer_synchronize();  // Ensure motion is complete
 
-    // Step 2: Lower the Z-axis to insert the pen into the holder
-    current_pen_position[Z_AXIS] -= PEN_Z_OFFSET;  // Define the offset for the Z-axis to lower the pen
-    mc_linear(current_pen_position, nullptr, gc_state.position);  // Lower the head
-    protocol_buffer_synchronize();
+//     // Step 2: Lower the Z-axis to insert the pen into the holder
+//     current_pen_position[Z_AXIS] -= PEN_Z_OFFSET;  // Define the offset for the Z-axis to lower the pen
+//     mc_linear(current_pen_position, nullptr, gc_state.position);  // Lower the head
+//     protocol_buffer_synchronize();
 
-    // Step 3: Move back along the X or Y axis to detach the pen from the head
-    current_pen_position[X_AXIS] -= PEN_Y_OFFSET;  // Move the head back to release the pen
-    mc_linear(current_pen_position, nullptr, gc_state.position);  // Move back to detach the pen
-    protocol_buffer_synchronize();
+//     // Step 3: Move back along the X or Y axis to detach the pen from the head
+//     current_pen_position[X_AXIS] -= PEN_Y_OFFSET;  // Move the head back to release the pen
+//     mc_linear(current_pen_position, nullptr, gc_state.position);  // Move back to detach the pen
+//     protocol_buffer_synchronize();
 
-    // Step 4: Lift the Z-axis after detaching the pen
-    current_pen_position[Z_AXIS] += PEN_Z_OFFSET;  // Lift the head up after detaching
-    mc_linear(current_pen_position, nullptr, gc_state.position);
-    protocol_buffer_synchronize();
+//     // Step 4: Lift the Z-axis after detaching the pen
+//     current_pen_position[Z_AXIS] += PEN_Z_OFFSET;  // Lift the head up after detaching
+//     mc_linear(current_pen_position, nullptr, gc_state.position);
+//     protocol_buffer_synchronize();
 
-    // Step 5: Move to the new pen's position to pick it up
-    get_pen_position(next_pen, new_pen_position);  // Get the new pen's position
-    mc_linear(new_pen_position, nullptr, gc_state.position);  // Move to the new pen position
-    protocol_buffer_synchronize();
+//     // Step 5: Move to the new pen's position to pick it up
+//     get_pen_position(next_pen, new_pen_position);  // Get the new pen's position
+//     mc_linear(new_pen_position, nullptr, gc_state.position);  // Move to the new pen position
+//     protocol_buffer_synchronize();
 
-    // Step 6: Lower the Z-axis to pick up the new pen
-    new_pen_position[Z_AXIS] -= PEN_Z_OFFSET;  // Define the Z-axis offset to attach the new pen
-    mc_linear(new_pen_position, nullptr, gc_state.position);  // Lower the head to pick up the pen
-    protocol_buffer_synchronize();
+//     // Step 6: Lower the Z-axis to pick up the new pen
+//     new_pen_position[Z_AXIS] -= PEN_Z_OFFSET;  // Define the Z-axis offset to attach the new pen
+//     mc_linear(new_pen_position, nullptr, gc_state.position);  // Lower the head to pick up the pen
+//     protocol_buffer_synchronize();
 
-    // Step 7: Move back along the X or Y axis to pull the pen out of the holder
-    new_pen_position[X_AXIS] += PEN_Y_OFFSET;  // Move the head back to pull the pen out of the holder
-    mc_linear(new_pen_position, nullptr, gc_state.position);  // Move back to pick up the pen
-    protocol_buffer_synchronize();
+//     // Step 7: Move back along the X or Y axis to pull the pen out of the holder
+//     new_pen_position[X_AXIS] += PEN_Y_OFFSET;  // Move the head back to pull the pen out of the holder
+//     mc_linear(new_pen_position, nullptr, gc_state.position);  // Move back to pick up the pen
+//     protocol_buffer_synchronize();
 
-    // Step 8: Lift the pen by raising the Z-axis
-    new_pen_position[Z_AXIS] += PEN_Z_OFFSET;  // Lift the pen
-    mc_linear(new_pen_position, nullptr, gc_state.position);
-    protocol_buffer_synchronize();
-}
+//     // Step 8: Lift the pen by raising the Z-axis
+//     new_pen_position[Z_AXIS] += PEN_Z_OFFSET;  // Lift the pen
+//     mc_linear(new_pen_position, nullptr, gc_state.position);
+//     protocol_buffer_synchronize();
+// }

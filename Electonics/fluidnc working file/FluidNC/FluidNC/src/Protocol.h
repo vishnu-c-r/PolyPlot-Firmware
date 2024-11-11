@@ -94,6 +94,7 @@ extern const ArgEvent reportStatusEvent;
 
 extern const NoArgEvent safetyDoorEvent;
 extern const NoArgEvent feedHoldEvent;
+extern const NoArgEvent CancelJobEvent;
 extern const NoArgEvent cycleStartEvent;
 extern const NoArgEvent cycleStopEvent;
 extern const NoArgEvent motionCancelEvent;

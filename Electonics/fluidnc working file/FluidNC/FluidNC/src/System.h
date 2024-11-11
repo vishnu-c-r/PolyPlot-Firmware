@@ -45,7 +45,8 @@ struct system_t {
     StepControl    step_control;       // Governs the step segment generator depending on system state.
     Percent        f_override;         // Feed rate override value in percent
     Percent        r_override;         // Rapids override value in percent
-    Override       override_ctrl;      // Tracks override control states.
+    Override       override_ctrl;  
+    bool           rtCancelJob;        // Real-time job cancel flag
 };
 extern system_t sys;
 

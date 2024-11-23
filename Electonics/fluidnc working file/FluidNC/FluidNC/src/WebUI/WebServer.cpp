@@ -35,6 +35,8 @@
 #    include "src/HashFS.h"
 #    include <list>
 
+#    include "PenConfig.h"
+
 namespace WebUI {
     const byte DNS_PORT = 53;
     DNSServer  dnsServer;
@@ -187,6 +189,13 @@ namespace WebUI {
             log_info("SSDP Started");
             SSDP.begin();
         }
+
+        // Add pen configuration endpoints
+    // Update pen configuration endpoints to use static methods directly
+    _webserver->on("/penconfig", HTTP_GET, handleGetPenConfig);
+    _webserver->on("/penconfig", HTTP_POST, handleSetPenConfig);
+    _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
+
 
         log_info("HTTP started on port " << WebUI::http_port->get());
         //start webserver
@@ -1374,5 +1383,73 @@ namespace WebUI {
         return AuthenticationLevel::LEVEL_GUEST;
     }
 #    endif
+
+    void Web_Server::handleGetPenConfig() {
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "text/plain", "Authentication failed");
+            return;
+        }
+
+        PenConfig& config = PenConfig::getInstance();
+        config.loadConfig();
+        _webserver->send(200, "application/json", config.toJSON().c_str());
+    }
+
+    
+void Web_Server::handleSetPenConfig() {
+    AuthenticationLevel auth_level = is_authenticated();
+    if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+        log_debug("Auth failed for pen config");  // Add debug logging
+        _webserver->send(401, "text/plain", "Authentication failed");
+        return;
+    }
+
+    if (!_webserver->hasArg("plain")) {
+        log_debug("No data in pen config request");  // Add debug logging
+        _webserver->send(400, "text/plain", "Missing pen configuration data");
+        return;
+    }
+
+    std::string jsonData = _webserver->arg("plain").c_str();
+    log_debug("Received pen config: " << jsonData);  // Add debug logging
+    
+    PenConfig& config = PenConfig::getInstance();
+    if (config.fromJSON(jsonData)) {
+        if (config.saveConfig()) {
+            log_debug("Pen config saved successfully");  // Add debug logging
+            _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            log_debug("Failed to save pen config");  // Add debug logging
+            _webserver->send(500, "text/plain", "Failed to save configuration");
+        }
+    } else {
+        log_debug("Failed to parse pen config");  // Add debug logging
+        _webserver->send(400, "text/plain", "Invalid pen configuration data");
+    }
 }
+
+    void Web_Server::handleDeletePen() {
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "text/plain", "Authentication failed");
+            return;
+        }
+
+        if (!_webserver->hasArg("id")) {
+            _webserver->send(400, "text/plain", "Missing pen ID");
+            return;
+        }
+
+        int penId = _webserver->arg("id").toInt();
+        PenConfig& config = PenConfig::getInstance();
+        
+        if (config.deletePen(penId)) {
+            config.saveConfig();
+            _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            _webserver->send(404, "text/plain", "Pen not found");
+        }
+    }
 #endif
+}  // namespace web_server

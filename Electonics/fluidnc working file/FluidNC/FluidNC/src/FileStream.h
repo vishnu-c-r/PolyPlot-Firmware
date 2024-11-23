@@ -63,5 +63,8 @@ public:
     void save() override;
     void restore() override;
 
+    // Operator to check if the file is open
+    operator bool() const { return _fd != nullptr; }
+
     ~FileStream() override;
 };

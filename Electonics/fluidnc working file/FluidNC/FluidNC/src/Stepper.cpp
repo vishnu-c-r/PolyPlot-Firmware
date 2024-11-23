@@ -18,7 +18,8 @@
 #include <esp_attr.h>  // IRAM_ATTR
 #include <cmath>
 
-using namespace Stepper;
+// Remove this line since we're using a class now
+// using namespace Stepper;
 
 static bool awake = false;
 

@@ -186,6 +186,7 @@ enum class ToolLengthOffset : gcodenum_t {
 };
 
 static const uint32_t MaxToolNumber = 99999999;
+static const uint32_t MAX_PENS = 10;  // Add this line
 
 enum class ToolChange : bool {
     Disable = 0,
@@ -208,7 +209,7 @@ enum class GCodeWord : uint8_t {
     Q = 8,
     R = 9,
     S = 10,
-    T = 11,
+    T = 11,  // Tool selection for M6
     X = 12,
     Y = 13,
     Z = 14,

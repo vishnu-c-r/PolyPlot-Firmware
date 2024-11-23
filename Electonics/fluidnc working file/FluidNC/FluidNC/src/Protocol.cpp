@@ -460,7 +460,7 @@ static void protocol_do_alarm(void* alarmVoid) {
     set_state(State::Alarm);
 }
 
-static void protocol_start_holding() {
+void protocol_start_holding() {
     if (!(sys.suspend.bit.motionCancel || sys.suspend.bit.jogCancel)) {  // Block, if already holding.
         sys.step_control = {};
         if (!Stepper::update_plan_block_parameters()) {  // Notify stepper module to recompute for hold deceleration.
@@ -470,13 +470,13 @@ static void protocol_start_holding() {
     }
 }
 
-static void protocol_cancel_jogging() {
+void protocol_cancel_jogging() {
     if (!sys.suspend.bit.motionCancel) {
         sys.suspend.bit.jogCancel = true;
     }
 }
 
-static void protocol_hold_complete() {
+void protocol_hold_complete() {
     sys.suspend.value            = 0;
     sys.suspend.bit.holdComplete = true;
 }
@@ -577,25 +577,19 @@ static void move_to_safe_position() {
     protocol_buffer_synchronize();
 }
 static void protocol_do_cancel_job() {
-    // Step 1: Initiate a Hold
+    // Step 1: Suspend Current Operations
     if (!(sys.suspend.bit.motionCancel || sys.suspend.bit.jogCancel)) {
-        protocol_start_holding();  // Gracefully start a hold before canceling
+        protocol_start_holding();  // Gracefully hold the machine before canceling
     }
 
     // Step 2: Handle Specific States
     switch (sys.state) {
-        case State::ConfigAlarm:
-        case State::Alarm:
-        case State::CheckMode:
-        case State::SafetyDoor:
-        case State::Sleep:
-            return;  // Do not proceed if in these conditions
         case State::Homing:
             log_info("Cancel job ignored during homing; use Reset instead");
             return;
         case State::Cycle:
         case State::Hold:
-            protocol_start_holding();  // Ensure the machine is in a hold state
+            protocol_execute_realtime();  // Process real-time commands to pause ongoing cycle
             break;
         case State::Jog:
             protocol_cancel_jogging();  // Cancel jogging safely
@@ -605,17 +599,21 @@ static void protocol_do_cancel_job() {
         default:
             break;
     }
-    // Step 3: Disable Stepper Motors
-    Stepper::go_idle();  // Disables all stepper motors
 
-    // Step 4: Reset G-code Parser and Clear Buffers
+    // Step 3: Synchronize the Planner and Stop Motion
+    protocol_buffer_synchronize();  // Synchronize the planner to stop all movements immediately
+
+    // Step 5: Disable Stepper Motors
+    protocol_disable_steppers();  // Disables all stepper motors to ensure no unintended movement
+
+    // Step 6: Reset G-code Parser and Clear Buffers
     protocol_reset();  // Clear all G-code commands in the buffer
 
-    // Step 5: Move to Safe Position
-    move_to_safe_position();  // Move to a safe coordinate (e.g., X600, Y600, Z50)
+    // Step 7: Move to Safe Position
+    move_to_safe_position();  // Move the machine to a predefined safe position
 
-    // Step 6: Set System State to Idle
-    set_state(State::Idle);  // Transition to Idle state after the cancellation
+    // Step 8: Set System State to Idle
+    set_state(State::Idle);  // Transition the machine to the Idle state
 }
 
 static void protocol_do_safety_door() {

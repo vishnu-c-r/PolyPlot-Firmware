@@ -635,6 +635,16 @@ Error gc_execute_line(char* line) {
                         }
                         mg_word_bit = ModalGroup::MM8;
                         break;
+                    case 6:
+                        if (value_words & bitnum_to_mask(GCodeWord::T)) {
+                            // M6 with T word - pen change command
+                            gc_block.modal.tool_change = ToolChange::Enable;
+                            // Tool number validation happens in STEP 3
+                        } else {
+                            FAIL(Error::GcodeValueWordMissing);  // T word missing for M6
+                        }
+                        mg_word_bit = ModalGroup::MM6;
+                        break;
                     case 56:
                         if (config->_enableParkingOverrideControl) {
                             gc_block.modal.override = Override::ParkingMotion;
@@ -1413,6 +1423,11 @@ switch (gc_block.modal.module) {
     if (value_words) {
         FAIL(Error::GcodeUnusedWords);  // [Unused words]
     }
+    if (gc_block.modal.tool_change == ToolChange::Enable) {
+        if (gc_block.values.t < 1 || gc_block.values.t > MAX_PENS) {
+            FAIL(Error::GcodeMaxValueExceeded);  // Invalid pen number
+        }
+    }
     /* -------------------------------------------------------------------------------------
         STEP 4: EXECUTE!!
         Assumes that all error-checking has been completed and no failure modes exist. We just
@@ -1731,6 +1746,16 @@ switch (gc_block.modal.module) {
     gc_state.modal.program_flow = ProgramFlow::Running;  // Reset program flow.
 
     perform_assignments();
+
+    if (gc_block.modal.tool_change == ToolChange::Enable) {
+        protocol_buffer_synchronize();
+        
+        // Call mc_pen_change with the new pen number, planner data, and current position
+        mc_pen_change(gc_block.values.t, pl_data, gc_state.position);
+        
+        // Update the parser's state with the new pen number
+        gc_state.tool = gc_block.values.t;
+    }
 
     // TODO: % to denote start of program.
     return Error::Ok;

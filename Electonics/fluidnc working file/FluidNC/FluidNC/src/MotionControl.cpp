@@ -14,6 +14,7 @@
 #include "I2SOut.h"          // i2s_out_reset
 #include "Platform.h"        // WEAK_LINK
 #include "Settings.h"        // coords
+#include "Pen.h"
 
 #include <cmath>
 
@@ -621,10 +622,6 @@ GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool aw
     }
 }
 
-
-
-
-
 // Handles updating the override control state.
 void mc_override_ctrl_update(Override override_state) {
     // Finish all queued commands before altering override control state
@@ -675,3 +672,58 @@ void mc_critical(ExecAlarm alarm) {
 
 //     protocol_buffer_synchronize(); // Synchronize the protocol buffer
 // }
+
+void mc_pen_change(int new_pen_number, plan_line_data_t* pl_data, float* current_position) {
+    if (new_pen_number < 1 || new_pen_number > MAX_PENS) {
+        return;  // Invalid pen number
+    }
+
+    // Store start position
+    float start_position[MAX_N_AXIS];
+    memcpy(start_position, current_position, sizeof(float) * MAX_N_AXIS);
+
+    // First return current pen if one is active
+    if (current_pen > 0) {
+        float return_pos[MAX_N_AXIS];
+        get_pen_place_position(current_pen, return_pos);
+        
+        // Move Z up first
+        float safe_z = return_pos[Z_AXIS] + 10.0f;  // Safe Z height
+        float z_pos[MAX_N_AXIS];
+        memcpy(z_pos, current_position, sizeof(float) * MAX_N_AXIS);
+        z_pos[Z_AXIS] = safe_z;
+        mc_linear(z_pos, pl_data, current_position);
+        
+        // Move to pen return position XY
+        float xy_pos[MAX_N_AXIS];
+        memcpy(xy_pos, return_pos, sizeof(float) * MAX_N_AXIS);
+        xy_pos[Z_AXIS] = safe_z;
+        mc_linear(xy_pos, pl_data, current_position);
+        
+        // Lower Z to return pen
+        mc_linear(return_pos, pl_data, current_position);
+    }
+
+    // Now pick up new pen
+    float pickup_pos[MAX_N_AXIS];
+    get_pen_pickup_position(new_pen_number, pickup_pos);
+    
+    // Move Z up to safe height
+    float safe_z = pickup_pos[Z_AXIS] + 10.0f;
+    float z_pos[MAX_N_AXIS];
+    memcpy(z_pos, current_position, sizeof(float) * MAX_N_AXIS);
+    z_pos[Z_AXIS] = safe_z;
+    mc_linear(z_pos, pl_data, current_position);
+    
+    // Move to new pen XY
+    float xy_pos[MAX_N_AXIS];
+    memcpy(xy_pos, pickup_pos, sizeof(float) * MAX_N_AXIS);
+    xy_pos[Z_AXIS] = safe_z;
+    mc_linear(xy_pos, pl_data, current_position);
+    
+    // Lower Z to pick up pen
+    mc_linear(pickup_pos, pl_data, current_position);
+    
+    // Update current pen
+    set_current_pen(new_pen_number);
+}

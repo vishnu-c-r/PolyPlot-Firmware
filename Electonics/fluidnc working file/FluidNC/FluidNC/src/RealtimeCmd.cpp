@@ -90,5 +90,5 @@ bool is_realtime_command(uint8_t data) {
         return true;
     }
     auto cmd = static_cast<Cmd>(data);
-    return cmd == Cmd::Reset || cmd == Cmd::StatusReport || cmd == Cmd::CycleStart || cmd == Cmd::FeedHold;
+    return cmd == Cmd::Reset || cmd == Cmd::StatusReport || cmd == Cmd::CycleStart || cmd == Cmd::FeedHold || cmd == Cmd::CancelJob; 
 }

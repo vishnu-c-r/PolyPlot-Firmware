@@ -12,6 +12,7 @@ Control::Control() {
     _pins.push_back(new ControlPin(&rtResetEvent, "reset_pin", 'R'));
     _pins.push_back(new ControlPin(&feedHoldEvent, "feed_hold_pin", 'H'));
     _pins.push_back(new ControlPin(&cycleStartEvent, "cycle_start_pin", 'S'));
+    _pins.push_back(new ControlPin(&CancelJobEvent, "cancel_job_pin", 'C'));
     _pins.push_back(new ControlPin(&macro0Event, "macro0_pin", '0'));
     _pins.push_back(new ControlPin(&macro1Event, "macro1_pin", '1'));
     _pins.push_back(new ControlPin(&macro2Event, "macro2_pin", '2'));

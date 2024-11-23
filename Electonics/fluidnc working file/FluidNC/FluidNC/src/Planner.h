@@ -5,23 +5,38 @@
 
 #pragma once
 
-/*
-  Planner.h - buffers movement commands and manages the acceleration profile plan
-*/
-
 #include "Config.h"            // MAX_N_AXIS
 #include "GCode.h"             // CoolantState
 #include "Types.h"             // AxisMask
 
-#include <cstdint>
+// Forward declare dependencies
+class Stepper;
+struct PenPosition;
 
-// Define planner data condition flags. Used to denote running conditions of a block.
+// Define planner data condition flags first
 struct PlMotion {
     uint8_t rapidMotion : 1;
     uint8_t systemMotion : 1;    // Single motion. Circumvents planner state. Used by home/park.
     uint8_t noFeedOverride : 1;  // Motion does not honor feed override.
     uint8_t inverseTime : 1;     // Interprets feed rate value as inverse time when set.
 };
+
+// Define plan_line_data_t before including pen.h
+struct plan_line_data_t {
+    float        feed_rate;       // Desired feed rate for line motion. Value is ignored, if rapid motion.
+    PlMotion     motion;          // Bitflag variable to indicate motion conditions. See defines above.
+    CoolantState coolant;
+    int32_t      pen;     // pen state
+    uint32_t     Axis_step;   // Number of steps to take for this motion. Used for special motion cases.
+    int32_t      line_number;     // Desired line number to report when executing.
+    bool         is_jog;          // true if this was generated due to a jog command
+    bool         limits_checked;  // true if soft limits already checked
+};
+
+// Now safe to include pen.h
+#include "pen.h"
+
+#include <cstdint>
 
 // This struct stores a linear movement of a g-code block motion with its critical "nominal" values
 // are as specified in the source g-code.
@@ -54,8 +69,9 @@ struct plan_block_t {
     float rapid_rate;              // Axis-limit adjusted maximum rate for this block direction in (mm/min)
     float programmed_rate;         // Programmed rate of this block (mm/min).
 
-
     bool is_jog;
+    bool is_pen_change;  // Flag to indicate this is a pen change operation
+    int new_pen;        // New pen number for pen change operations
 };
 
 
@@ -63,16 +79,6 @@ extern float last_position[MAX_N_AXIS];
 
 
 // Planner data prototype. Must be used when passing new motions to the planner.
-struct plan_line_data_t {
-    float        feed_rate;       // Desired feed rate for line motion. Value is ignored, if rapid motion.
-    PlMotion     motion;          // Bitflag variable to indicate motion conditions. See defines above.
-    CoolantState coolant;
-    int32_t      pen;     // pen state
-    uint32_t     Axis_step;   // Number of steps to take for this motion. Used for special motion cases.
-    int32_t      line_number;     // Desired line number to report when executing.
-    bool         is_jog;          // true if this was generated due to a jog command
-    bool         limits_checked;  // true if soft limits already checked
-};
 
 void plan_init();
 
@@ -121,3 +127,6 @@ uint8_t plan_get_block_buffer_available();
 uint8_t plan_check_full_buffer();
 
 void plan_get_planner_mpos(float* target);
+
+// Add function declaration
+bool plan_buffer_pen_change(int new_pen, plan_line_data_t* pl_data);

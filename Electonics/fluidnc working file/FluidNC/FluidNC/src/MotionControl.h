@@ -60,3 +60,6 @@ void mc_cancel_jog();
 void mc_init();
 
 void mc_pen_module_controll(plan_line_data_t* pl_data);
+
+// Add this declaration:
+void mc_pen_change(int new_pen_number, plan_line_data_t* pl_data, float* current_position);

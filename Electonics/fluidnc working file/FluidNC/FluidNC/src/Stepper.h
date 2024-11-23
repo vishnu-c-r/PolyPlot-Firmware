@@ -9,41 +9,26 @@
   Stepper.h - stepper motor driver: executes motion plans of planner.c using the stepper motors
 */
 
+#include "Types.h"
+#include "Pin.h"
 #include "EnumItem.h"
 
 #include <cstdint>
 
-namespace Stepper {
-    void init();
+// Change from namespace to class to match Planner.h declaration
+class Stepper {
+public:
+    static void init();
+    static bool update_plan_block_parameters();  // Changed to return bool
+    static bool pulse_func();  // Changed to return bool
+    static void reset();
+    static void wake_up();
+    static void go_idle();
+    static void stop_stepping();
+    static void parking_setup_buffer();
+    static void parking_restore_buffer();
+    static void prep_buffer();
+    static float get_realtime_rate();
 
-    bool pulse_func();
-
-    // Enable steppers, but cycle does not start unless called by motion control or realtime command.
-    void wake_up();
-
-    // Stops stepping and disables stepper (not ISR-safe)
-    void go_idle();
-
-    // Stops stepping (ISR-safe)
-    void stop_stepping();
-
-    // Reset the stepper subsystem variables
-    void reset();
-
-    // Changes the run state of the step segment buffer to execute the special parking motion.
-    void parking_setup_buffer();
-
-    // Restores the step segment buffer to the normal run state after a parking motion.
-    void parking_restore_buffer();
-
-    // Reloads step segment buffer. Called continuously by realtime execution system.
-    void prep_buffer();
-
-    // Called by planner_recalculate() when the executing block is updated by the new plan.
-    bool update_plan_block_parameters();
-
-    // Called by realtime status reporting if realtime rate reporting is enabled in config.h.
-    float get_realtime_rate();
-
-    extern uint32_t isr_count;
-}
+    static uint32_t isr_count;
+};

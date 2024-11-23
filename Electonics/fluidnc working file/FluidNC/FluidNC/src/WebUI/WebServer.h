@@ -121,6 +121,9 @@ namespace WebUI {
         static void sendWithOurAddress(const char* s, int code);
         static void sendCaptivePortal();
         static void send404Page();
+        static void handleGetPenConfig();    // Change to static
+        static void handleSetPenConfig();    // Change to static
+        static void handleDeletePen();       // Change to static
 
         static int getPageid();
     };

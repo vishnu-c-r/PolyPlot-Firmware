@@ -45,6 +45,9 @@ namespace Machine {
         handler.section("uart_channel1", _uart_channels[1], 1);
         handler.section("uart_channel2", _uart_channels[2], 2);
 
+        handler.section("laser_pointer", _laserPointer);
+        handler.section("status_outputs", _stat_out);
+
         handler.section("i2so", _i2so);
 
         handler.section("i2c0", _i2c[0], 0);
@@ -99,6 +102,11 @@ namespace Machine {
         if (_userOutputs == nullptr) {
             _userOutputs = new UserOutputs();
         }
+
+        // Remove auto-creation of laser pointer - only create if configured in yaml
+        // if (_laserPointer == nullptr) {
+        //     _laserPointer = new LaserPointer();
+        // }
 
         if (_sdCard == nullptr) {
             _sdCard = new SDCard();
@@ -276,5 +284,6 @@ namespace Machine {
         delete _spi;
         delete _control;
         delete _macros;
+        delete _laserPointer;
     }
 }

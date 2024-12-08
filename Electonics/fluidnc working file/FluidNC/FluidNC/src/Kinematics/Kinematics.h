@@ -7,6 +7,7 @@
 #include "../Planner.h"
 #include "../Types.h"
 #include "src/Machine/Homing.h"
+#include "../Machine/MachineConfig.h"  // Add this include for config access
 
 /*
 Special types
@@ -28,6 +29,12 @@ Add a #define to this file for your kinematic
 You will be ablr to add your kinematic using the config file.
 
 */
+
+// Forward declare MachineConfig to avoid circular dependency
+namespace Machine {
+    class MachineConfig;
+}
+extern Machine::MachineConfig* config;
 
 namespace Kinematics {
     class KinematicSystem;
@@ -91,6 +98,9 @@ namespace Kinematics {
         virtual void releaseMotors(AxisMask axisMask, MotorMask motors) {}
         virtual bool limitReached(AxisMask& axisMask, MotorMask& motors, MotorMask limited) { return false; }
         virtual bool kinematics_homing(AxisMask& axisMask) { return false; }
+
+        // Move apply_laser_offset implementation to cpp file
+        virtual void apply_laser_offset(float* target);
 
         // Configuration interface.
         void afterParse() override {}

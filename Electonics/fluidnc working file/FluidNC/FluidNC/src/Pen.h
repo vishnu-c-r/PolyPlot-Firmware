@@ -4,6 +4,8 @@
 #include <cstdint>
 #include "GCode.h" // Include this for MAX_PENS definition
 
+#define MAX_PENS 8
+
 // Forward declaration
 struct plan_line_data_t;
 
@@ -24,3 +26,12 @@ void get_pen_pickup_position(int pen_number, float position[3]);
 void get_pen_place_position(int pen_number, float position[3]);
 bool plan_pen_change_moves(int new_pen, plan_line_data_t* pl_data, float* current_position);
 bool plan_pen_move(float* target, plan_line_data_t* pl_data, float* start_pos);
+
+// Initialize pen module
+void init_pen_system();
+
+// Set and get current pen
+int get_current_pen();
+
+// Convert laser position to pen position
+void laser_to_pen_position(float* target);

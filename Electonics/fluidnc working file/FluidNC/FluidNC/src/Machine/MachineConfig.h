@@ -4,6 +4,12 @@
 
 #pragma once
 
+// Forward declare Kinematics namespace and class
+namespace Kinematics {
+    class Kinematics;
+}
+
+// Move includes after forward declarations
 #include "../Assert.h"
 #include "../Configuration/GenericFactory.h"
 #include "../Configuration/HandlerBase.h"
@@ -27,6 +33,7 @@
 #include "UserOutputs.h"
 #include "Macros.h"
 #include "Module4thAxis.h"
+#include "../LaserPointer.h"
 
 #include <string_view>
 
@@ -61,7 +68,7 @@ namespace Machine {
         MachineConfig() = default;
 
         Axes*                 _axes           = nullptr;
-        Kinematics*           _kinematics     = nullptr;
+        ::Kinematics::Kinematics* _kinematics     = nullptr;
         SPIBus*               _spi            = nullptr;
         I2CBus*               _i2c[MAX_N_I2C] = { nullptr };
         I2SOBus*              _i2so           = nullptr;
@@ -77,6 +84,7 @@ namespace Machine {
         Module4thAxis*        _module4thAxis  = nullptr;
         OLED*                 _oled           = nullptr;
         Status_Outputs*       _stat_out       = nullptr;
+        LaserPointer*         _laserPointer   = nullptr;
 
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };
         Uart*        _uarts[MAX_N_UARTS]         = { nullptr };

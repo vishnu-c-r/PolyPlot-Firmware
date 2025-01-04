@@ -131,10 +131,15 @@ namespace WebUI {
         _webserver->sendHeader("Access-Control-Allow-Origin", "*");
         _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
         _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-        //     //Web server handlers
+        //Web server handlers
         //trick to catch command line on "/" before file being processed
         _webserver->on("/", [this]() { handle_root("/"); });
+        // _webserver->on("/index/index-DOrIMAkz.js", HTTP_GET, []() { myStreamFile("/ui/assets/index-DOrIMAkz.js"); });
+        // _webserver->on("/index/index-r_rVtzDA.css", HTTP_GET, []() { myStreamFile("/ui/assets/index-r_rVtzDA.css"); });
+        // _webserver->serveStatic("/", reinterpret_cast<fs::FS&>(SD), "/ui/assets");
         _webserver->on("/admin", [this]() { handle_root("/admin"); });
+        _webserver->on("/tab", [this]() { handle_root("/tab"); });
+
         // _webserver->on("/", HTTP_GET, handle_root);
         // _webserver->on("/", HTTP_OPTIONS, handle_options);
         // //Page not found handler
@@ -191,11 +196,22 @@ namespace WebUI {
         }
 
         // Add pen configuration endpoints
-    // Update pen configuration endpoints to use static methods directly
-    _webserver->on("/penconfig", HTTP_GET, handleGetPenConfig);
-    _webserver->on("/penconfig", HTTP_POST, handleSetPenConfig);
-    _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
+        // Update pen configuration endpoints to use static methods directly
+        _webserver->on("/penconfig", HTTP_GET, handleGetPenConfig);
+        _webserver->on("/penconfig", HTTP_POST, handleSetPenConfig);
+        _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
 
+        // Add explicit routes for JS module and CSS files with correct MIME types
+        _webserver->on("/ui/assets/index-DOrIMAkz.js", HTTP_GET, [this]() {
+            // For ES6 modules, we need to use this specific MIME type
+            _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
+            myStreamFile("/ui/assets/index-DOrIMAkz.js");
+        });
+
+        _webserver->on("/ui/assets/index-r_rVtzDA.css", HTTP_GET, [this]() {
+            _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
+            myStreamFile("/ui/assets/index-r_rVtzDA.css");
+        });
 
         log_info("HTTP started on port " << WebUI::http_port->get());
         //start webserver
@@ -245,69 +261,138 @@ namespace WebUI {
 #    endif
     }
 
+    // Move the endsWithCI function declaration and implementation up here, before streamFileFromPath
+    static bool endsWithCI(const char* suffix, const char* test) {
+        size_t slen = strlen(suffix);
+        size_t tlen = strlen(test);
+        
+        if (slen > tlen) {
+            return false;
+        }
+        
+        // Compare from the end of both strings
+        const char* s = suffix + slen - 1;
+        const char* t = test + tlen - 1;
+        
+        while (s >= suffix) {
+            if (tolower(*s) != tolower(*t)) {
+                return false;
+            }
+            s--;
+            t--;
+        }
+        return true;
+    }
+
     bool Web_Server::myStreamFile(const char* path, bool download) {
         std::error_code ec;
+        log_debug("Trying to serve file: " << path); // Add debug logging
 
         // Try to open the file from the SD card first
         FluidPath sdPath { path, sdName, ec };
         if (!ec) {
-            return streamFileFromPath(sdPath, download);  // Create a function to handle streaming
+            log_debug("Found file on SD: " << sdPath.c_str());
+            return streamFileFromPath(sdPath, download);
         }
+        log_debug("SD file error: " << ec.message());
 
         // If the file isn't on the SD card, fallback to SPIFFS
         FluidPath spiffsPath { path, localfsName, ec };
         if (!ec) {
+            log_debug("Found file on SPIFFS: " << spiffsPath.c_str());
             return streamFileFromPath(spiffsPath, download);
         }
+        log_debug("SPIFFS file error: " << ec.message());
 
         return false;
     }
 
     bool Web_Server::streamFileFromPath(const FluidPath& fpath, bool download) {
-        // Your existing code for streaming the file
-        std::string hash = HashFS::hash(fpath);
-        if (!hash.length()) {
-            std::filesystem::path gzpath(fpath);
-            gzpath += ".gz";
-            hash = HashFS::hash(gzpath);
-        }
-
-        if (hash.length() && std::string(_webserver->header("If-None-Match").c_str()) == hash) {
-            log_debug(fpath.c_str() << " is cached");
-            _webserver->send(304);
-            return true;
-        }
-
-        bool        isGzip = false;
-        FileStream* file   = nullptr;
+        FileStream* file = nullptr;
+        bool isGzip = false;
+        std::string actualPath;
+        size_t fileSize = 0;
+        static const size_t CHUNK_SIZE = 1024; // Read 1KB at a time
+        uint8_t chunk[CHUNK_SIZE];
+        
         try {
             file = new FileStream(fpath, "r", "");
+            actualPath = fpath.c_str();
+            fileSize = file->size();
         } catch (const Error err) {
+            if (file) {
+                delete file;
+                file = nullptr;
+            }
+            
             try {
                 std::filesystem::path gzpath(fpath);
                 gzpath += ".gz";
-                file   = new FileStream(gzpath, "r", "");
+                file = new FileStream(gzpath, "r", "");
                 isGzip = true;
+                actualPath = gzpath.string();
+                fileSize = file->size();
             } catch (const Error err) {
+                if (file) {
+                    delete file;
+                }
                 log_debug(fpath.c_str() << " not found");
                 return false;
             }
         }
 
+        // Get hash first
+        std::string hash = HashFS::hash(actualPath);
+        log_debug("File hash: " << (hash.length() ? hash : "none") << " for " << actualPath);
+
+        // Check if client has valid cached version
+        if (hash.length() && _webserver->hasHeader("If-None-Match")) {
+            if (std::string(_webserver->header("If-None-Match").c_str()) == hash) {
+                log_debug(actualPath << " is cached by client");
+                delete file;
+                _webserver->send(304);
+                return true;
+            }
+        }
+
+        // Set response headers
         if (download) {
             _webserver->sendHeader("Content-Disposition", "attachment");
         }
         if (hash.length()) {
             _webserver->sendHeader("ETag", hash.c_str());
         }
-        _webserver->setContentLength(file->size());
+        _webserver->setContentLength(fileSize);
         if (isGzip) {
             _webserver->sendHeader("Content-Encoding", "gzip");
         }
-        _webserver->send(200, getContentType(fpath.c_str()), "");
-        _webserver->client().write(*file);
+
+        // Determine and set content type
+        const char* contentType = getContentType(fpath.c_str());
+        if (endsWithCI(".js", fpath.c_str())) {
+            _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
+        } 
+        _webserver->send(200, contentType, "");
+
+        // Stream file in chunks
+        size_t bytesRemaining = fileSize;
+        while (bytesRemaining > 0) {
+            size_t bytesToRead = min(CHUNK_SIZE, bytesRemaining);
+            if (file->read(chunk, bytesToRead) != bytesToRead) {
+                delete file;
+                return false;
+            }
+            if (_webserver->client().write(chunk, bytesToRead) != bytesToRead) {
+                delete file;
+                return false;
+            }
+            bytesRemaining -= bytesToRead;
+            // Optional: Add a small delay to prevent watchdog timer issues
+            delay(0);
+        }
 
         delete file;
+        log_debug("Served " << actualPath << " with type " << contentType);
         return true;
     }
 
@@ -352,15 +437,20 @@ namespace WebUI {
     void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
         if (path == "/admin") {
-            if (myStreamFile("admin.html"))
+            if (myStreamFile("/admin.html"))
                 return;
         } else if (path == "/tab") {
-            if (myStreamFile("tab.html"))
+            if (myStreamFile("/tab.html"))
                 return;
         } else if (path == "/") {
-            if (myStreamFile("index.html"))
+            // Explicitly set content type for index.html
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            if (myStreamFile("/ui/index.html")) {
                 return;
+            }
+            log_debug("Failed to serve index.html"); // Add debug logging
         }
+        
         // If we did not send any HTML, send the default content
         _webserver->sendHeader("Content-Encoding", "gzip");
         _webserver->send_P(200, "text/html", PAGE_NOFILES, PAGE_NOFILES_SIZE);
@@ -1218,26 +1308,23 @@ namespace WebUI {
         const char* suffix;
         const char* mime_type;
     } mime_types[] = {
-        { ".htm", "text/html" },         { ".html", "text/html" },        { ".css", "text/css" },   { ".js", "application/javascript" },
-        { ".htm", "text/html" },         { ".png", "image/png" },         { ".gif", "image/gif" },  { ".jpeg", "image/jpeg" },
-        { ".jpg", "image/jpeg" },        { ".ico", "image/x-icon" },      { ".xml", "text/xml" },   { ".pdf", "application/x-pdf" },
-        { ".zip", "application/x-zip" }, { ".gz", "application/x-gzip" }, { ".txt", "text/plain" }, { "", "application/octet-stream" }
+        { ".html", "text/html" },
+        { ".htm", "text/html" },
+        { ".css", "text/css" },
+        { ".js", "application/javascript" },
+        { ".png", "image/png" },
+        { ".gif", "image/gif" },
+        { ".jpeg", "image/jpeg" },
+        { ".jpg", "image/jpeg" },
+        { ".ico", "image/x-icon" },
+        { ".xml", "text/xml" },
+        { ".pdf", "application/x-pdf" },
+        { ".zip", "application/x-zip" },
+        { ".gz", "application/x-gzip" },
+        { ".txt", "text/plain" },
+        { "", "application/octet-stream" }
     };
-    static bool endsWithCI(const char* suffix, const char* test) {
-        size_t slen = strlen(suffix);
-        size_t tlen = strlen(test);
-        if (slen > tlen) {
-            return false;
-        }
-        const char* s = suffix + slen;
-        const char* t = test + tlen;
-        while (--s != s) {
-            if (tolower(*s) != tolower(*--t)) {
-                return false;
-            }
-        }
-        return true;
-    }
+
     const char* Web_Server::getContentType(const char* filename) {
         mime_type* m;
         for (m = mime_types; *(m->suffix) != '\0'; ++m) {
@@ -1396,38 +1483,37 @@ namespace WebUI {
         _webserver->send(200, "application/json", config.toJSON().c_str());
     }
 
-    
-void Web_Server::handleSetPenConfig() {
-    AuthenticationLevel auth_level = is_authenticated();
-    if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
-        log_debug("Auth failed for pen config");  // Add debug logging
-        _webserver->send(401, "text/plain", "Authentication failed");
-        return;
-    }
-
-    if (!_webserver->hasArg("plain")) {
-        log_debug("No data in pen config request");  // Add debug logging
-        _webserver->send(400, "text/plain", "Missing pen configuration data");
-        return;
-    }
-
-    std::string jsonData = _webserver->arg("plain").c_str();
-    log_debug("Received pen config: " << jsonData);  // Add debug logging
-    
-    PenConfig& config = PenConfig::getInstance();
-    if (config.fromJSON(jsonData)) {
-        if (config.saveConfig()) {
-            log_debug("Pen config saved successfully");  // Add debug logging
-            _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
-        } else {
-            log_debug("Failed to save pen config");  // Add debug logging
-            _webserver->send(500, "text/plain", "Failed to save configuration");
+    void Web_Server::handleSetPenConfig() {
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            log_debug("Auth failed for pen config");  // Add debug logging
+            _webserver->send(401, "text/plain", "Authentication failed");
+            return;
         }
-    } else {
-        log_debug("Failed to parse pen config");  // Add debug logging
-        _webserver->send(400, "text/plain", "Invalid pen configuration data");
+
+        if (!_webserver->hasArg("plain")) {
+            log_debug("No data in pen config request");  // Add debug logging
+            _webserver->send(400, "text/plain", "Missing pen configuration data");
+            return;
+        }
+
+        std::string jsonData = _webserver->arg("plain").c_str();
+        log_debug("Received pen config: " << jsonData);  // Add debug logging
+
+        PenConfig& config = PenConfig::getInstance();
+        if (config.fromJSON(jsonData)) {
+            if (config.saveConfig()) {
+                log_debug("Pen config saved successfully");  // Add debug logging
+                _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                log_debug("Failed to save pen config");  // Add debug logging
+                _webserver->send(500, "text/plain", "Failed to save configuration");
+            }
+        } else {
+            log_debug("Failed to parse pen config");  // Add debug logging
+            _webserver->send(400, "text/plain", "Invalid pen configuration data");
+        }
     }
-}
 
     void Web_Server::handleDeletePen() {
         AuthenticationLevel auth_level = is_authenticated();
@@ -1441,9 +1527,9 @@ void Web_Server::handleSetPenConfig() {
             return;
         }
 
-        int penId = _webserver->arg("id").toInt();
+        int        penId  = _webserver->arg("id").toInt();
         PenConfig& config = PenConfig::getInstance();
-        
+
         if (config.deletePen(penId)) {
             config.saveConfig();
             _webserver->send(200, "application/json", "{\"status\":\"ok\"}");

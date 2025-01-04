@@ -66,7 +66,7 @@ void protocol_reset() {
     probing                = false;
     soft_limit             = false;
     rtSafetyDoor           = false;
-
+    
 }
 
 static int32_t idleEndTime = 0;

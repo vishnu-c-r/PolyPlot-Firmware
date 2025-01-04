@@ -1693,10 +1693,26 @@ switch (gc_block.modal.module) {
             // Then either break or fall through to actually stop.
             break;
         case ProgramFlow::Paused:
-            protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
+            protocol_buffer_synchronize();
             if (!state_is(State::CheckMode)) {
                 protocol_send_event(&feedHoldEvent);
-                protocol_execute_realtime();  // Execute suspend.
+                protocol_execute_realtime();
+
+                // Move Z-axis to the top position
+                float target_position[MAX_N_AXIS];
+                copyAxes(target_position, gc_state.position);
+                
+                // Get the Z axis limits and use max travel as safe height
+                auto zAxis = config->_axes->_axis[Z_AXIS];
+                target_position[Z_AXIS] = zAxis->_maxTravel;
+
+                plan_line_data_t pl_data;
+                memset(&pl_data, 0, sizeof(plan_line_data_t));
+                pl_data.feed_rate = zAxis->_maxRate;  // Use the Z axis max rate
+                pl_data.motion.rapidMotion = 1;
+
+                mc_linear(target_position, &pl_data, gc_state.position);
+                copyAxes(gc_state.position, target_position);
             }
             break;
         case ProgramFlow::CompletedM2:

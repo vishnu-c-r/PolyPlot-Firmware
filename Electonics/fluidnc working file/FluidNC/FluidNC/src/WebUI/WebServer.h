@@ -25,6 +25,7 @@ namespace WebUI {
 
     extern EnumSetting* http_enable;
     extern IntSetting*  http_port;
+    extern EnumSetting* http_block_during_motion;
 
 #    ifdef ENABLE_AUTHENTICATION
     struct AuthenticationIP {
@@ -124,7 +125,7 @@ namespace WebUI {
         static void handleGetPenConfig();    // Change to static
         static void handleSetPenConfig();    // Change to static
         static void handleDeletePen();       // Change to static
-
+        static void serveStatic(const char* uri, const char* path, const char* cache_header); 
         static int getPageid();
     };
 

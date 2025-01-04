@@ -315,10 +315,13 @@ namespace WebUI {
         static const size_t CHUNK_SIZE = 1024; // Read 1KB at a time
         uint8_t chunk[CHUNK_SIZE];
         
+        // First try to get file size without keeping file open
         try {
             file = new FileStream(fpath, "r", "");
             actualPath = fpath.c_str();
             fileSize = file->size();
+            delete file;
+            file = nullptr;
         } catch (const Error err) {
             if (file) {
                 delete file;
@@ -332,6 +335,8 @@ namespace WebUI {
                 isGzip = true;
                 actualPath = gzpath.string();
                 fileSize = file->size();
+                delete file;
+                file = nullptr;
             } catch (const Error err) {
                 if (file) {
                     delete file;
@@ -341,7 +346,7 @@ namespace WebUI {
             }
         }
 
-        // Get hash first
+        // Try to get hash
         std::string hash = HashFS::hash(actualPath);
         log_debug("File hash: " << (hash.length() ? hash : "none") << " for " << actualPath);
 
@@ -349,7 +354,6 @@ namespace WebUI {
         if (hash.length() && _webserver->hasHeader("If-None-Match")) {
             if (std::string(_webserver->header("If-None-Match").c_str()) == hash) {
                 log_debug(actualPath << " is cached by client");
-                delete file;
                 _webserver->send(304);
                 return true;
             }
@@ -367,33 +371,42 @@ namespace WebUI {
             _webserver->sendHeader("Content-Encoding", "gzip");
         }
 
-        // Determine and set content type
+        // Set correct content type
         const char* contentType = getContentType(fpath.c_str());
         if (endsWithCI(".js", fpath.c_str())) {
             _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
         } 
         _webserver->send(200, contentType, "");
 
-        // Stream file in chunks
-        size_t bytesRemaining = fileSize;
-        while (bytesRemaining > 0) {
-            size_t bytesToRead = min(CHUNK_SIZE, bytesRemaining);
-            if (file->read(chunk, bytesToRead) != bytesToRead) {
-                delete file;
-                return false;
+        // Now open file again for streaming
+        bool success = true;
+        try {
+            file = new FileStream(isGzip ? (fpath.c_str() + std::string(".gz")) : fpath.c_str(), "r", "");
+            // Stream file in chunks
+            size_t bytesRemaining = fileSize;
+            while (bytesRemaining > 0) {
+                size_t bytesToRead = min(CHUNK_SIZE, bytesRemaining);
+                if (file->read(chunk, bytesToRead) != bytesToRead) {
+                    success = false;
+                    break;
+                }
+                if (_webserver->client().write(chunk, bytesToRead) != bytesToRead) {
+                    success = false;
+                    break;
+                }
+                bytesRemaining -= bytesToRead;
+                delay(0); // Prevent watchdog trigger
             }
-            if (_webserver->client().write(chunk, bytesToRead) != bytesToRead) {
-                delete file;
-                return false;
-            }
-            bytesRemaining -= bytesToRead;
-            // Optional: Add a small delay to prevent watchdog timer issues
-            delay(0);
+        } catch (const Error err) {
+            success = false;
         }
 
-        delete file;
+        if (file) {
+            delete file;
+        }
+
         log_debug("Served " << actualPath << " with type " << contentType);
-        return true;
+        return success;
     }
 
     void Web_Server::sendWithOurAddress(const char* content, int code) {

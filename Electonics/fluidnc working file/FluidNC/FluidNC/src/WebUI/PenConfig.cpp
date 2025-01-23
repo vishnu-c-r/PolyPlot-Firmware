@@ -36,9 +36,9 @@ namespace WebUI {
     }
 
     bool PenConfig::addPen(const Pen& pen) {
-        // Check if pen with same ID already exists
+        // Check if pen with same name already exists
         for (const auto& existingPen : pens) {
-            if (existingPen.id == pen.id) {
+            if (existingPen.name == pen.name) {
                 return false;
             }
         }
@@ -48,7 +48,7 @@ namespace WebUI {
 
     bool PenConfig::updatePen(const Pen& pen) {
         for (auto& existingPen : pens) {
-            if (existingPen.id == pen.id) {
+            if (existingPen.name == pen.name) {
                 existingPen = pen;
                 return true;
             }
@@ -56,9 +56,9 @@ namespace WebUI {
         return false;
     }
 
-    bool PenConfig::deletePen(int id) {
+    bool PenConfig::deletePen(const std::string& name) {
         for (auto it = pens.begin(); it != pens.end(); ++it) {
-            if (it->id == id) {
+            if (it->name == name) {
                 pens.erase(it);
                 return true;
             }
@@ -75,9 +75,25 @@ namespace WebUI {
 
         for (const auto& pen : pens) {
             j.begin_object();
-            j.member("id", std::to_string(pen.id).c_str());
             j.member("color", pen.color.c_str());
-            j.member("order", std::to_string(pen.order).c_str());
+            j.member("name", pen.name.c_str());
+            j.member("zValue", std::to_string(pen.zValue).c_str());
+            
+            // Handle penPick array
+            j.begin_array("penPick");
+            for (const auto& pick : pen.penPick) {
+                j.string(pick.c_str());
+            }
+            j.end_array();
+
+            // Handle penDrop array
+            j.begin_array("penDrop");
+            for (const auto& drop : pen.penDrop) {
+                j.string(drop.c_str());
+            }
+            j.end_array();
+
+            j.member("skipped", pen.skipped ? "true" : "false");
             j.end_object();
         }
 
@@ -106,24 +122,71 @@ namespace WebUI {
             std::string obj = jsonStr.substr(pos, end - pos + 1);
             log_debug("Processing object: " << obj);  // Add debug logging
 
-            Pen    pen;
-            size_t idPos    = obj.find("\"id\":");
+            Pen pen;
+            // Parse color
             size_t colorPos = obj.find("\"color\":");
-            size_t orderPos = obj.find("\"order\":");
-
-            if (idPos != std::string::npos) {
-                pen.id = atoi(obj.substr(idPos + 5).c_str());
-            }
             if (colorPos != std::string::npos) {
                 size_t start = obj.find("\"", colorPos + 8) + 1;
                 size_t end   = obj.find("\"", start);
                 pen.color    = obj.substr(start, end - start);
             }
-            if (orderPos != std::string::npos) {
-                pen.order = atoi(obj.substr(orderPos + 8).c_str());
+
+            // Parse name
+            size_t namePos = obj.find("\"name\":");
+            if (namePos != std::string::npos) {
+                size_t start = obj.find("\"", namePos + 7) + 1;
+                size_t end   = obj.find("\"", start);
+                pen.name     = obj.substr(start, end - start);
             }
 
-            log_debug("Adding pen: id=" << pen.id << " color=" << pen.color << " order=" << pen.order);  // Add debug logging
+            // Parse zValue
+            size_t zValuePos = obj.find("\"zValue\":");
+            if (zValuePos != std::string::npos) {
+                pen.zValue = atoi(obj.substr(zValuePos + 9).c_str());
+            }
+
+            // Parse penPick array
+            size_t pickPos = obj.find("\"penPick\":");
+            if (pickPos != std::string::npos) {
+                size_t arrayStart = obj.find("[", pickPos);
+                size_t arrayEnd = obj.find("]", pickPos);
+                std::string arrayStr = obj.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
+                
+                // Parse each string in the array
+                size_t strStart = 0;
+                while ((strStart = arrayStr.find("\"", strStart)) != std::string::npos) {
+                    size_t strEnd = arrayStr.find("\"", strStart + 1);
+                    if (strEnd == std::string::npos) break;
+                    pen.penPick.push_back(arrayStr.substr(strStart + 1, strEnd - strStart - 1));
+                    strStart = strEnd + 1;
+                }
+            }
+
+            // Parse penDrop array
+            size_t dropPos = obj.find("\"penDrop\":");
+            if (dropPos != std::string::npos) {
+                size_t arrayStart = obj.find("[", dropPos);
+                size_t arrayEnd = obj.find("]", dropPos);
+                std::string arrayStr = obj.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
+                
+                // Parse each string in the array
+                size_t strStart = 0;
+                while ((strStart = arrayStr.find("\"", strStart)) != std::string::npos) {
+                    size_t strEnd = arrayStr.find("\"", strStart + 1);
+                    if (strEnd == std::string::npos) break;
+                    pen.penDrop.push_back(arrayStr.substr(strStart + 1, strEnd - strStart - 1));
+                    strStart = strEnd + 1;
+                }
+            }
+
+            // Parse skipped
+            size_t skippedPos = obj.find("\"skipped\":");
+            if (skippedPos != std::string::npos) {
+                std::string skippedStr = obj.substr(skippedPos + 9, 5);
+                pen.skipped = (skippedStr.find("true") != std::string::npos);
+            }
+
+            log_debug("Adding pen: " << pen.name << " color=" << pen.color);  // Updated debug logging
             pens.push_back(pen);
             pos = end + 1;
         }

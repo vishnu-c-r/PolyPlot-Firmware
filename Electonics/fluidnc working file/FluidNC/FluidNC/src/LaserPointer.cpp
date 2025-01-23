@@ -33,4 +33,5 @@ void LaserPointer::afterParse() {
     if (_pin == -1) {
         log_info("Laser pointer not configured");
     }
+    log_info("Laser pointer offset: X=" << _x_offset << " Y=" << _y_offset);
 }

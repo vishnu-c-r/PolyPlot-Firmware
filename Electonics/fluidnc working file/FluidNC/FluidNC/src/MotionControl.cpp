@@ -19,7 +19,6 @@
 #include <cmath>
 
 
-
 #define PROBE_POSITION_X 100.0f  // Example X-axis probing position
 #define PROBE_POSITION_Y 150.0f  // Example Y-axis probing position
 #define PROBE_POSITION_Z 0.0f    // Example Z-axis probing height (start of the probing)
@@ -385,115 +384,6 @@ GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, 
     }
 }
 
-// Perform a new probe cycle that oscillates the probe to find the offset of the pen. Requires probe switch.
-// NOTE: Upon probe failure, the program will be stopped and placed into ALARM state.
-// GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset) {
-//     if (!config->_probe->exists()) {
-//         log_error("Probe pin is not configured");
-//         return GCUpdatePos::None;
-//     }
-
-//     if (state_is(State::CheckMode)) {
-//         return config->_probe->_check_mode_start ? GCUpdatePos::None : GCUpdatePos::Target;
-//     }
-
-//     protocol_buffer_synchronize();
-//     if (sys.abort) {
-//         return GCUpdatePos::None;  // Abort if reset is triggered.
-//     }
-
-//     config->_stepping->beginLowLatency();
-//     probe_succeeded = false;  // Re-initialize probe state.
-//     config->_probe->set_direction(away);
-
-//     // Check if the probe is already triggered before starting.
-//     if (config->_probe->tripped()) {
-//         send_alarm(ExecAlarm::ProbeFailInitial);
-//         protocol_execute_realtime();
-//         config->_stepping->endLowLatency();
-//         return GCUpdatePos::None;
-//     }
-
-//     // Setup probing movement and target position
-//     float original_target[MAX_N_AXIS];
-//     memcpy(original_target, target, sizeof(original_target));
-
-//     // Setup oscillation parameters
-//     float oscillation_amplitude = 2.0f;  // Adjust amplitude of the oscillation
-//     int oscillation_count = 10;          // Number of oscillations
-
-//     // Perform the probing cycle
-//     probing = true;
-//     for (int i = 0; i < oscillation_count; ++i) {
-//         // Move the X or Y axis back and forth while probing down
-//         target[X_AXIS] = original_target[X_AXIS] + ((i % 2 == 0) ? oscillation_amplitude : -oscillation_amplitude);
-//         mc_linear(target, pl_data, gc_state.position);  // Execute the movement
-
-//         protocol_send_event(&cycleStartEvent);  // Start the cycle
-//         do {
-//             protocol_execute_realtime();
-//             if (sys.abort) {
-//                 config->_stepping->endLowLatency();
-//                 return GCUpdatePos::None;
-//             }
-//         } while (!state_is(State::Idle));
-//     }
-
-//     // Continue the probing motion towards the target
-//     target[X_AXIS] = original_target[X_AXIS];  // Reset X-axis to the original position
-//     mc_linear(target, pl_data, gc_state.position);
-
-//     protocol_buffer_synchronize();
-//     probing = false;
-
-//     config->_stepping->endLowLatency();
-
-//     // Probing complete! Check if probing was successful
-//     if (probing) {
-//         if (no_error) {
-//             // Retrieve motor steps of probe position
-//             get_motor_steps(probe_steps);
-//         } else {
-//             send_alarm(ExecAlarm::ProbeFailContact);
-//         }
-//     } else {
-//         probe_succeeded = true;
-//     }
-
-//     probing = false;  // Ensure probe state monitor is disabled.
-//     protocol_execute_realtime();  // Check and execute run-time commands
-
-//     // Store and apply probed position if successful
-//     if (probe_succeeded) {
-//         if (offset != __FLT_MAX__) {
-//             float coord_data[MAX_N_AXIS];
-//             float probe_contact[MAX_N_AXIS];
-
-//             motor_steps_to_mpos(probe_contact, probe_steps);  // Convert motor steps to machine coordinates
-//             coords[gc_state.modal.coord_select]->get(coord_data);  // Get current coordinate offsets
-
-//             auto n_axis = config->_axes->_numberAxis;
-//             for (int axis = 0; axis < n_axis; axis++) {
-//                 if (offsetAxis & (1 << axis)) {
-//                     coord_data[axis] = probe_contact[axis] - offset;  // Apply offset
-//                     break;
-//                 }
-//             }
-
-//             log_info("Probe offset applied:");
-//             coords[gc_state.modal.coord_select]->set(coord_data);  // Save updated coordinates
-//             copyAxes(gc_state.coord_system, coord_data);
-
-//             report_wco_counter = 0;  // Force reporting of the updated position
-//         }
-
-//         return GCUpdatePos::System;  // Successful probe cycle
-//     } else {
-//         return GCUpdatePos::Target;  // Failed to trigger probe within travel
-//     }
-// }
-
-
 GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset) {
     if (!config->_probe->exists()) {
         log_error("Probe pin is not configured");
@@ -645,85 +535,204 @@ void mc_critical(ExecAlarm alarm) {
     send_alarm(alarm);
 }
 
-// // Function to control the pen module
-// void mc_pen_module_controll(plan_line_data_t* pl_data) {
-//     plan_reset(); // Reset planner buffer
-//     plan_sync_position(); // Sync planner position to current machine position
+// automatic pen change execution
+bool mc_pen_change(plan_line_data_t* pl_data) {
+    static int current_loaded_pen = 0;
+    int nextPen = pl_data->penNumber;
 
-//     // Define an array to store the step counts for each pen position
-//     String penStepCounts[8] = {"440", "1690", "2970", "4280" , "5510", "6800", "8030", "9320"};//red 1-11 pink 2-9.5 yellow 3-9.5 green 4-9.5 blue 5-9.8 6-9.8 orange 7-9.5 black 8-9 brwn
-//     char buffer[20];//temporary buffer to store the step count
-//     // Check if the pen position is within the valid range
-//     if (pl_data->pen >= 61 && pl_data->pen <= 68) {
-//         int index = pl_data->pen - 61;
-//         String stepCount = penStepCounts[index];
-//         sendMessage(stepCount.c_str());
-//     }
-//     // Check if the pen position is for homing the module
-//     if (pl_data->pen == 69) {
-//         sendMessage("M28");
-//     }
-//     //check if the step count is to be sent
-//     if (pl_data->pen == 60)
-//     {
-//         sprintf(buffer, "%d", pl_data->Axis_step);
-//         sendMessage(buffer);
-//     }
+    log_info("Starting pen change - Current:" << current_loaded_pen << " Next:" << nextPen);
 
-//     protocol_buffer_synchronize(); // Synchronize the protocol buffer
-// }
+    protocol_buffer_synchronize();
+    plan_reset();
+    plan_sync_position();
 
-void mc_pen_change(int new_pen_number, plan_line_data_t* pl_data, float* current_position) {
-    if (new_pen_number < 1 || new_pen_number > MAX_PENS) {
-        return;  // Invalid pen number
+    float currentPos[MAX_N_AXIS];
+    copyAxes(currentPos, gc_state.position);
+    float startPos[MAX_N_AXIS];
+    copyAxes(startPos, currentPos);
+    
+    pl_data->feed_rate = 3000;
+
+    // If current pen and next pen are the same, just redock it
+    if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
+        float dropPos[MAX_N_AXIS];
+        if (!get_pen_place_position(current_loaded_pen, dropPos)) {
+            log_error("Invalid pen position");
+            return false;
+        }
+
+        // 1. Move Z to safe height
+        currentPos[Z_AXIS] = 0;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 2. Move Y to current pen position
+        currentPos[Y_AXIS] = dropPos[Y_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 3. Move X to dock after Y and Z complete
+        currentPos[X_AXIS] = dropPos[X_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 4. Lower Z to dock
+        currentPos[Z_AXIS] = dropPos[Z_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        mc_drop_pen(current_loaded_pen);  // Add this to properly mark pen as docked
+
+        // 5. Move X back 50mm
+        currentPos[X_AXIS] += 50.0f;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // Return to starting position
+        if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
+
+        // Set current_loaded_pen to 0 so next command treats it as a fresh pickup
+        current_loaded_pen = 0;
+        log_info("Pen redocked and cleared: " << nextPen);
+        return true;
     }
 
-    // Store start position
-    float start_position[MAX_N_AXIS];
-    memcpy(start_position, current_position, sizeof(float) * MAX_N_AXIS);
+    // First pickup (no pen loaded)
+    if (current_loaded_pen == 0 && nextPen > 0) {
+        float pickupPos[MAX_N_AXIS];
+        if (!get_pen_pickup_position(nextPen, pickupPos)) {
+            log_error("Invalid pen pickup position"); 
+            return false;
+        }
 
-    // First return current pen if one is active
-    if (current_pen > 0) {
-        float return_pos[MAX_N_AXIS];
-        get_pen_place_position(current_pen, return_pos);
+        // 1. Move Z up first
+        currentPos[Z_AXIS] = pickupPos[Z_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 2. Move Y to pen position
+        currentPos[Y_AXIS] = pickupPos[Y_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
         
-        // Move Z up first
-        float safe_z = return_pos[Z_AXIS] + 10.0f;  // Safe Z height
-        float z_pos[MAX_N_AXIS];
-        memcpy(z_pos, current_position, sizeof(float) * MAX_N_AXIS);
-        z_pos[Z_AXIS] = safe_z;
-        mc_linear(z_pos, pl_data, current_position);
+        // 3. After Z and Y are done, move X to dock
+        currentPos[X_AXIS] = pickupPos[X_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        mc_pick_pen(nextPen);
+
+        // 4. Move Z up to 0
+        currentPos[Z_AXIS] = 0;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 5. Retract X by 50mm
+        currentPos[X_AXIS] += 50.0f;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        current_loaded_pen = nextPen;
+
+        // Return to starting position
+        if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
+    }
+    // Change pen when one is already loaded
+    else if (current_loaded_pen > 0 && nextPen > 0) {
+        float dropPos[MAX_N_AXIS], pickupPos[MAX_N_AXIS];
         
-        // Move to pen return position XY
-        float xy_pos[MAX_N_AXIS];
-        memcpy(xy_pos, return_pos, sizeof(float) * MAX_N_AXIS);
-        xy_pos[Z_AXIS] = safe_z;
-        mc_linear(xy_pos, pl_data, current_position);
-        
-        // Lower Z to return pen
-        mc_linear(return_pos, pl_data, current_position);
+        if (!get_pen_place_position(current_loaded_pen, dropPos) || 
+            !get_pen_pickup_position(nextPen, pickupPos)) {
+            log_error("Invalid pen position");
+            return false;
+        }
+
+        // 1. Move Z to safe height
+        currentPos[Z_AXIS] = 0;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 2. Move Y to current pen return position
+        currentPos[Y_AXIS] = dropPos[Y_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 3. After Z and Y complete, move X to dock
+        currentPos[X_AXIS] = dropPos[X_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 4. Lower Z to dock
+        currentPos[Z_AXIS] = dropPos[Z_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        mc_drop_pen(current_loaded_pen);
+
+        // 5. Move X back 50mm
+        currentPos[X_AXIS] += 50.0f;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 6. Move Y and Z to next pen position
+        currentPos[Y_AXIS] = pickupPos[Y_AXIS];
+        currentPos[Z_AXIS] = pickupPos[Z_AXIS];
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 7. After Y and Z complete, move X to dock
+        currentPos[X_AXIS] = pickupPos[X_AXIS]; 
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        mc_pick_pen(nextPen);
+
+        // 8. Move Z up to 0  
+        currentPos[Z_AXIS] = 0;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        // 9. Move X back 50mm
+        currentPos[X_AXIS] += 50.0f;
+        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+        protocol_buffer_synchronize();
+
+        current_loaded_pen = nextPen;
+
+        // Return to starting position
+        if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
     }
 
-    // Now pick up new pen
-    float pickup_pos[MAX_N_AXIS];
-    get_pen_pickup_position(new_pen_number, pickup_pos);
-    
-    // Move Z up to safe height
-    float safe_z = pickup_pos[Z_AXIS] + 10.0f;
-    float z_pos[MAX_N_AXIS];
-    memcpy(z_pos, current_position, sizeof(float) * MAX_N_AXIS);
-    z_pos[Z_AXIS] = safe_z;
-    mc_linear(z_pos, pl_data, current_position);
-    
-    // Move to new pen XY
-    float xy_pos[MAX_N_AXIS];
-    memcpy(xy_pos, pickup_pos, sizeof(float) * MAX_N_AXIS);
-    xy_pos[Z_AXIS] = safe_z;
-    mc_linear(xy_pos, pl_data, current_position);
-    
-    // Lower Z to pick up pen
-    mc_linear(pickup_pos, pl_data, current_position);
-    
-    // Update current pen
-    set_current_pen(new_pen_number);
+    log_info("Pen change complete. Current pen: " << current_loaded_pen);
+    return true;
+}
+
+void mc_pick_pen(int penNumber) {
+    plan_reset();
+    plan_sync_position();
+
+    float pickupPos[3] = {0.0f, 0.0f, 0.0f};
+    get_pen_pickup_position(penNumber, pickupPos);
+
+    plan_line_data_t pl_data = {0};
+    pl_data.feed_rate = 3000;  // Set faster feed rate
+    mc_linear(pickupPos, &pl_data, gc_state.position);
+
+    // Use namespace Pen::
+    Pen::pickPen(penNumber - 1);  // Use namespace prefix
+}
+
+void mc_drop_pen(int penNumber) {
+    plan_reset();
+    plan_sync_position();
+
+    float placePos[3] = {0.0f, 0.0f, 0.0f};
+    get_pen_place_position(penNumber, placePos);
+
+    plan_line_data_t pl_data = {0};
+    pl_data.feed_rate = 3000;  // Set faster feed rate
+    mc_linear(placePos, &pl_data, gc_state.position);
+
+    // Use namespace Pen::
+    Pen::dropPen(penNumber - 1);  // Use namespace prefix
 }

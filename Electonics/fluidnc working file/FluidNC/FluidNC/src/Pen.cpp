@@ -1,43 +1,66 @@
-#include "pen.h"
-#include "Planner.h" // Add this include here instead of in pen.h
+#include "Pen.h"
+#include "GCode.h"  // For MAX_PENS
 
-std::array<PenPosition, MAX_PENS> pen_positions;
-int current_pen = 0;
+static PenLocation penLocations[] = {
+    { -494.700f, 39.9f, -14.0f, false },  // Pen 1 location (Z moves down from 0)
+    { -100.0f, 85.0f, -15.0f, false },  // Pen 2 location
+    { -100.0f, 95.0f, -15.0f, false },  // Pen 3 location
+    { -492.0f, 162.30f, -14.0f, false }, // Pen 4 location
+    { -100.0f, 115.0f, -15.0f, false }, // Pen 5 location 
+    { -100.0f, 125.0f, -15.0f, false }, // Pen 6 location
+    { -100.0f, 135.0f, -15.0f, false }, // Pen 7 location
+    { -100.0f, 145.0f, -15.0f, false }  // Pen 8 location
+};
 
-void initialize_pen_positions() {
-    // Initialize hardcoded pen positions in millimeters
-    // Format: X, Y, Z, occupied
-    pen_positions[0] = { 10.0f, 0.0f, 0.0f, true };    // Pen 1 at 10mm in X
-    pen_positions[1] = { 30.0f, 0.0f, 0.0f, true };    // Pen 2 at 30mm in X
-    pen_positions[2] = { 50.0f, 0.0f, 0.0f, true };    // Pen 3
-    pen_positions[3] = { 70.0f, 0.0f, 0.0f, true };    // Pen 4
-    pen_positions[4] = { 90.0f, 0.0f, 0.0f, true };    // Pen 5
-    pen_positions[5] = { 110.0f, 0.0f, 0.0f, true };   // Pen 6
-    pen_positions[6] = { 130.0f, 0.0f, 0.0f, true };   // Pen 7
-}
-
-bool set_current_pen(int pen_number) {
-    if (pen_number >= 0 && pen_number <= MAX_PENS) {
-        current_pen = pen_number;
-        return true;
+PenLocation getPenLocation(int penIndex) {
+    if (penIndex >= 0 && penIndex < MAX_PENS) {
+        return penLocations[penIndex];
     }
-    return false;
+    // Return first pen location as fallback
+    return penLocations[0];
 }
 
-void get_pen_pickup_position(int pen_number, float position[3]) {
-    if (pen_number > 0 && pen_number <= MAX_PENS) {
-        auto& pen = pen_positions[pen_number - 1];
-        position[0] = pen.x;
-        position[1] = pen.y;
-        position[2] = pen.z;
+void setPenOccupied(int penIndex, bool state) {
+    if (penIndex >= 0 && penIndex < MAX_PENS) {
+        penLocations[penIndex].occupied = state;
     }
 }
 
-void get_pen_place_position(int pen_number, float position[3]) {
-    if (pen_number > 0 && pen_number <= MAX_PENS) {
-        auto& pen = pen_positions[pen_number - 1];
-        position[0] = pen.x;
-        position[1] = pen.y;
-        position[2] = pen.z;
+// Add namespace Pen implementation
+namespace Pen {
+    void pickPen(int penIndex) {
+        if (penIndex >= 0 && penIndex < MAX_PENS) {
+            // Mark the pen as no longer in the holder
+            setPenOccupied(penIndex, false);
+        }
     }
+
+    void dropPen(int penIndex) {
+        if (penIndex >= 0 && penIndex < MAX_PENS) {
+            // Mark the pen as returned to the holder
+            setPenOccupied(penIndex, true);
+        }
+    }
+}
+
+bool get_pen_place_position(int penNumber, float* position) {
+    if (penNumber <= 0 || penNumber > MAX_PENS) {
+        return false;
+    }
+    PenLocation loc = getPenLocation(penNumber - 1);
+    position[X_AXIS] = loc.x;
+    position[Y_AXIS] = loc.y;
+    position[Z_AXIS] = loc.z;
+    return true;
+}
+
+bool get_pen_pickup_position(int penNumber, float* position) {
+    if (penNumber <= 0 || penNumber > MAX_PENS) {
+        return false;
+    }
+    PenLocation loc = getPenLocation(penNumber - 1);
+    position[X_AXIS] = loc.x;
+    position[Y_AXIS] = loc.y;
+    position[Z_AXIS] = loc.z;
+    return true;
 }

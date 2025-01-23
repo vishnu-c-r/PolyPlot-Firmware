@@ -12,7 +12,6 @@ namespace Kinematics {
     void HBot::init() {
         log_info("Kinematic system: " << name());
 
-        // Swapped X and Y axes
         config->_axes->_axis[Y_AXIS]->_motors[0]->limitOtherAxis(X_AXIS);
         config->_axes->_axis[X_AXIS]->_motors[0]->limitOtherAxis(Y_AXIS);
     }
@@ -32,14 +31,20 @@ namespace Kinematics {
     }
 
     bool HBot::limitReached(AxisMask& axisMask, MotorMask& motors, MotorMask limited) {
-        // For H-Bot, the limit switches are associated with axes, not motors.
         MotorMask toClear = axisMask & limited;
-
         clear_bits(axisMask, limited);
         clear_bits(motors, limited);
-
+        
+        // Make sure to release motors and clear limit state
         releaseMotors(axisMask, motors);
-
+        
+        // For HBot, when one limit is hit we need to ensure both motors handle it properly
+        auto axes = config->_axes;
+        if (limited) {
+            axes->_axis[X_AXIS]->_motors[0]->unlimit();
+            axes->_axis[Y_AXIS]->_motors[0]->unlimit();
+        }
+        
         return bool(toClear);
     }
 
@@ -54,6 +59,10 @@ namespace Kinematics {
     }
 
     bool HBot::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
+        // Add debug logging to track motion
+        log_debug("HBot motion - target: " << target[X_AXIS] << "," << target[Y_AXIS] 
+                 << " position: " << position[X_AXIS] << "," << position[Y_AXIS]);
+        
         auto n_axis = config->_axes->_numberAxis;
 
         float motors[n_axis];
@@ -72,9 +81,13 @@ namespace Kinematics {
     }
 
     void HBot::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
-        // Swapped X and Y axes
-        cartesian[Y_AXIS] = motors[X_AXIS];                   // Y = A
-        cartesian[X_AXIS] = motors[Y_AXIS] - motors[X_AXIS];  // X = B - A
+        // Add bounds checking
+        if (std::isnan(motors[X_AXIS]) || std::isnan(motors[Y_AXIS])) {
+            log_error("Invalid motor positions detected");
+            return;
+        }
+        cartesian[X_AXIS] = (motors[Y_AXIS] - motors[X_AXIS]);   // X = B - A (removed negative)
+        cartesian[Y_AXIS] = -motors[X_AXIS];                     // Y = -A
 
         for (int axis = Z_AXIS; axis < n_axis; axis++) {
             cartesian[axis] = motors[axis];
@@ -82,9 +95,8 @@ namespace Kinematics {
     }
 
     bool HBot::transform_cartesian_to_motors(float* motors, float* cartesian) {
-        // Swapped X and Y axes
-        motors[X_AXIS] = cartesian[Y_AXIS];                      // A = Y
-        motors[Y_AXIS] = cartesian[X_AXIS] + cartesian[Y_AXIS];  // B = X + Y
+        motors[X_AXIS] = -cartesian[Y_AXIS];                     // A = -Y (unchanged)
+        motors[Y_AXIS] = cartesian[X_AXIS] - cartesian[Y_AXIS];  // B = X - Y (removed negative from X)
 
         auto n_axis = config->_axes->_numberAxis;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) {

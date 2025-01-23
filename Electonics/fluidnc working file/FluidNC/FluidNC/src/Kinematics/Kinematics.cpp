@@ -81,6 +81,11 @@ namespace Kinematics {
     Kinematics::~Kinematics() { delete _system; }
 
     void KinematicSystem::apply_laser_offset(float* target) {
+        // Skip laser offset during homing operations
+        if (sys.state == State::Homing) {
+            return;
+        }
+
         if (config && config->_laserPointer && 
             config->_laserPointer->isAvailable() && 
             config->_laserPointer->getState()) {

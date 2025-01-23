@@ -51,10 +51,14 @@ std::string report_pin_string;
 
 portMUX_TYPE mmux = portMUX_INITIALIZER_UNLOCKED;
 
+// Explanation: This function notifies users or systems about specific events.
+// It takes a title and a message, then performs the desired reporting action.
 void _notify(const char* title, const char* msg) {
     WebUI::notificationsService.sendMSG(title, msg);
 }
 
+// Explanation: This function uses a formatted string to notify users.
+// It supports variable arguments for more flexible reporting.
 void _notifyf(const char* title, const char* format, ...) {
     char    loc_buf[64];
     char*   temp = loc_buf;
@@ -79,6 +83,7 @@ void _notifyf(const char* title, const char* format, ...) {
     }
 }
 
+// Maintain counters for overriding certain behaviors
 Counter report_ovr_counter = 0;
 Counter report_wco_counter = 0;
 
@@ -149,6 +154,7 @@ void report_error_message(Message message) {  // ok to send to all channels
     }
 }
 
+// The radio string toggles behavior based on whether WIFI or BLUETOOTH is enabled.
 const char* radio =
 #if defined(ENABLE_WIFI) || defined(ENABLE_BLUETOOTH)
 #    if defined(ENABLE_WIFI) && defined(ENABLE_BLUETOOTH)

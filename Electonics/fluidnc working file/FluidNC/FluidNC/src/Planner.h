@@ -26,11 +26,13 @@ struct plan_line_data_t {
     float        feed_rate;       // Desired feed rate for line motion. Value is ignored, if rapid motion.
     PlMotion     motion;          // Bitflag variable to indicate motion conditions. See defines above.
     CoolantState coolant;
-    int32_t      pen;     // pen state
-    uint32_t     Axis_step;   // Number of steps to take for this motion. Used for special motion cases.
     int32_t      line_number;     // Desired line number to report when executing.
     bool         is_jog;          // true if this was generated due to a jog command
     bool         limits_checked;  // true if soft limits already checked
+    
+    // Add pen tracking variables
+    int              prevPenNumber;  // Previous pen number before change
+    int              penNumber;      // Current/target pen number
 };
 
 // Now safe to include pen.h
@@ -42,36 +44,35 @@ struct plan_line_data_t {
 // are as specified in the source g-code.
 struct plan_block_t {
     // Fields used by the bresenham algorithm for tracing the line
-    // NOTE: Used by stepper algorithm to execute the block correctly. Do not alter these values.
-
     uint32_t steps[MAX_N_AXIS];  // Step count along each axis
     uint32_t step_event_count;   // The maximum step axis count and number of steps required to complete this block.
-    uint8_t  direction_bits;     // The direction bit set for this block (refers to *_DIRECTION_BIT in config.h)
+    uint8_t  direction_bits;     // The direction bit set for this block
 
-    // Block condition data to ensure correct execution depending on states and overrides.
-    PlMotion     motion;       // Block bitflag motion conditions. Copied from pl_line_data.
+    // Block condition data
+    PlMotion     motion;       // Block bitflag motion conditions
     CoolantState coolant;      // Coolant state
-    int32_t      pen;          // pen state
-    uint32_t     Module_Axis_steps;// Number of steps to take for the motion of the 4th axis.
-    int32_t      line_number;  // Block line number for real-time reporting. Copied from pl_line_data.
+    int32_t      line_number;  // Block line number for reporting
 
-    // Fields used by the motion planner to manage acceleration. Some of these values may be updated
-    // by the stepper module during execution of special motion cases for replanning purposes.
-    float entry_speed_sqr;      // The current planned entry speed at block junction in (mm/min)^2
-    float max_entry_speed_sqr;  // Maximum allowable entry speed based on the minimum of junction limit and
-    //   neighboring nominal speeds with overrides in (mm/min)^2
-    float acceleration;  // Axis-limit adjusted line acceleration in (mm/min^2). Does not change.
-    float millimeters;   // The remaining distance for this block to be executed in (mm).
-    // NOTE: This value may be altered by stepper algorithm during execution.
+    // Remove old unused fields:
+    // int32_t      pen;          // OLD: Remove this
+    // uint32_t     Module_Axis_steps;  // OLD: Remove this
 
-    // Stored rate limiting data used by planner when changes occur.
-    float max_junction_speed_sqr;  // Junction entry speed limit based on direction vectors in (mm/min)^2
-    float rapid_rate;              // Axis-limit adjusted maximum rate for this block direction in (mm/min)
-    float programmed_rate;         // Programmed rate of this block (mm/min).
+    // Fields used by the motion planner to manage acceleration
+    float entry_speed_sqr;      
+    float max_entry_speed_sqr;  
+    float acceleration;
+    float millimeters;   
+
+    // Rate limiting data
+    float max_junction_speed_sqr;
+    float rapid_rate;
+    float programmed_rate;
 
     bool is_jog;
-    bool is_pen_change;  // Flag to indicate this is a pen change operation
-    int new_pen;        // New pen number for pen change operations
+
+    // Add the new pen change tracking:
+    int currentPenNumber;   // Current pen number 
+    int previousPenNumber;  // Previous pen number
 };
 
 

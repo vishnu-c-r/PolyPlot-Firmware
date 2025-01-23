@@ -9,6 +9,7 @@
 #include "Planner.h"
 #include "Config.h"
 #include "Probe.h"
+#include "Pen.h"  // Make sure this is included
 
 #include <cstdint>
 
@@ -59,7 +60,9 @@ void mc_cancel_jog();
 
 void mc_init();
 
-void mc_pen_module_controll(plan_line_data_t* pl_data);
+// void mc_pen_module_controll(plan_line_data_t* pl_data);
 
-// Add this declaration:
-void mc_pen_change(int new_pen_number, plan_line_data_t* pl_data, float* current_position);
+// Pen change functions
+bool mc_pen_change(plan_line_data_t* pl_data);  // Change return type to bool
+void mc_pick_pen(int penNumber);
+void mc_drop_pen(int penNumber);

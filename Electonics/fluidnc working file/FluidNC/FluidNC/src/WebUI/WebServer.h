@@ -127,6 +127,16 @@ namespace WebUI {
         static void handleDeletePen();       // Change to static
         static void serveStatic(const char* uri, const char* path, const char* cache_header); 
         static int getPageid();
+
+        static const uint32_t WEBSOCKET_TIMEOUT = 120000;  // 2 minutes timeout
+        static const uint8_t MAX_RETRY_ATTEMPTS = 3;
+        static uint8_t retry_count;
+        static uint32_t last_ws_activity;
+        
+        void resetWebSocket();
+        bool checkWebSocketTimeout();
+        static void setCORSHeaders();
+        static void enableCachingHeaders();
     };
 
     extern Web_Server webServer;

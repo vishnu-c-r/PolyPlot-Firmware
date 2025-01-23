@@ -88,6 +88,9 @@ enum class Error : uint8_t {
     ExpressionUnknownOp          = 173,
     ExpressionArgumentOutOfRange = 174,
     ExpressionSyntaxError        = 175,
+    GcodeToolChangeRequiresToolNumber = 180,
+    GcodeUnsupportedToolNumber   = 181,
+    GcodeToolChangeFailed        = 182
 };
 
 const char* errorString(Error errorNumber);

@@ -16,7 +16,7 @@
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
 #include "Job.h"                  // Job::active() and Job::channel()
-
+#include "Pen.h"
 
 #include "Machine/MachineConfig.h"
 #include "Parameters.h"
@@ -41,21 +41,20 @@ parser_block_t gc_block;
 
 // clang-format off
 gc_modal_t modal_defaults = {
-    Motion::Seek,
-    FeedRate::UnitsPerMin,
-    Units::Mm,
-    Distance::Absolute,  // G90
-    // ArcDistance::Incremental
-    Plane::XY,
-    Module::home,
-    // CutterCompensation::Disable,
-    ToolLengthOffset::Cancel,
-    CoordIndex::G54,
-    ProgramFlow::Running,
-    {}, // 0, // CoolantState::M7,
-    ToolChange::Disable,
-    IoControl::None,
-    Override::ParkingMotion
+    Motion::Seek,               // motion
+    FeedRate::UnitsPerMin,     // feed_rate
+    Units::Mm,                 // units
+    Distance::Absolute,        // distance
+    Plane::XY,                // plane_select
+    Module::home,             // module
+    ToolLengthOffset::Cancel, // tool_length
+    CoordIndex::G54,         // coord_select
+    ProgramFlow::Running,     // program_flow
+    {},                      // coolant
+    Override::Disabled,      // override
+    ToolChange::Disable,     // tool_change
+    SetToolNumber::Disable,  // set_tool
+    IoControl::None,         // io_control
 };
 // clang-format on
 
@@ -603,6 +602,12 @@ Error gc_execute_line(char* line) {
                         }
                         mg_word_bit = ModalGroup::MM7;
                         break;
+                    case 6: 
+                        // Tool change
+                        gc_block.modal.tool_change = ToolChange::Enable;
+                        mg_word_bit = ModalGroup::MM6;
+                        log_info("M6 command received with T=" << gc_state.tool); // Add logging
+                        break;
                     case 7:
                     case 8:
                     case 9:
@@ -634,16 +639,6 @@ Error gc_execute_line(char* line) {
                                 Serial.println(mantissa);
                         }
                         mg_word_bit = ModalGroup::MM8;
-                        break;
-                    case 6:
-                        if (value_words & bitnum_to_mask(GCodeWord::T)) {
-                            // M6 with T word - pen change command
-                            gc_block.modal.tool_change = ToolChange::Enable;
-                            // Tool number validation happens in STEP 3
-                        } else {
-                            FAIL(Error::GcodeValueWordMissing);  // T word missing for M6
-                        }
-                        mg_word_bit = ModalGroup::MM6;
                         break;
                     case 56:
                         if (config->_enableParkingOverrideControl) {
@@ -774,10 +769,6 @@ Error gc_execute_line(char* line) {
                         break;
                     case 'T':
                         axis_word_bit = GCodeWord::T;
-                        if (value > MaxToolNumber) {
-                            FAIL(Error::GcodeMaxValueExceeded);
-                        }
-                        log_info("Tool No: " << int_value);
                         gc_state.tool = int_value;
                         break;
                     case 'X':
@@ -1000,6 +991,16 @@ switch (gc_block.modal.module) {
         break;
     default:
         FAIL(Error::GcodeUnsupportedCommand);  // Undefined command or parameter
+}
+
+if (gc_block.non_modal_command == NonModal::AbsoluteOverride) 
+if (gc_block.modal.tool_change == ToolChange::Enable) {
+    if (bitnum_is_false(value_words, GCodeWord::T)) {
+        FAIL(Error::GcodeToolChangeRequiresToolNumber);
+    }
+    if (gc_state.tool < 0 || gc_state.tool >= MAX_PENS) {
+        FAIL(Error::GcodeUnsupportedToolNumber);
+    }
 }
 
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED. Error, if enabled while G53 is active.
@@ -1423,11 +1424,6 @@ switch (gc_block.modal.module) {
     if (value_words) {
         FAIL(Error::GcodeUnusedWords);  // [Unused words]
     }
-    if (gc_block.modal.tool_change == ToolChange::Enable) {
-        if (gc_block.values.t < 1 || gc_block.values.t > MAX_PENS) {
-            FAIL(Error::GcodeMaxValueExceeded);  // Invalid pen number
-        }
-    }
     /* -------------------------------------------------------------------------------------
         STEP 4: EXECUTE!!
         Assumes that all error-checking has been completed and no failure modes exist. We just
@@ -1452,6 +1448,31 @@ switch (gc_block.modal.module) {
 //     mc_pen_module_controll(pl_data);
 //     gc_ovr_changed();
 // }
+
+// function for automatic tool change
+if (gc_block.modal.tool_change == ToolChange::Enable) {
+    log_info("Executing tool change from T" << gc_state.prev_tool << " to T" << gc_state.tool);
+    
+    // Initialize plan_data properly
+    memset(pl_data, 0, sizeof(plan_line_data_t));
+    pl_data->prevPenNumber = gc_state.prev_tool;
+    pl_data->penNumber = gc_state.tool;
+    pl_data->motion.rapidMotion = 1;
+    pl_data->feed_rate = 3000;
+    pl_data->line_number = gc_block.values.n;
+
+    // Make sure we're synchronized before tool change
+    protocol_buffer_synchronize();
+    
+    // Execute pen change with error checking
+    if (!mc_pen_change(pl_data)) {
+        log_error("Tool change failed");
+        return Error::GcodeToolChangeFailed;
+    }
+    
+    gc_state.prev_tool = gc_state.tool;
+}
+
 
     // Intercept jog commands and complete error checking for valid jog commands and execute.
     // NOTE: G-code parser state is not updated, except the position to ensure sequential jog
@@ -1693,7 +1714,7 @@ switch (gc_block.modal.module) {
             // Then either break or fall through to actually stop.
             break;
         case ProgramFlow::Paused:
-            protocol_buffer_synchronize();
+            protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
             if (!state_is(State::CheckMode)) {
                 protocol_send_event(&feedHoldEvent);
                 protocol_execute_realtime();
@@ -1762,16 +1783,6 @@ switch (gc_block.modal.module) {
     gc_state.modal.program_flow = ProgramFlow::Running;  // Reset program flow.
 
     perform_assignments();
-
-    if (gc_block.modal.tool_change == ToolChange::Enable) {
-        protocol_buffer_synchronize();
-        
-        // Call mc_pen_change with the new pen number, planner data, and current position
-        mc_pen_change(gc_block.values.t, pl_data, gc_state.position);
-        
-        // Update the parser's state with the new pen number
-        gc_state.tool = gc_block.values.t;
-    }
 
     // TODO: % to denote start of program.
     return Error::Ok;

@@ -311,8 +311,8 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->coolant              = pl_data->coolant;
     block->line_number          = pl_data->line_number;
     block->is_jog               = pl_data->is_jog;
-    block->pen                  = pl_data->pen;
-    block->Module_Axis_steps    = pl_data->Axis_step;
+    block->previousPenNumber    = pl_data->prevPenNumber;
+    block->currentPenNumber     = pl_data->penNumber;
 
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
@@ -352,7 +352,8 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     if (block->step_event_count == 0) {
         return false;
     }
-// for storing the last known position of the axes so that pen can be lifted to change the pen without going to origin
+
+    // for storing the last known position of the axes so that pen can be lifted to change the pen without going to origin
     for (size_t idx = 0; idx < config->_axes->_numberAxis; idx++) {
         pl.previous_position[idx] = target[idx];
     }
@@ -442,9 +443,6 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     return true;
 }
 
-
-
-
 // Reset the planner position vectors. Called by the system abort/initialization routine.
 void plan_sync_position() {
     // TODO: For motor configurations not in the same coordinate frame as the machine position,
@@ -471,71 +469,4 @@ void plan_cycle_reinitialize() {
     Stepper::update_plan_block_parameters();
     block_buffer_planned = block_buffer_tail;
     planner_recalculate();
-}
-
-bool plan_pen_move(float* target, plan_line_data_t* pl_data, float* start_pos) {
-    // Set rapid motion for pen movements
-    pl_data->motion.rapidMotion = 1;
-    pl_data->motion.systemMotion = 1;
-    
-    // Plan the move
-    return plan_buffer_line(target, pl_data);
-}
-
-bool plan_pen_change_moves(int new_pen, plan_line_data_t* pl_data, float* current_position) {
-    float temp_pos[MAX_N_AXIS];
-    memcpy(temp_pos, current_position, sizeof(float) * MAX_N_AXIS);
-
-    // Store current Z for safe height
-    float safe_z = temp_pos[Z_AXIS] + 10.0f;  // 10mm above current Z
-
-    if (current_pen > 0) {  // We have a pen to return
-        float place_pos[MAX_N_AXIS];
-        get_pen_place_position(current_pen, place_pos);
-
-        // Move up to safe Z first
-        temp_pos[Z_AXIS] = safe_z;
-        if (!plan_pen_move(temp_pos, pl_data, current_position)) {
-            return false;
-        }
-
-        // Move XY to return position
-        temp_pos[X_AXIS] = place_pos[X_AXIS];
-        temp_pos[Y_AXIS] = place_pos[Y_AXIS];
-        if (!plan_pen_move(temp_pos, pl_data, temp_pos)) {
-            return false;
-        }
-
-        // Lower Z to return pen
-        temp_pos[Z_AXIS] = place_pos[Z_AXIS];
-        if (!plan_pen_move(temp_pos, pl_data, temp_pos)) {
-            return false;
-        }
-    }
-
-    // Get the pickup position for new pen
-    float pickup_pos[MAX_N_AXIS];
-    get_pen_pickup_position(new_pen, pickup_pos);
-
-    // Move up to safe Z
-    temp_pos[Z_AXIS] = safe_z;
-    if (!plan_pen_move(temp_pos, pl_data, temp_pos)) {
-        return false;
-    }
-
-    // Move XY to pickup position
-    temp_pos[X_AXIS] = pickup_pos[X_AXIS];
-    temp_pos[Y_AXIS] = pickup_pos[Y_AXIS];
-    if (!plan_pen_move(temp_pos, pl_data, temp_pos)) {
-        return false;
-    }
-
-    // Lower Z to pickup pen
-    temp_pos[Z_AXIS] = pickup_pos[Z_AXIS];
-    if (!plan_pen_move(temp_pos, pl_data, temp_pos)) {
-        return false;
-    }
-
-    // Add final pen change block
-    return plan_buffer_pen_change(new_pen, pl_data);
 }

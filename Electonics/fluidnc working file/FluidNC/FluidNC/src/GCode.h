@@ -188,7 +188,15 @@ enum class ToolLengthOffset : gcodenum_t {
 static const uint32_t MaxToolNumber = 99999999;
 static const uint32_t MAX_PENS = 10;  // Add this line
 
+#define MAX_PENS 8  // Maximum number of pen positions
+
 enum class ToolChange : bool {
+    Disable = 0,
+    Enable  = 1,
+};
+
+// Add this enum class definition before it's used:
+enum class SetToolNumber : uint8_t {
     Disable = 0,
     Enable  = 1,
 };
@@ -255,23 +263,20 @@ CoordIndex& operator++(CoordIndex& i);
 
 // NOTE: When this struct is zeroed, the 0 values in the above types set the system defaults.
 struct gc_modal_t {
-    Motion   motion;     // {G0,G1,G2,G3,G38.2,G80}
-    FeedRate feed_rate;  // {G93,G94}
-    Units    units;      // {G20,G21}
-    Distance distance;   // {G90,G91}
-    // ArcDistance distance_arc; // {G91.1} NOTE: Don't track. Only default supported.
-    Plane plane_select;  // {G17,G18,G19}
-    Module module;       // {G6.1, G6.2, G6.3, G6.4, G6.5, G6.6, G6.7, G6.8, G6.9}
-
-    // CutterCompensation cutter_comp;  // {G40} NOTE: Don't track. Only default supported.
-    ToolLengthOffset tool_length;   // {G43.1,G49}
-    CoordIndex       coord_select;  // {G54,G55,G56,G57,G58,G59}
-    // uint8_t control;      // {G61} NOTE: Don't track. Only default supported.
-    ProgramFlow  program_flow;  // {M0,M1,M2,M30}
-    CoolantState coolant;       // {M7,M8,M9}
-    ToolChange   tool_change;   // {M6}
-    IoControl    io_control;    // {M62, M63, M67}
-    Override     override;      // {M56}
+    Motion          motion;          // {G0,G1,G2,G3,G38.2,G80}
+    FeedRate        feed_rate;       // {G93,G94}
+    Units           units;           // {G20,G21}
+    Distance        distance;        // {G90,G91}
+    Plane           plane_select;    // {G17,G18,G19}
+    Module          module;          // controls the current module being used
+    ToolLengthOffset tool_length;    // {G43.1,G49}
+    CoordIndex      coord_select;    // {G54,G55,G56,G57,G58,G59}
+    ProgramFlow     program_flow;    // {M0,M1,M2,M30}
+    CoolantState    coolant;         // {M7,M8,M9}
+    Override        override;        // {M56}
+    ToolChange      tool_change;     // {M6}
+    SetToolNumber   set_tool;        // For selecting which tool to use
+    IoControl       io_control;      // For digital/analog I/O control
 };
 
 struct gc_values_t {
@@ -292,7 +297,8 @@ struct parser_state_t {
     gc_modal_t modal;
 
     float    feed_rate;      // Millimeters/min
-    uint32_t tool;           // Tracks tool number
+    int32_t  tool;           // Current pen number (0 = no pen)
+    int32_t  prev_tool;      // Previous pen number
     int32_t  line_number;    // Last line number sent
 
     float position[MAX_N_AXIS];  // Where the interpreter considers the tool to be at this point in the code

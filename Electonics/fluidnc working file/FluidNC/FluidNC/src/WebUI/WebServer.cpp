@@ -63,6 +63,9 @@ namespace WebUI {
     bool       Web_Server::_setupdone = false;
     uint16_t   Web_Server::_port      = 0;
 
+    uint8_t  Web_Server::retry_count = 0;
+    uint32_t Web_Server::last_ws_activity = 0;
+
     UploadStatus      Web_Server::_upload_status   = UploadStatus::NONE;
     WebServer*        Web_Server::_webserver       = NULL;
     WebSocketsServer* Web_Server::_socket_server   = NULL;
@@ -92,6 +95,8 @@ namespace WebUI {
         end();
     }
 
+    // Explanation: The begin method sets up the web server and initializes websockets.
+    // It also configures DNS services if in WiFi AP mode and sets up routes for SSDP.
     bool Web_Server::begin() {
         bool no_error = true;
         _setupdone    = false;
@@ -103,6 +108,7 @@ namespace WebUI {
 
         //create instance
         _webserver = new WebServer(_port);
+
 #    ifdef ENABLE_AUTHENTICATION
         //here the list of headers to be recorded
         const char* headerkeys[]   = { "Cookie" };
@@ -124,6 +130,10 @@ namespace WebUI {
         _socket_serverv3->begin();
         _socket_serverv3->onEvent(handle_Websocketv3_Event);
 
+        // Configure WebSocket keep-alive
+        _socket_server->enableHeartbeat(60000, 10000, 3); // pingInterval=60s, timeout=10s, retries=3
+        _socket_serverv3->enableHeartbeat(60000, 10000, 3); // pingInterval=60s, timeout=10s, retries=3
+
         //events functions
         //_web_events->onConnect(handle_onevent_connect);
         //events management
@@ -134,9 +144,6 @@ namespace WebUI {
         //Web server handlers
         //trick to catch command line on "/" before file being processed
         _webserver->on("/", [this]() { handle_root("/"); });
-        // _webserver->on("/index/index-DOrIMAkz.js", HTTP_GET, []() { myStreamFile("/ui/assets/index-DOrIMAkz.js"); });
-        // _webserver->on("/index/index-r_rVtzDA.css", HTTP_GET, []() { myStreamFile("/ui/assets/index-r_rVtzDA.css"); });
-        // _webserver->serveStatic("/", reinterpret_cast<fs::FS&>(SD), "/ui/assets");
         _webserver->on("/admin", [this]() { handle_root("/admin"); });
         _webserver->on("/tab", [this]() { handle_root("/tab"); });
 
@@ -195,22 +202,144 @@ namespace WebUI {
             SSDP.begin();
         }
 
-        // Add pen configuration endpoints
-        // Update pen configuration endpoints to use static methods directly
-        _webserver->on("/penconfig", HTTP_GET, handleGetPenConfig);
-        _webserver->on("/penconfig", HTTP_POST, handleSetPenConfig);
-        _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
+        // Add pen configuration endpoints with CORS
+        _webserver->on("/penconfig", HTTP_OPTIONS, [this]() {
+            this->setCORSHeaders();
+            _webserver->send(204);
+        });
 
-        // Add explicit routes for JS module and CSS files with correct MIME types
+        _webserver->on("/penconfig", HTTP_GET, [this]() {
+            this->setCORSHeaders();
+            handleGetPenConfig();
+        });
+
+        _webserver->on("/penconfig", HTTP_POST, [this]() {
+            this->setCORSHeaders();
+            handleSetPenConfig();
+        });
+
+        _webserver->on("/penconfig", HTTP_DELETE, [this]() {
+            this->setCORSHeaders();
+            handleDeletePen();
+        });
+
+        // Add explicit routes for static assets with proper caching and compression
+        _webserver->on("/ui/index.html", HTTP_GET, [this]() {
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
+            myStreamFile("/ui/index.html");
+        });
+
         _webserver->on("/ui/assets/index-DOrIMAkz.js", HTTP_GET, [this]() {
-            // For ES6 modules, we need to use this specific MIME type
             _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
-            myStreamFile("/ui/assets/index-DOrIMAkz.js");
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            myStreamFile("/ui/assets/index-DOrIMAkz.js.gz");  // Serve pre-gzipped version
         });
 
         _webserver->on("/ui/assets/index-r_rVtzDA.css", HTTP_GET, [this]() {
             _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
-            myStreamFile("/ui/assets/index-r_rVtzDA.css");
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            myStreamFile("/ui/assets/index-r_rVtzDA.css.gz");  // Serve pre-gzipped version
+        });
+
+        // Add generic handler for other assets in /ui/assets/
+        _webserver->on("/ui/assets/", HTTP_GET, [this]() {
+            String path = _webserver->uri();
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
+            
+            if (path.endsWith(".js")) {
+                _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
+            } else if (path.endsWith(".css")) {
+                _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
+            } else if (path.endsWith(".woff2")) {
+                _webserver->sendHeader("Content-Type", "font/woff2");
+            } else if (path.endsWith(".ttf")) {
+                _webserver->sendHeader("Content-Type", "font/ttf");
+            }
+
+            // Try to serve gzipped version first
+            if (myStreamFile((path + ".gz").c_str())) {
+                _webserver->sendHeader("Content-Encoding", "gzip");
+            } else {
+                myStreamFile(path.c_str());
+            }
+        });
+
+        // Add generic handler for static assets with proper caching and compression
+        _webserver->on("/index.html", HTTP_GET, [this]() {
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
+            myStreamFile("/index.html");
+        });
+
+        // Generic handler for assets folder
+        _webserver->on("/assets/", HTTP_GET, [this]() {
+            String path = _webserver->uri();
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
+            
+            if (path.endsWith(".js")) {
+                _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
+            } else if (path.endsWith(".css")) {
+                _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
+            } else if (path.endsWith(".woff2")) {
+                _webserver->sendHeader("Content-Type", "font/woff2");
+            } else if (path.endsWith(".ttf")) {
+                _webserver->sendHeader("Content-Type", "font/ttf");
+            }
+
+            // Try to serve gzipped version first
+            if (myStreamFile((path + ".gz").c_str())) {
+                _webserver->sendHeader("Content-Encoding", "gzip");
+            } else {
+                myStreamFile(path.c_str());
+            }
+        });
+
+        // Static file handlers
+        _webserver->on("/admin.html", HTTP_GET, [this]() {
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            myStreamFile("/admin.html.gz");
+        });
+
+        _webserver->on("/ui/index.html", HTTP_GET, [this]() {
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            myStreamFile("/ui/index.html.gz");
+        });
+
+        // Handle all assets dynamically, ignoring hashes in filenames
+        _webserver->on("/assets/", HTTP_GET, [this]() {
+            String path = _webserver->uri();  // Define 'path' before using it
+            log_debug("Asset request: " << path.c_str());
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
+            _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+
+            if (path.indexOf("index-") >= 0 && path.endsWith(".js")) {
+                _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
+            } else if (path.indexOf("index-") >= 0 && path.endsWith(".css")) {
+                _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
+            } else if (path.endsWith(".woff2")) {
+                _webserver->sendHeader("Content-Type", "font/woff2");
+            } else if (path.endsWith(".ttf")) {
+                _webserver->sendHeader("Content-Type", "font/ttf");
+            }
+
+            // Try to serve gzipped version first
+            if (myStreamFile((path + ".gz").c_str())) {
+                _webserver->sendHeader("Content-Encoding", "gzip");
+            } else {
+                myStreamFile(path.c_str());
+            }
+        });
+
+        // Root handler with optimized file serving
+        _webserver->on("/", [this]() {
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            myStreamFile("/index.html.gz");
         });
 
         log_info("HTTP started on port " << WebUI::http_port->get());
@@ -228,6 +357,7 @@ namespace WebUI {
         return no_error;
     }
 
+    // Explanation: The end method frees up resources allocated by begin().
     void Web_Server::end() {
         _setupdone = false;
 
@@ -261,7 +391,7 @@ namespace WebUI {
 #    endif
     }
 
-    // Move the endsWithCI function declaration and implementation up here, before streamFileFromPath
+    // Explanation: This helper checks case-insensitively if 'test' ends with 'suffix'.
     static bool endsWithCI(const char* suffix, const char* test) {
         size_t slen = strlen(suffix);
         size_t tlen = strlen(test);
@@ -284,6 +414,7 @@ namespace WebUI {
         return true;
     }
 
+    // Explanation: Tries to stream a file: first from SD, fallback to SPIFFS if not found.
     bool Web_Server::myStreamFile(const char* path, bool download) {
         std::error_code ec;
         log_debug("Trying to serve file: " << path); // Add debug logging
@@ -307,14 +438,14 @@ namespace WebUI {
         return false;
     }
 
+    // Explanation: Streams file in chunks and sets appropriate HTTP headers and caching.
     bool Web_Server::streamFileFromPath(const FluidPath& fpath, bool download) {
         FileStream* file = nullptr;
         bool isGzip = false;
         std::string actualPath;
         size_t fileSize = 0;
-        static const size_t CHUNK_SIZE = 1024; // Read 1KB at a time
+        static const size_t CHUNK_SIZE = 3000; // Keep chunk size under 3 KB
         uint8_t chunk[CHUNK_SIZE];
-        
         // First try to get file size without keeping file open
         try {
             file = new FileStream(fpath, "r", "");
@@ -327,7 +458,6 @@ namespace WebUI {
                 delete file;
                 file = nullptr;
             }
-            
             try {
                 std::filesystem::path gzpath(fpath);
                 gzpath += ".gz";
@@ -345,11 +475,9 @@ namespace WebUI {
                 return false;
             }
         }
-
         // Try to get hash
         std::string hash = HashFS::hash(actualPath);
         log_debug("File hash: " << (hash.length() ? hash : "none") << " for " << actualPath);
-
         // Check if client has valid cached version
         if (hash.length() && _webserver->hasHeader("If-None-Match")) {
             if (std::string(_webserver->header("If-None-Match").c_str()) == hash) {
@@ -358,7 +486,6 @@ namespace WebUI {
                 return true;
             }
         }
-
         // Set response headers
         if (download) {
             _webserver->sendHeader("Content-Disposition", "attachment");
@@ -370,7 +497,7 @@ namespace WebUI {
         if (isGzip) {
             _webserver->sendHeader("Content-Encoding", "gzip");
         }
-
+        _webserver->sendHeader("Accept-Ranges", "bytes"); // Enable partial requests
         // Set correct content type
         const char* contentType = getContentType(fpath.c_str());
         if (endsWithCI(".js", fpath.c_str())) {
@@ -378,19 +505,23 @@ namespace WebUI {
         } 
         _webserver->send(200, contentType, "");
 
+        enableCachingHeaders();  // <--- Add this call before sending file
+
         // Now open file again for streaming
         bool success = true;
         try {
             file = new FileStream(isGzip ? (fpath.c_str() + std::string(".gz")) : fpath.c_str(), "r", "");
             // Stream file in chunks
             size_t bytesRemaining = fileSize;
+            WiFiClient client = _webserver->client();
+            client.setNoDelay(true); // Reduce TCP delays
             while (bytesRemaining > 0) {
                 size_t bytesToRead = min(CHUNK_SIZE, bytesRemaining);
                 if (file->read(chunk, bytesToRead) != bytesToRead) {
                     success = false;
                     break;
                 }
-                if (_webserver->client().write(chunk, bytesToRead) != bytesToRead) {
+                if (client.write(chunk, bytesToRead) != bytesToRead) {
                     success = false;
                     break;
                 }
@@ -409,6 +540,7 @@ namespace WebUI {
         return success;
     }
 
+    // Explanation: Sends a pre-defined HTML content, substituting placeholders with IP/port info.
     void Web_Server::sendWithOurAddress(const char* content, int code) {
         auto        ip    = WiFi.getMode() == WIFI_STA ? WiFi.localIP() : WiFi.softAPIP();
         std::string ipstr = IP_string(ip);
@@ -447,18 +579,22 @@ namespace WebUI {
         sendWithOurAddress(PAGE_404, 404);
     }
 
+    // Explanation: Root handler - decides what file/page to serve or defaults to a built-in page.
     void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
         if (path == "/admin") {
-            if (myStreamFile("/admin.html"))
+            _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            if (myStreamFile("/admin.html.gz")) {
                 return;
+            }
         } else if (path == "/tab") {
             if (myStreamFile("/tab.html"))
                 return;
         } else if (path == "/") {
-            // Explicitly set content type for index.html
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
-            if (myStreamFile("/ui/index.html")) {
+            _webserver->sendHeader("Content-Encoding", "gzip");
+            if (myStreamFile("/ui/index.html.gz")) {
                 return;
             }
             log_debug("Failed to serve index.html"); // Add debug logging
@@ -469,6 +605,7 @@ namespace WebUI {
         _webserver->send_P(200, "text/html", PAGE_NOFILES, PAGE_NOFILES_SIZE);
     }
 
+    // Explanation: This handles the OPTIONS request, setting CORS headers with no content response.
     void Web_Server::handle_options() {
         _webserver->sendHeader("Access-Control-Allow-Origin", "*");
         _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
@@ -476,14 +613,9 @@ namespace WebUI {
         _webserver->send(204);  // No Content response for OPTIONS request
     }
 
-    //     void Web_Server::setup() {
-    //     // Set up routes
-    //     _webserver->on("/", HTTP_GET, std::bind(&Web_Server::handle_root, this));
-    //     _webserver->on("/", HTTP_OPTIONS, std::bind(&Web_Server::handle_options, this));
-    //     // ... other routes and setup code ...
-    // }
 
-    // Handle filenames and other things that are not explicitly registered
+
+    // Explanation: This integrates or overrides the normal 404 process to handle captive portals or custom 404 pages.
     void Web_Server::handle_not_found() {
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->sendHeader(LOCATION_HEADER, "/");
@@ -519,7 +651,7 @@ namespace WebUI {
         send404Page();
     }
 
-    //http SSDP xml presentation
+    // Explanation: Provides SSDP info in XML format for network discovery.
     void Web_Server::handle_SSDP() {
         StreamString sschema;
         if (!sschema.reserve(1024)) {
@@ -1288,32 +1420,97 @@ namespace WebUI {
         }
     }
 
+    // Explanation: Called regularly to keep the system in sync and handle websockets.
     void Web_Server::handle() {
-        static uint32_t start_time = millis();
         if (WiFi.getMode() == WIFI_AP) {
             dnsServer.processNextRequest();
         }
+        
+        // Check WebSocket timeouts
+        if (checkWebSocketTimeout()) {
+            resetWebSocket();
+        }
+        
         if (_webserver) {
             _webserver->handleClient();
         }
+        
+        // Handle WebSocket connections with error checking
         if (_socket_server && _setupdone) {
-            _socket_server->loop();
+            try {
+                _socket_server->loop();
+                last_ws_activity = millis();  // Update activity timestamp
+                retry_count = 0;  // Reset retry counter on successful operation
+            } catch (...) {
+                log_error("WebSocket server error - attempting recovery");
+                resetWebSocket();
+            }
         }
+        
         if (_socket_serverv3 && _setupdone) {
-            _socket_serverv3->loop();
+            try {
+                _socket_serverv3->loop();
+                last_ws_activity = millis();  // Update activity timestamp
+            } catch (...) {
+                log_error("WebSocketV3 server error - attempting recovery");
+                resetWebSocket();
+            }
         }
-        if ((millis() - start_time) > 10000 && _socket_server) {
+        
+        // Send ping more frequently to keep connection alive
+        static uint32_t last_ping = millis();
+        if ((millis() - last_ping) > 60000 && _socket_server) { // Increased from 5000 to 60000
             WSChannels::sendPing();
-            start_time = millis();
+            last_ping = millis();
         }
     }
 
+    void Web_Server::resetWebSocket() {
+        if (retry_count++ >= MAX_RETRY_ATTEMPTS) {
+            log_error("Max WebSocket retry attempts reached. Restarting services.");
+            // Reset both WebSocket servers
+            if (_socket_server) {
+                delete _socket_server;
+                _socket_server = new WebSocketsServer(_port + 1);
+                _socket_server->begin();
+                _socket_server->onEvent(handle_Websocket_Event);
+            }
+            
+            if (_socket_serverv3) {
+                delete _socket_serverv3;
+                _socket_serverv3 = new WebSocketsServer(_port + 2, "", "webui-v3");
+                _socket_serverv3->begin();
+                _socket_serverv3->onEvent(handle_Websocketv3_Event);
+            }
+            retry_count = 0;
+        }
+    }
+
+    bool Web_Server::checkWebSocketTimeout() {
+        if (!last_ws_activity) {
+            last_ws_activity = millis();
+            return false;
+        }
+        return (millis() - last_ws_activity) > 60000; // Increased from default to 60000 ms
+    }
+
+    // Explanation: Event callbacks for websockets to handle data exchange and connection states.
     void Web_Server::handle_Websocket_Event(uint8_t num, uint8_t type, uint8_t* payload, size_t length) {
-        WSChannels::handleEvent(_socket_server, num, type, payload, length);
+        last_ws_activity = millis();  // Update activity timestamp
+        try {
+            WSChannels::handleEvent(_socket_server, num, type, payload, length);
+        } catch (...) {
+            log_error("WebSocket event handler error");
+        }
     }
 
     void Web_Server::handle_Websocketv3_Event(uint8_t num, uint8_t type, uint8_t* payload, size_t length) {
-        WSChannels::handlev3Event(_socket_serverv3, num, type, payload, length);
+        last_ws_activity = millis();  // Update activity timestamp
+        try {
+            WSChannels::handlev3Event(_socket_serverv3, num, type, payload, length);
+        } catch (...) {
+            log_error("WebSocketV3 event handler error");
+        }
     }
 
     //Convert file extension to content type
@@ -1487,7 +1684,7 @@ namespace WebUI {
     void Web_Server::handleGetPenConfig() {
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
-            _webserver->send(401, "text/plain", "Authentication failed");
+            _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
             return;
         }
 
@@ -1499,56 +1696,64 @@ namespace WebUI {
     void Web_Server::handleSetPenConfig() {
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
-            log_debug("Auth failed for pen config");  // Add debug logging
-            _webserver->send(401, "text/plain", "Authentication failed");
+            _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
             return;
         }
 
         if (!_webserver->hasArg("plain")) {
-            log_debug("No data in pen config request");  // Add debug logging
-            _webserver->send(400, "text/plain", "Missing pen configuration data");
+            _webserver->send(400, "application/json", "{\"error\":\"Missing pen configuration data\"}");
             return;
         }
 
         std::string jsonData = _webserver->arg("plain").c_str();
-        log_debug("Received pen config: " << jsonData);  // Add debug logging
-
         PenConfig& config = PenConfig::getInstance();
+        
         if (config.fromJSON(jsonData)) {
             if (config.saveConfig()) {
-                log_debug("Pen config saved successfully");  // Add debug logging
                 _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
             } else {
-                log_debug("Failed to save pen config");  // Add debug logging
-                _webserver->send(500, "text/plain", "Failed to save configuration");
+                _webserver->send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
             }
         } else {
-            log_debug("Failed to parse pen config");  // Add debug logging
-            _webserver->send(400, "text/plain", "Invalid pen configuration data");
+            _webserver->send(400, "application/json", "{\"error\":\"Invalid pen configuration data\"}");
         }
     }
 
     void Web_Server::handleDeletePen() {
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
-            _webserver->send(401, "text/plain", "Authentication failed");
+            _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
             return;
         }
 
-        if (!_webserver->hasArg("id")) {
-            _webserver->send(400, "text/plain", "Missing pen ID");
+        if (!_webserver->hasArg("name")) {
+            _webserver->send(400, "application/json", "{\"error\":\"Missing pen name\"}");
             return;
         }
 
-        int        penId  = _webserver->arg("id").toInt();
+        std::string penName = _webserver->arg("name").c_str();
         PenConfig& config = PenConfig::getInstance();
 
-        if (config.deletePen(penId)) {
+        if (config.deletePen(penName)) {
             config.saveConfig();
             _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
         } else {
-            _webserver->send(404, "text/plain", "Pen not found");
+            _webserver->send(404, "application/json", "{\"error\":\"Pen not found\"}");
         }
+    }
+
+    // Add this helper function near the top of the Web_Server class
+    void Web_Server::setCORSHeaders() {
+        _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+        _webserver->sendHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+        _webserver->sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        _webserver->sendHeader("Access-Control-Max-Age", "3600");
+    }
+
+    void Web_Server::enableCachingHeaders() {
+        _webserver->sendHeader("Connection", "keep-alive");
+        // Cache for a long time (e.g. 1 year) - adjust as needed
+        _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
     }
 #endif
 }  // namespace web_server

@@ -7,10 +7,12 @@
 
 namespace WebUI {
     struct Pen {
-        int         id;
         std::string color;
-        int         order;
-        // Add any other pen properties you need
+        std::string name;
+        int         zValue;
+        std::vector<std::string> penPick;
+        std::vector<std::string> penDrop;
+        bool        skipped;
     };
 
     class PenConfig {
@@ -24,8 +26,8 @@ namespace WebUI {
         bool             saveConfig();
         bool             addPen(const Pen& pen);
         bool             updatePen(const Pen& pen);
-        bool             deletePen(int id);
-        std::vector<Pen> getPens();
+        bool             deletePen(const std::string& name);  // Changed to use name instead of ID
+        std::vector<Pen> getPens() { return pens; }
         std::string      toJSON();
         bool             fromJSON(const std::string& jsonStr);
 

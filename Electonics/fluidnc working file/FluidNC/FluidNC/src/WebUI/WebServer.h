@@ -128,21 +128,15 @@ namespace WebUI {
         static void serveStatic(const char* uri, const char* path, const char* cache_header); 
         static int getPageid();
 
-        // Core timeout and retry settings
-        static const uint32_t WEBSOCKET_TIMEOUT = 10000;
-        static const uint32_t WS_PING_INTERVAL = 2000;
-        static const uint8_t MAX_RETRY_ATTEMPTS = 5;
-        static uint32_t last_ws_activity;
+        static const uint32_t WEBSOCKET_TIMEOUT = 120000;  // 2 minutes timeout
+        static const uint8_t MAX_RETRY_ATTEMPTS = 3;
         static uint8_t retry_count;
-
-        static const uint32_t INITIAL_CONNECT_TIMEOUT = 5000;
-        static const uint32_t RECONNECT_DELAY = 1000;
+        static uint32_t last_ws_activity;
         
         void resetWebSocket();
         bool checkWebSocketTimeout();
-
-        void setCORSHeaders();
-        void enableCachingHeaders();
+        static void setCORSHeaders();
+        static void enableCachingHeaders();
     };
 
     extern Web_Server webServer;

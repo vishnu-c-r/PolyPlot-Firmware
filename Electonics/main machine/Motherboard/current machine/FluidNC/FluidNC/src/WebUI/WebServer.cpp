@@ -125,10 +125,12 @@ namespace WebUI {
         _socket_server = new WebSocketsServer(_port + 1);
         _socket_server->begin();
         _socket_server->onEvent(handle_Websocket_Event);
-
+        _socket_server->enableHeartbeat(WS_PING_INTERVAL, WEBSOCKET_TIMEOUT/2, 3);
+        
         _socket_serverv3 = new WebSocketsServer(_port + 2, "", "webui-v3");
         _socket_serverv3->begin();
         _socket_serverv3->onEvent(handle_Websocketv3_Event);
+        _socket_serverv3->enableHeartbeat(WS_PING_INTERVAL, WEBSOCKET_TIMEOUT/2, 3);
 
         // Configure WebSocket keep-alive
         _socket_server->enableHeartbeat(60000, 10000, 3); // pingInterval=60s, timeout=10s, retries=3
@@ -505,7 +507,8 @@ namespace WebUI {
         } 
         _webserver->send(200, contentType, "");
 
-        enableCachingHeaders();  // <--- Add this call before sending file
+        _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
+        _webserver->sendHeader("Expires", "Thu, 31 Dec 2037 23:59:59 GMT");
 
         // Now open file again for streaming
         bool success = true;
@@ -1491,7 +1494,7 @@ namespace WebUI {
             last_ws_activity = millis();
             return false;
         }
-        return (millis() - last_ws_activity) > 60000; // Increased from default to 60000 ms
+        return (millis() - last_ws_activity) > 30000; // Increased from default to 60000 ms
     }
 
     // Explanation: Event callbacks for websockets to handle data exchange and connection states.
@@ -1745,15 +1748,14 @@ namespace WebUI {
     // Add this helper function near the top of the Web_Server class
     void Web_Server::setCORSHeaders() {
         _webserver->sendHeader("Access-Control-Allow-Origin", "*");
-        _webserver->sendHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-        _webserver->sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-        _webserver->sendHeader("Access-Control-Max-Age", "3600");
+        _webserver->sendHeader("Access-Control-Max-Age", "600");
+        _webserver->sendHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+        _webserver->sendHeader("Access-Control-Allow-Headers", "*");
     }
 
     void Web_Server::enableCachingHeaders() {
-        _webserver->sendHeader("Connection", "keep-alive");
-        // Cache for a long time (e.g. 1 year) - adjust as needed
         _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
+        _webserver->sendHeader("Expires", "Thu, 31 Dec 2037 23:59:59 GMT");
     }
 #endif
 }  // namespace web_server

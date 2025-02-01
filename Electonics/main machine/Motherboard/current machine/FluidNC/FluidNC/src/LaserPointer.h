@@ -1,17 +1,14 @@
 #pragma once
 
 #include "Configuration/Configurable.h"
-#include "Pin.h"  // Add this include for Pin definitions
-#include <cstdint>
+#include "Pin.h"
 
 class LaserPointer : public Configuration::Configurable {
 private:
-    int      _pin;
-    bool     _active_low;
-    float    _x_offset;  // Offset between laser and pen in X axis
-    float    _y_offset;  // Offset between laser and pen in Y axis
-    bool     _enabled;
-    uint32_t _pwm_channel;
+    Pin     _laserPin;
+    int32_t _xOffset;  // Integer offset in mm
+    int32_t _yOffset;  // Integer offset in mm
+    bool    _enabled;
 
 public:
     LaserPointer();
@@ -20,15 +17,13 @@ public:
     void setState(bool on);
     bool getState() const { return _enabled; }
     
-    float getXOffset() const { return _x_offset; }
-    float getYOffset() const { return _y_offset; }
+    int32_t getXOffset() const { return _xOffset; }
+    int32_t getYOffset() const { return _yOffset; }
     
-    bool isAvailable() const { return _pin != -1; }  // Add this method
+    bool isAvailable() const { return _laserPin.defined(); }
     
-    // Configuration handlers
     void group(Configuration::HandlerBase& handler) override;
     void afterParse() override;
     
-    // Static instance
     static LaserPointer* instance;
 };

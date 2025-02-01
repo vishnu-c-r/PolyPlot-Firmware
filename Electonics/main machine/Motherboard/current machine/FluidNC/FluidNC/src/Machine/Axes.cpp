@@ -20,6 +20,32 @@ namespace Machine {
 
     bool Axes::disabled = false;
 
+    // Add this new function to determine quadrant
+    const char* getQuadrant(float x, float y) {
+        if (x >= 0 && y >= 0) return "Q1 (X+,Y+)";
+        if (x < 0 && y >= 0) return "Q2 (X-,Y+)";
+        if (x < 0 && y < 0) return "Q3 (X-,Y-)";
+        return "Q4 (X+,Y-)";
+    }
+
+    // Helper function to determine machine's working quadrant
+    const char* determineWorkingQuadrant() {
+        auto xAxis = config->_axes->_axis[X_AXIS];
+        auto yAxis = config->_axes->_axis[Y_AXIS];
+        
+        float xMin = xAxis->_homing ? xAxis->_homing->_mpos - xAxis->_maxTravel : -xAxis->_maxTravel;
+        float xMax = xAxis->_homing ? xAxis->_homing->_mpos : 0;
+        float yMin = yAxis->_homing ? yAxis->_homing->_mpos - yAxis->_maxTravel : -yAxis->_maxTravel;
+        float yMax = yAxis->_homing ? yAxis->_homing->_mpos : 0;
+
+        // Determine primary working quadrant based on travel ranges
+        if (xMin < 0 && xMax <= 0 && yMin < 0 && yMax <= 0) return "Q3 (X-,Y-)";
+        if (xMin < 0 && xMax <= 0 && yMin >= 0 && yMax > 0) return "Q2 (X-,Y+)";
+        if (xMin >= 0 && xMax > 0 && yMin >= 0 && yMax > 0) return "Q1 (X+,Y+)";
+        if (xMin >= 0 && xMax > 0 && yMin < 0 && yMax <= 0) return "Q4 (X+,Y-)";
+        return "Multi-quadrant";
+    }
+
     Axes::Axes() : _axis() {
         for (int i = 0; i < MAX_N_AXIS; ++i) {
             _axis[i] = nullptr;
@@ -40,11 +66,29 @@ namespace Machine {
             _sharedStepperReset.report("Shared stepper reset");
         }
 
-        // certain motors need features to be turned on. Check them here
+        const char* workingQuadrant = determineWorkingQuadrant();
+        log_info("Machine Space Configuration:");
+        log_info("Current Machine Configuration in " << workingQuadrant);
+        log_info("Quadrant Layout:");
+        log_info("    Q2 | Q1");
+        log_info("   ----+----  (0,0)");
+        log_info("    Q3 | Q4");
+        log_info("Machine Origin at (0,0)");
+
+        // Get home position for detailed range info
+        float homeX = _axis[X_AXIS]->_homing ? _axis[X_AXIS]->_homing->_mpos : 0;
+        float homeY = _axis[Y_AXIS]->_homing ? _axis[Y_AXIS]->_homing->_mpos : 0;
+        log_info("Home position: X(" << homeX << "," << limitsMaxPosition(X_AXIS) 
+                << ") Y(" << homeY << "," << limitsMaxPosition(Y_AXIS) << ")");
+
         for (size_t axis = X_AXIS; axis < _numberAxis; axis++) {
             auto a = _axis[axis];
             if (a) {
-                log_info("Axis " << axisName(axis) << " (" << limitsMinPosition(axis) << "," << limitsMaxPosition(axis) << ")");
+                log_info("Axis " << axisName(axis) 
+                    << " Range:(" << limitsMinPosition(axis) << "," << limitsMaxPosition(axis) << ")"
+                    << " Normal:" << a->_maxTravel 
+                    << " Pen-change:" << (a->_penChangeTravel > 0 ? std::to_string(a->_penChangeTravel) : "Not Set")
+                    << " Direction:" << (a->_homing && a->_homing->_positiveDirection ? "Positive" : "Negative"));
                 a->init();
             }
         }

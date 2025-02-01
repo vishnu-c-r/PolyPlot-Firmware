@@ -1,18 +1,19 @@
 name: MAX-A3
 board: ESP32
 use_line_numbers: true
-planner_blocks: 50
+planner_blocks: 20
 kinematics: 
   hbot:
 axes:
   x:
     steps_per_mm: 160
     max_rate_mm_per_min: 20000
-    acceleration_mm_per_sec2: 100
-    max_travel_mm: 500
+    acceleration_mm_per_sec2: 500
+    max_travel_mm: 440
+    pen_change_travel_mm: 500
     soft_limits: true
     homing:
-      cycle: 1
+      cycle: 3
       mpos_mm: 0
       positive_direction: true
       feed_mm_per_min: 500
@@ -38,13 +39,13 @@ axes:
   y:
     steps_per_mm: 160
     max_rate_mm_per_min: 20000
-    acceleration_mm_per_sec2: 100
+    acceleration_mm_per_sec2: 500
     max_travel_mm: 302
     soft_limits: true
     homing:
       cycle: 2
       mpos_mm: 0
-      positive_direction: false
+      positive_direction: true
       feed_mm_per_min: 500
       seek_mm_per_min: 4000
       settle_ms: 250
@@ -70,7 +71,7 @@ axes:
     max_travel_mm: 25
     soft_limits: true
     homing:
-      cycle: 3
+      cycle: 1
     motor0:
       limit_all_pin: NO_PIN
       limit_neg_pin: NO_PIN
@@ -81,6 +82,10 @@ axes:
         output_pin: gpio.13
         min_pulse_us: 2500
         max_pulse_us: 500
+laser_pointer:
+  laserPointer_pin: gpio.35:high
+  x_offset: 10
+  y_offset: 20
 start:
   check_limits: false
 stepping:
@@ -96,7 +101,6 @@ spi:
 sdcard:
   card_detect_pin: no_pin
   cs_pin: gpio.5
-
 uart1:
   txd_pin: gpio.22
   rxd_pin: gpio.21
@@ -104,7 +108,6 @@ uart1:
   cts_pin: NO_PIN
   baud: 115200
   mode: 8N1
-
 uart_channel1:
   report_interval_ms: 50
   uart_num: 1

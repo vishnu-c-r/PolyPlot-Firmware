@@ -7,8 +7,8 @@
 
 namespace WebUI {
     struct Pen {
-        std::string color;
         std::string name;
+        std::string color;
         int         zValue;
         std::vector<std::string> penPick;
         std::vector<std::string> penDrop;

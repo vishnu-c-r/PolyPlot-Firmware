@@ -96,6 +96,9 @@ namespace Machine {
 
         size_t _planner_blocks = 16;
 
+        // Add a pen-change flag
+        bool _penChangeMode = false;  // Tracks whether the pen-change limit is active
+
         // Add a getter method for the module type
         // String getModuleType() const { return _module_type; }
 

@@ -4,34 +4,34 @@
 
 LaserPointer* LaserPointer::instance = nullptr;
 
-LaserPointer::LaserPointer() : _xOffset(0), _yOffset(0), _enabled(false) {
+LaserPointer::LaserPointer() : _pin(-1), _active_low(false), _x_offset(0), _y_offset(0), _enabled(false), _pwm_channel(0) {
     instance = this;
 }
 
 void LaserPointer::init() {
-    if (_laserPin.defined()) {
-        _laserPin.setAttr(Pin::Attr::Output);
-        _laserPin.write(false);
+    if (_pin != -1) {
+        pinMode(_pin, OUTPUT);  // Use standard Arduino pinMode
+        digitalWrite(_pin, _active_low); // Set initial state
     }
 }
 
 void LaserPointer::setState(bool on) {
-    if (_laserPin.defined()) {
+    if (_pin != -1) {
         _enabled = on;
-        _laserPin.write(on);
+        digitalWrite(_pin, on != _active_low);  // Use standard Arduino digitalWrite
     }
 }
 
 void LaserPointer::group(Configuration::HandlerBase& handler) {
-    handler.item("laserPointer_pin", _laserPin);
-    handler.item("x_offset", _xOffset, -1000, 1000);  // Range: -1000mm to +1000mm
-    handler.item("y_offset", _yOffset, -1000, 1000);  // Range: -1000mm to +1000mm
+    handler.item("pin", _pin);
+    handler.item("active_low", _active_low);
+    handler.item("x_offset", _x_offset);
+    handler.item("y_offset", _y_offset);
 }
 
 void LaserPointer::afterParse() {
-    if (!_laserPin.defined()) {
+    if (_pin == -1) {
         log_info("Laser pointer not configured");
-        return;
     }
-    log_info("Laser pointer configured on pin " << _laserPin.name() << " offset X:" << _xOffset << " Y:" << _yOffset);
+    log_info("Laser pointer offset: X=" << _x_offset << " Y=" << _y_offset);
 }

@@ -59,7 +59,12 @@ namespace Kinematics {
     }
 
     bool HBot::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
+        // Add debug logging to track motion
+        log_debug("HBot motion - target: " << target[X_AXIS] << "," << target[Y_AXIS] 
+                 << " position: " << position[X_AXIS] << "," << position[Y_AXIS]);
+        
         auto n_axis = config->_axes->_numberAxis;
+
         float motors[n_axis];
         transform_cartesian_to_motors(motors, target);
 
@@ -68,6 +73,7 @@ namespace Kinematics {
             float last_motors[n_axis];
             transform_cartesian_to_motors(last_motors, position);
             float motor_distance = vector_distance(motors, last_motors, n_axis);
+
             pl_data->feed_rate *= motor_distance / cartesian_distance;
         }
 
@@ -75,8 +81,14 @@ namespace Kinematics {
     }
 
     void HBot::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
-        cartesian[X_AXIS] = (motors[Y_AXIS] - motors[X_AXIS]);
-        cartesian[Y_AXIS] = -motors[X_AXIS];
+        // Add bounds checking
+        if (std::isnan(motors[X_AXIS]) || std::isnan(motors[Y_AXIS])) {
+            log_error("Invalid motor positions detected");
+            return;
+        }
+        cartesian[X_AXIS] = (motors[Y_AXIS] - motors[X_AXIS]);   // X = B - A (removed negative)
+        cartesian[Y_AXIS] = -motors[X_AXIS];                     // Y = -A
+
         for (int axis = Z_AXIS; axis < n_axis; axis++) {
             cartesian[axis] = motors[axis];
         }

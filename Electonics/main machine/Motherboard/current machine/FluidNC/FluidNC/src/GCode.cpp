@@ -1467,6 +1467,7 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
     // Execute pen change with error checking
     if (!mc_pen_change(pl_data)) {
         log_error("Tool change failed");
+        gc_state.tool = gc_state.prev_tool;  // Restore previous tool on failure
         return Error::GcodeToolChangeFailed;
     }
     

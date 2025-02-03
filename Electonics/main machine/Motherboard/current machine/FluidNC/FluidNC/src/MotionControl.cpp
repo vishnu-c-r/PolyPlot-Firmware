@@ -15,6 +15,7 @@
 #include "Platform.h"        // WEAK_LINK
 #include "Settings.h"        // coords
 #include "Pen.h"
+#include "WebUI/ToolConfig.h"  // Add this line for ToolConfig
 
 #include <cmath>
 
@@ -553,6 +554,9 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     
     pl_data->feed_rate = 3000;
 
+    // Calculate a safe retraction distance that won't exceed limits
+    float safe_retraction = 25.0f; // Reduce from 50mm to 25mm
+
     // If current pen and next pen are the same, just redock it
     if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
         float dropPos[MAX_N_AXIS];
@@ -584,7 +588,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         mc_drop_pen(current_loaded_pen);  // Add this to properly mark pen as docked
 
         // 5. Move X back 50mm
-        currentPos[X_AXIS] += 50.0f;
+        currentPos[X_AXIS] += safe_retraction;
         if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
         protocol_buffer_synchronize();
 
@@ -628,7 +632,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         protocol_buffer_synchronize();
 
         // 5. Retract X by 50mm
-        currentPos[X_AXIS] += 50.0f;
+        currentPos[X_AXIS] += safe_retraction;
         if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
         protocol_buffer_synchronize();
 
@@ -670,7 +674,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         mc_drop_pen(current_loaded_pen);
 
         // 5. Move X back 50mm
-        currentPos[X_AXIS] += 50.0f;
+        currentPos[X_AXIS] += safe_retraction;
         if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
         protocol_buffer_synchronize();
 
@@ -693,7 +697,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         protocol_buffer_synchronize();
 
         // 9. Move X back 50mm
-        currentPos[X_AXIS] += 50.0f;
+        currentPos[X_AXIS] += safe_retraction;
         if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
         protocol_buffer_synchronize();
 

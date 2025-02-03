@@ -188,7 +188,7 @@ enum class ToolLengthOffset : gcodenum_t {
 static const uint32_t MaxToolNumber = 99999999;
 static const uint32_t MAX_PENS = 10;  // Add this line
 
-#define MAX_PENS 8  // Maximum number of pen positions
+#define MAX_PENS 6  // Update maximum number of pens to 6
 
 enum class ToolChange : bool {
     Disable = 0,

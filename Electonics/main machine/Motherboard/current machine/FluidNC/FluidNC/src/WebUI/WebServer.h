@@ -23,6 +23,11 @@ namespace WebUI {
     static const int MIN_HTTP_PORT = 1;
     static const int MAX_HTTP_PORT = 65001;
 
+    static const uint32_t WS_PING_INTERVAL = 5000;      // 5 seconds between pings
+    static const uint32_t WEBSOCKET_TIMEOUT = 15000;    // 15 seconds timeout
+    static const uint8_t WS_RETRY_COUNT = 5;            // Number of retry attempts
+    static const uint8_t MAX_RETRY_ATTEMPTS = 3;        // Max number of connection retry attempts
+
     extern EnumSetting* http_enable;
     extern IntSetting*  http_port;
     extern EnumSetting* http_block_during_motion;
@@ -125,18 +130,17 @@ namespace WebUI {
         static void handleGetPenConfig();    // Change to static
         static void handleSetPenConfig();    // Change to static
         static void handleDeletePen();       // Change to static
-        static void serveStatic(const char* uri, const char* path, const char* cache_header); 
         static int getPageid();
 
-        static const uint32_t WEBSOCKET_TIMEOUT = 120000;  // 2 minutes timeout
-        static const uint8_t MAX_RETRY_ATTEMPTS = 3;
         static uint8_t retry_count;
         static uint32_t last_ws_activity;
         
         void resetWebSocket();
         bool checkWebSocketTimeout();
+        
         static void setCORSHeaders();
         static void enableCachingHeaders();
+        
     };
 
     extern Web_Server webServer;

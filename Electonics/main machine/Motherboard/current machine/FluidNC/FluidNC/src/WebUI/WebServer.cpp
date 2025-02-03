@@ -125,16 +125,12 @@ namespace WebUI {
         _socket_server = new WebSocketsServer(_port + 1);
         _socket_server->begin();
         _socket_server->onEvent(handle_Websocket_Event);
-        _socket_server->enableHeartbeat(WS_PING_INTERVAL, WEBSOCKET_TIMEOUT/2, 3);
+        _socket_server->enableHeartbeat(WS_PING_INTERVAL, WEBSOCKET_TIMEOUT/2, WS_RETRY_COUNT);
         
         _socket_serverv3 = new WebSocketsServer(_port + 2, "", "webui-v3");
         _socket_serverv3->begin();
         _socket_serverv3->onEvent(handle_Websocketv3_Event);
-        _socket_serverv3->enableHeartbeat(WS_PING_INTERVAL, WEBSOCKET_TIMEOUT/2, 3);
-
-        // Configure WebSocket keep-alive
-        _socket_server->enableHeartbeat(60000, 10000, 3); // pingInterval=60s, timeout=10s, retries=3
-        _socket_serverv3->enableHeartbeat(60000, 10000, 3); // pingInterval=60s, timeout=10s, retries=3
+        _socket_serverv3->enableHeartbeat(WS_PING_INTERVAL, WEBSOCKET_TIMEOUT/2, WS_RETRY_COUNT);
 
         //events functions
         //_web_events->onConnect(handle_onevent_connect);

@@ -1,0 +1,283 @@
+IMPLEMENTED FEATURES & USAGE
+==========================
+
+1. JSON Configuration
+--------------------
+Features:
+- Tool positions stored in /localfs/toolconfig.json
+- Dynamic loading without firmware reflash
+- JSON structure: number, x, y, z, occupied status
+
+Usage:
+- Edit toolconfig.json to update pen positions
+- Format: { "tools": [{"number": 1, "x": -494.700, "y": -39.900, "z": -14.000}] }
+- Upload to /localfs/ directory
+- Changes take effect immediately without restart
+
+2. Dual Soft Limits
+------------------
+Features:
+- Normal and extended travel limits
+
+Usage:
+- Set in MAXA3.yaml:
+  max_travel_mm: 440           # Normal limit
+  pen_change_travel_mm: 500    # Extended limit
+- System automatically switches during pen changes
+- Manual moves restricted to max_travel_mm
+
+3. Safety Features
+----------------
+Features:
+- Collision prevention
+- Position validation
+- State tracking
+
+Usage:
+- System automatically checks for collisions
+- Invalid movements are blocked
+- Error messages indicate safety violations
+
+4. Manual Calibration
+-------------------
+Features:
+- Manual position calibration
+- Position verification
+- No probe required
+
+Usage:
+- Calibrate pen positions:
+  1. Manually jog to correct position
+  2. Use calibratePenPosition(pen_number, x, y, z)
+  3. Test with verifyPosition(pen_number)
+  4. Save with saveCalibration(pen_number)
+
+5. State Management
+-----------------
+Features:
+- Pen state tracking
+- Position persistence
+
+Usage:
+- System tracks current pen automatically
+- States saved between power cycles
+- Check status with toolConfig.getStatus()
+
+6. WebSocket Connection Stability
+------------------------------
+Features:
+- Automatic ping/pong every 5 seconds
+- Connection timeout after 15 seconds of inactivity
+- Automatic reconnection with 5 retry attempts
+- Graceful connection recovery
+- Error logging and monitoring
+
+Usage:
+- WebUI automatically maintains connection
+- System detects disconnects within 15 seconds
+- Connection automatically recovers after temporary network issues
+- Monitor logs for connection status
+
+Implementation:
+- Uses heartbeat protocol for connection monitoring
+- Sends PING message every 5 seconds
+- Expects PONG response within timeout period
+- Tracks connection activity timestamps
+- Handles recovery through retry mechanism
+
+Technical Details:
+- WS_PING_INTERVAL = 5000ms (5 seconds)
+- WEBSOCKET_TIMEOUT = 15000ms (15 seconds)
+- WS_RETRY_COUNT = 5 attempts
+- Automatic error logging
+- Connection state tracking
+
+Benefits:
+- More reliable WebUI connection
+- Faster disconnect detection
+- Automatic recovery from network issues
+- Better user experience
+- Reduced manual intervention needed
+
+Usage:
+1. WebSocket Connection:
+   - UI connects to ws://[fluidnc-ip]:[port+1]
+   - Default port is 81 (HTTP port + 1)
+
+2. Ping-Pong Protocol:
+   - UI sends: "PING:[clientId]"
+   - FluidNC responds: "PONG:[clientId]"
+   - Send ping every 5-60 seconds
+
+7. Laser Position Indicator
+--------------------------
+Features:
+- Basic laser pointer control
+- Shows relative pen positions using laser
+- Configurable X/Y offset from tool position
+
+Usage:
+1. Configure in YAML:
+   laser_pointer:
+     pin: gpio.25        # Laser control pin
+     active_low: false   # Pin logic
+     x_offset: -10.0     # X offset from pen position
+     y_offset: 10.0      # Y offset from pen position
+
+2. G-code Commands:
+   M649 - Enable/disable laser pointer
+   M650 S[0/1] - Laser on/off
+
+
+PENDING FEATURES
+==============
+1. Emergency Recovery System
+   - Save machine state during emergency stops
+   - Record pen positions and states
+   - Automatic recovery after power loss
+   - Safe return to home after emergency
+
+2. Enhanced Status Reporting
+   - Web interface for pen status
+   - Real-time position monitoring
+   - Error state display
+   - Movement confirmation feedback
+
+3. Advanced Calibration
+   - G-code commands for calibration
+   - Calibration verification routines
+   - Multiple calibration profiles
+   - Calibration data backup/restore
+
+4. Safety Enhancements
+   - Advanced collision prevention
+   - Pen presence detection
+   - Movement path validation
+   - Safe zone definitions
+
+5. User Interface Improvements
+   - Web-based position editor
+   - Calibration wizard
+   - Status monitoring dashboard
+   - Configuration backup/restore
+
+TO BE IMPLEMENTED:
+-----------------
+1. Laser Pointer Enhancements
+   - Interactive calibration procedure
+   - Automatic offset measurement
+   - Manual laser control through WebUI
+   - Laser brightness control
+   - Position verification using laser
+   - Multiple calibration profiles
+
+FUTURE IMPLEMENTATIONS
+====================
+
+1. Calibration System
+--------------------
+Features:
+- Manual position calibration via G-code
+- Position verification routine
+- Calibration data storage in JSON
+- Automatic safety checks
+
+Usage (To be implemented):
+- M6.1 P[pen] X[pos] Y[pos] Z[pos] - Calibrate pen position
+- M6.2 P[pen] - Verify pen position
+- M6.3 - Save calibration data
+- M6.4 - Load calibration data
+
+Example:
+M6.1 P1 X-494.700 Y-39.900 Z-14.000  ; Calibrate pen 1
+M6.2 P1                               ; Verify pen 1 position
+
+2. Next Steps for Implementation
+------------------------------
+1. Emergency Recovery System
+   - Power loss recovery
+   - Error state handling
+   - State restoration
+   - Emergency stop handling
+
+2. Status Reporting System
+   - Real-time position feedback
+   - Pen state monitoring
+   - Error reporting
+   - Status display interface
+
+FILE MODIFICATIONS
+================
+1. ToolConfig.h/.cpp
+   - Added position validation
+   - Added collision detection
+   - Added state persistence
+   - Added status reporting structure
+
+2. Pen.h/.cpp
+   - Removed hardcoded positions
+   - Added calibration functions
+   - Added position verification
+   - Integrated with ToolConfig
+
+3. MotionControl.cpp
+   - Implemented dual soft limits
+   - Added safety checks
+   - Enhanced error handling
+   - Improved movement coordination
+
+4. GCode.h/.cpp
+   - Added pen-specific defines
+   - Added tool change handling
+   - MAX_PENS definition
+
+5. Configuration Files
+   - Added toolconfig.json
+   - Modified MAXA3.yaml for limits
+   - Added penstate.json for recovery
+
+6. Features Added/Modified
+   - JSON configuration system
+   - Dual soft limits
+   - Safety features
+   - Manual calibration
+   - State management
+   - Position validation
+
+7. WebSocket Implementation Files
+------------------------------
+1. WebServer.h/.cpp
+   - Added WebSocket constants and configuration
+   - Implemented ping/pong protocol
+   - Added connection monitoring
+   - Added auto-recovery system
+   - Added error logging
+   - Added connection timeouts
+
+2. WSChannel.h/.cpp
+   - Added WebSocket channel management
+   - Implemented connection tracking
+   - Added message handling
+   - Added ping/pong responses
+   - Added channel state management
+
+3. Channel.h
+   - Added base communication interface
+   - Added stream handling
+   - Added queue management
+   - Added real-time command support
+
+Latest Changes Summary:
+- Stabilized WebSocket connections
+- Added automatic reconnection
+- Improved error handling
+- Added connection monitoring
+- Implemented ping/pong protocol
+- Added connection state tracking
+
+NOTES
+=====
+- Manual calibration requires careful positioning
+- Save positions after successful calibration
+- Backup toolconfig.json before making changes
+- Test movements at low speed first

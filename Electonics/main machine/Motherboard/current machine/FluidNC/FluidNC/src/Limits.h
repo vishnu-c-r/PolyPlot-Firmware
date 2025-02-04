@@ -9,6 +9,7 @@
 #include <cstdint>
 
 extern bool soft_limit;
+extern bool pen_change;  // Add this line to expose the pen_change variable
 
 // Initialize the limits module
 void limits_init();

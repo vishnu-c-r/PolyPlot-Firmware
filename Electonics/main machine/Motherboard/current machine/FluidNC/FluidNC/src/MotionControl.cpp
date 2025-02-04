@@ -4,9 +4,9 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "MotionControl.h"
-
 #include "Machine/MachineConfig.h"
 #include "Machine/Homing.h"  // run_cycles
+#include "Machine/ToolConfig.h"  // Add this line
 #include "Limits.h"          // limits_soft_check
 #include "Report.h"          // report_over_counter
 #include "Protocol.h"        // protocol_execute_realtime
@@ -15,7 +15,6 @@
 #include "Platform.h"        // WEAK_LINK
 #include "Settings.h"        // coords
 #include "Pen.h"
-#include "WebUI/ToolConfig.h"  // Add this line for ToolConfig
 
 #include <cmath>
 
@@ -40,6 +39,12 @@ static volatile void* mc_pl_data_inflight;  // holds a plan_line_data_t while mc
 
 void mc_init() {
     mc_pl_data_inflight = NULL;
+    
+    // Load tool config at startup
+    auto& toolConfig = Machine::ToolConfig::getInstance();
+    if (!toolConfig.loadConfig()) {
+        log_error("Failed to load tool configuration");
+    }
 }
 
 // Execute linear motor motion in absolute millimeter coordinates. Feed rate given in
@@ -120,6 +125,10 @@ static bool mc_linear_no_check(float* target, plan_line_data_t* pl_data, float* 
 
 
 bool mc_linear(float* target, plan_line_data_t* pl_data, float* position) {
+    if (pen_change) {
+        log_debug("Pen change Z movement - current: " << position[Z_AXIS] << " target: " << target[Z_AXIS]);
+    }
+    
     if (!pl_data->is_jog && !pl_data->limits_checked) {  // soft limits for jogs have already been dealt with
         if (config->_kinematics->invalid_line(target)) {
             return false;
@@ -538,205 +547,251 @@ void mc_critical(ExecAlarm alarm) {
 
 // automatic pen change execution
 bool mc_pen_change(plan_line_data_t* pl_data) {
+    log_debug("Setting pen_change flag to true");
+
     static int current_loaded_pen = 0;
     int nextPen = pl_data->penNumber;
+    auto& toolConfig = Machine::ToolConfig::getInstance();
 
-    log_info("Starting pen change - Current:" << current_loaded_pen << " Next:" << nextPen);
+    // Get current Z position for debugging
+    float current_z = gc_state.position[Z_AXIS];
+    log_debug("Current Z position before pen change: " << current_z);
 
-    protocol_buffer_synchronize();
-    plan_reset();
-    plan_sync_position();
+    bool success = true;  // Track success/failure
 
-    float currentPos[MAX_N_AXIS];
-    copyAxes(currentPos, gc_state.position);
-    float startPos[MAX_N_AXIS];
-    copyAxes(startPos, currentPos);
-    
-    pl_data->feed_rate = 3000;
+    try {
+        log_info("Starting pen change - Current:" << current_loaded_pen << " Next:" << nextPen);
 
-    // Calculate a safe retraction distance that won't exceed limits
-    float safe_retraction = 25.0f; // Reduce from 50mm to 25mm
-
-    // If current pen and next pen are the same, just redock it
-    if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
-        float dropPos[MAX_N_AXIS];
-        if (!get_pen_place_position(current_loaded_pen, dropPos)) {
-            log_error("Invalid pen position");
-            return false;
-        }
-
-        // 1. Move Z to safe height
-        currentPos[Z_AXIS] = 0;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
         protocol_buffer_synchronize();
+        plan_reset();
+        plan_sync_position();
 
-        // 2. Move Y to current pen position
-        currentPos[Y_AXIS] = dropPos[Y_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 3. Move X to dock after Y and Z complete
-        currentPos[X_AXIS] = dropPos[X_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 4. Lower Z to dock
-        currentPos[Z_AXIS] = dropPos[Z_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        mc_drop_pen(current_loaded_pen);  // Add this to properly mark pen as docked
-
-        // 5. Move X back 50mm
-        currentPos[X_AXIS] += safe_retraction;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // Return to starting position
-        if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
-
-        // Set current_loaded_pen to 0 so next command treats it as a fresh pickup
-        current_loaded_pen = 0;
-        log_info("Pen redocked and cleared: " << nextPen);
-        return true;
-    }
-
-    // First pickup (no pen loaded)
-    if (current_loaded_pen == 0 && nextPen > 0) {
-        float pickupPos[MAX_N_AXIS];
-        if (!get_pen_pickup_position(nextPen, pickupPos)) {
-            log_error("Invalid pen pickup position"); 
-            return false;
-        }
-
-        // 1. Move Z up first
-        currentPos[Z_AXIS] = pickupPos[Z_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 2. Move Y to pen position
-        currentPos[Y_AXIS] = pickupPos[Y_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
+        float currentPos[MAX_N_AXIS];
+        copyAxes(currentPos, gc_state.position);
+        float startPos[MAX_N_AXIS];
+        copyAxes(startPos, currentPos);
         
-        // 3. After Z and Y are done, move X to dock
-        currentPos[X_AXIS] = pickupPos[X_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
+        pl_data->feed_rate = 3000;
 
-        mc_pick_pen(nextPen);
+        // If current pen and next pen are the same, just redock it
+        if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
+            float dropPos[MAX_N_AXIS];
+            log_debug("Attempting to get tool position for pen " << nextPen);
+            if (!toolConfig.getToolPosition(current_loaded_pen, dropPos)) {
+                log_error("Invalid pen position");
+                return false;
+            }
+                pen_change = true;  // Set flag at start
+            // 1. Move Z to safe height
+            float beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = 0;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            float afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
-        // 4. Move Z up to 0
-        currentPos[Z_AXIS] = 0;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
+            // 2. Move Y to current pen position
+            currentPos[Y_AXIS] = dropPos[Y_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
 
-        // 5. Retract X by 50mm
-        currentPos[X_AXIS] += safe_retraction;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
+            // 3. Move X to dock after Y and Z complete
+            currentPos[X_AXIS] = dropPos[X_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
 
-        current_loaded_pen = nextPen;
+            // 4. Lower Z to dock
+            beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = dropPos[Z_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
-        // Return to starting position
-        if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
-    }
-    // Change pen when one is already loaded
-    else if (current_loaded_pen > 0 && nextPen > 0) {
-        float dropPos[MAX_N_AXIS], pickupPos[MAX_N_AXIS];
+            toolConfig.setToolOccupied(current_loaded_pen, true);  // Mark as docked
+
+            // 5. Move X back 50mm
+            currentPos[X_AXIS] += 50.0f;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            // Return to starting position
+            if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
+            pen_change = false;  // Clear flag at end 
+            // Set current_loaded_pen to 0 so next command treats it as a fresh pickup
+            current_loaded_pen = 0;
+            log_info("Pen redocked and cleared: " << nextPen);
+            return true;
+        }
         
-        if (!get_pen_place_position(current_loaded_pen, dropPos) || 
-            !get_pen_pickup_position(nextPen, pickupPos)) {
-            log_error("Invalid pen position");
-            return false;
+        // First pickup (no pen loaded)
+        if (current_loaded_pen == 0 && nextPen > 0) {
+            float pickupPos[MAX_N_AXIS];
+            log_debug("Attempting to get tool position for pen " << nextPen);
+            if (!toolConfig.getToolPosition(nextPen, pickupPos)) {
+                log_error("Invalid pen pickup position"); 
+                return false;
+            }
+            pen_change = true;  // Set flag at start
+            // 1. Move Z up first
+            float beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = pickupPos[Z_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            float afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+
+            // 2. Move Y to pen position
+            currentPos[Y_AXIS] = pickupPos[Y_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            
+            // 3. After Z and Y are done, move X to dock
+            currentPos[X_AXIS] = pickupPos[X_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            toolConfig.setToolOccupied(nextPen, false);  // Mark as picked up
+
+            // 4. Move Z up to 0
+            beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = 0;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+
+            // 5. Retract X by 50mm
+            currentPos[X_AXIS] += 50.0f;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            current_loaded_pen = nextPen;
+
+            // Return to starting position
+            if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
+            pen_change = false;  // Clear flag at end
+        }
+        // Change pen when one is already loaded
+        else if (current_loaded_pen > 0 && nextPen > 0) {
+            float dropPos[MAX_N_AXIS], pickupPos[MAX_N_AXIS];
+            
+            if (!toolConfig.getToolPosition(current_loaded_pen, dropPos) || 
+                !toolConfig.getToolPosition(nextPen, pickupPos)) {
+                log_error("Invalid pen position");
+                return false;
+            }
+            pen_change = true;  // Set flag at start
+            // 1. Move Z to safe height
+            float beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = 0;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            float afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+
+            // 2. Move Y to current pen return position
+            currentPos[Y_AXIS] = dropPos[Y_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            // 3. After Z and Y complete, move X to dock
+            currentPos[X_AXIS] = dropPos[X_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            // 4. Lower Z to dock
+            beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = dropPos[Z_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+
+            toolConfig.setToolOccupied(current_loaded_pen, true);  // Mark old pen as docked
+
+            // 5. Move X back 50mm
+            currentPos[X_AXIS] += 50.0f;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            // 6. Move Y and Z to next pen position
+            currentPos[Y_AXIS] = pickupPos[Y_AXIS];
+            beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = pickupPos[Z_AXIS];
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+
+            // 7. After Y and Z complete, move X to dock
+            currentPos[X_AXIS] = pickupPos[X_AXIS]; 
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            toolConfig.setToolOccupied(nextPen, false);  // Mark new pen as picked up
+
+            // 8. Move Z up to 0  
+            beforeZ = gc_state.position[Z_AXIS];
+            currentPos[Z_AXIS] = 0;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+            afterZ = gc_state.position[Z_AXIS];
+            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+
+            // 9. Move X back 50mm
+            currentPos[X_AXIS] += 50.0f;
+            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
+            protocol_buffer_synchronize();
+
+            current_loaded_pen = nextPen;
+
+            // Return to starting position
+            if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
+            pen_change = false;  // Clear flag at end
         }
 
-        // 1. Move Z to safe height
-        currentPos[Z_AXIS] = 0;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 2. Move Y to current pen return position
-        currentPos[Y_AXIS] = dropPos[Y_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 3. After Z and Y complete, move X to dock
-        currentPos[X_AXIS] = dropPos[X_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 4. Lower Z to dock
-        currentPos[Z_AXIS] = dropPos[Z_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        mc_drop_pen(current_loaded_pen);
-
-        // 5. Move X back 50mm
-        currentPos[X_AXIS] += safe_retraction;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 6. Move Y and Z to next pen position
-        currentPos[Y_AXIS] = pickupPos[Y_AXIS];
-        currentPos[Z_AXIS] = pickupPos[Z_AXIS];
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 7. After Y and Z complete, move X to dock
-        currentPos[X_AXIS] = pickupPos[X_AXIS]; 
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        mc_pick_pen(nextPen);
-
-        // 8. Move Z up to 0  
-        currentPos[Z_AXIS] = 0;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        // 9. Move X back 50mm
-        currentPos[X_AXIS] += safe_retraction;
-        if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-        protocol_buffer_synchronize();
-
-        current_loaded_pen = nextPen;
-
-        // Return to starting position
-        if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
+        log_info("Pen change complete. Current pen: " << current_loaded_pen);
+    }
+    catch (...) {
+        success = false;
+        log_error("Exception during pen change");
     }
 
-    log_info("Pen change complete. Current pen: " << current_loaded_pen);
-    return true;
+    log_debug("Setting pen_change flag to false");
+        protocol_buffer_synchronize();
+        plan_reset();
+        plan_sync_position();
+
+    return success;
 }
 
 void mc_pick_pen(int penNumber) {
+    auto& toolConfig = Machine::ToolConfig::getInstance();
     plan_reset();
     plan_sync_position();
 
     float pickupPos[3] = {0.0f, 0.0f, 0.0f};
-    get_pen_pickup_position(penNumber, pickupPos);
+    toolConfig.getToolPosition(penNumber, pickupPos);
 
     plan_line_data_t pl_data = {0};
     pl_data.feed_rate = 3000;  // Set faster feed rate
     mc_linear(pickupPos, &pl_data, gc_state.position);
 
-    // Use namespace Pen::
-    Pen::pickPen(penNumber - 1);  // Use namespace prefix
+    toolConfig.setToolOccupied(penNumber, false);
 }
 
 void mc_drop_pen(int penNumber) {
+    auto& toolConfig = Machine::ToolConfig::getInstance();
     plan_reset();
     plan_sync_position();
 
     float placePos[3] = {0.0f, 0.0f, 0.0f};
-    get_pen_place_position(penNumber, placePos);
+    toolConfig.getToolPosition(penNumber, placePos);
 
     plan_line_data_t pl_data = {0};
     pl_data.feed_rate = 3000;  // Set faster feed rate
     mc_linear(placePos, &pl_data, gc_state.position);
 
-    // Use namespace Pen::
-    Pen::dropPen(penNumber - 1);  // Use namespace prefix
+    toolConfig.setToolOccupied(penNumber, true);
 }

@@ -1,7 +1,3 @@
-// Copyright (c) 2012 - 2016 Sungeun K. Jeon for Gnea Research LLC
-// Copyright (c) 2018 -	Bart Dring
-// Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
-
 #include "Limits.h"
 
 #include "Machine/MachineConfig.h"
@@ -69,6 +65,7 @@ bool ambiguousLimit() {
 }
 
 bool soft_limit = false;
+bool pen_change = false;  // Track pen change state
 
 // Performs a soft limit check. Called from mcline() only. Assumes the machine has been homed,
 // the workspace volume is in all negative space, and the system is in normal operation.
@@ -102,7 +99,13 @@ float limitsMaxPosition(size_t axis) {
     auto axisConfig = config->_axes->_axis[axis];
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
-    auto maxtravel  = axisConfig->_maxTravel;
+    
+    // Only apply pen_change travel limits to X and Y axes, not Z
+    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
+
+    log_debug("Axis " << axis << " limits check - pen_change: " << pen_change 
+              << " maxtravel: " << maxtravel << " mpos: " << mpos 
+              << " axis: " << (axis == Z_AXIS ? "Z" : (axis == X_AXIS ? "X" : "Y")));
 
     return (!homing || homing->_positiveDirection) ? mpos : mpos + maxtravel;
 }
@@ -111,7 +114,9 @@ float limitsMinPosition(size_t axis) {
     auto axisConfig = config->_axes->_axis[axis];
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
-    auto maxtravel  = axisConfig->_maxTravel;
+    
+    // Only apply pen_change travel limits to X and Y axes, not Z
+    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
     return (!homing || homing->_positiveDirection) ? mpos - maxtravel : mpos;
 }

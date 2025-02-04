@@ -34,6 +34,7 @@ namespace Machine {
         float _maxRate      = 1000.0f;
         float _acceleration = 25.0f;
         float _maxTravel    = 1000.0f;
+        float _penChangeTravel = 1000.0f;  // Added: Extended travel limit for pen changes
         bool  _softLimits   = false;
 
         // Configuration system helpers:

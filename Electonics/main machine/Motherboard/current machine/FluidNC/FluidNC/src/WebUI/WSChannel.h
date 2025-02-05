@@ -58,11 +58,6 @@ namespace WebUI {
 
         void autoReport() override;
 
-        bool handlePing();
-        void sendPong();
-        uint32_t last_ping_time = 0;
-        bool ping_pending = false;
-
     private:
         WebSocketsServer* _server;
         uint8_t           _clientNum;
@@ -92,7 +87,6 @@ namespace WebUI {
         static void sendPing();
         static void handleEvent(WebSocketsServer* server, uint8_t num, uint8_t type, uint8_t* payload, size_t length);
         static void handlev3Event(WebSocketsServer* server, uint8_t num, uint8_t type, uint8_t* payload, size_t length);
-        static void checkPingTimeouts();  // New method to check ping timeouts
     };
 }
 

@@ -108,25 +108,6 @@ namespace WebUI {
 
     WSChannel::~WSChannel() {}
 
-    void WSChannel::sendPong() {
-        std::string pong("PONG:");
-        pong += std::to_string(_clientNum);
-        if (sendTXT(pong)) {
-            last_ping_time = millis();
-            ping_pending = false;
-            log_debug("Pong sent to client " << _clientNum);  // Add debug logging
-        } else {
-            log_error("Failed to send pong to client " << _clientNum);
-        }
-    }
-
-    bool WSChannel::handlePing() {
-        if (ping_pending && (millis() - last_ping_time > WEBSOCKET_TIMEOUT)) {  // Access constant directly in WebUI namespace
-            return false;  // Connection timed out
-        }
-        return true;
-    }
-
     std::map<uint8_t, WSChannel*> WSChannels::_wsChannels;
     std::list<WSChannel*>         WSChannels::_webWsChannels;
 
@@ -245,21 +226,6 @@ namespace WebUI {
                 }
             } break;
             case WStype_TEXT:
-                try {
-                    std::string msg((char*)payload, length);
-                    if (msg.rfind("PING:", 0) == 0) {
-                        // Immediate response to PING
-                        WSChannel* wsChannel = _wsChannels.at(num);
-                        wsChannel->last_ping_time = millis();  // Update timestamp
-                        wsChannel->sendPong();
-                        log_debug("Ping-Pong from client " << num);  // Add debug logging
-                    } else {
-                        _wsChannels.at(num)->push(payload, length);
-                    }
-                } catch (std::out_of_range& oor) {
-                    log_error("WebSocket channel not found");
-                }
-                break;
             case WStype_BIN:
                 try {
                     _wsChannels.at(num)->push(payload, length);

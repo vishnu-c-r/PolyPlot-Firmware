@@ -77,7 +77,7 @@ namespace WebUI {
             j.begin_object();
             j.member("color", pen.color.c_str());
             j.member("name", pen.name.c_str());
-            j.member("zValue", std::to_string(pen.zValue).c_str());
+            j.member("zValue", pen.zValue);  // Changed: Remove string conversion
             
             // Handle penPick array
             j.begin_array("penPick");
@@ -142,7 +142,16 @@ namespace WebUI {
             // Parse zValue
             size_t zValuePos = obj.find("\"zValue\":");
             if (zValuePos != std::string::npos) {
-                pen.zValue = atoi(obj.substr(zValuePos + 9).c_str());
+                size_t valueStart = zValuePos + 9;
+                while (valueStart < obj.length() && (obj[valueStart] == ' ' || obj[valueStart] == ':')) {
+                    valueStart++;
+                }
+                size_t valueEnd = valueStart;
+                while (valueEnd < obj.length() && (std::isdigit(obj[valueEnd]) || obj[valueEnd] == '-')) {
+                    valueEnd++;
+                }
+                std::string zValueStr = obj.substr(valueStart, valueEnd - valueStart);
+                pen.zValue = std::stoi(zValueStr);
             }
 
             // Parse penPick array

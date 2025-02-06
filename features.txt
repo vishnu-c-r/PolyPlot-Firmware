@@ -57,11 +57,38 @@ Usage:
 Features:
 - Pen state tracking
 - Position persistence
+- Real-time status reporting
+- Tool position monitoring
+- Occupancy tracking
+- Error state monitoring
 
 Usage:
 - System tracks current pen automatically
 - States saved between power cycles
 - Check status with toolConfig.getStatus()
+- Monitor tool positions via web interface
+- View real-time tool status
+- HTTP endpoints:
+  * GET /toolconfig/status - Current status
+  * GET /toolconfig - Full configuration
+  * POST /toolconfig - Update configuration
+  * POST /toolconfig/position - Update position
+
+Implementation:
+- Status information includes:
+  * Current active pen
+  * Total available pens
+  * Individual pen positions
+  * Occupancy status
+  * Motion state
+  * Error conditions
+- Automatic status reporting through:
+  * Serial interface
+  * Web interface
+  * WebSocket updates
+- Position validation against toolconfig.json
+- Collision prevention system
+- Persistent state storage
 
 6. WebSocket Connection Stability
 ------------------------------
@@ -128,6 +155,41 @@ Usage:
    M649 - Enable/disable laser pointer
    M650 S[0/1] - Laser on/off
 
+8. Tool Status System
+-------------------
+Features:
+- Real-time tool position monitoring
+- Occupancy tracking for each position
+- Status reporting through serial interface
+- Web API endpoints for status queries
+- JSON-based status representation
+- Error state tracking
+- Motion state monitoring
+
+Usage:
+1. Status Monitoring:
+   - GET /toolconfig/status for current state
+   - Serial output for debugging
+   - Web interface integration
+   - Real-time position updates
+
+2. Configuration:
+   - Tool positions in toolconfig.json
+   - Default values from constants
+   - Automatic validation
+   - Collision detection
+
+3. Data Access:
+   - RESTful API endpoints
+   - WebSocket status updates
+   - Serial monitoring output
+   - Status persistence
+
+// - Defined static LED color members (COLOR_RED, COLOR_GREEN, COLOR_ORANGE, COLOR_OFF)
+// - Added new LED animation methods: startupAnimation, homingAnimation, readyBlinkAnimation,
+//   runningAnimation, and pausedAnimation.
+// - Updated button handling on the keypad to support jog, play/pause, and homing commands.
+// - Enhanced serial communication and state reporting for FluidNC integration.
 
 PENDING FEATURES
 ==============
@@ -274,6 +336,72 @@ Latest Changes Summary:
 - Added connection monitoring
 - Implemented ping/pong protocol
 - Added connection state tracking
+
+UI INTEGRATION POINTS
+===================
+
+1. API Endpoints
+--------------
+- GET /toolconfig - Get complete configuration
+- POST /toolconfig - Update entire configuration
+- POST /toolconfig/position - Update single position
+- GET /toolconfig/status - Get real-time status
+
+2. Data Formats
+-------------
+Tool Position Format:
+{
+  "number": 1,
+  "x": -496.0,
+  "y": -33.5,
+  "z": -20.0,
+  "occupied": false
+}
+
+Status Response Format:
+{
+  "currentPen": 1,
+  "totalPens": 6,
+  "inMotion": false,
+  "error": false,
+  "lastError": "",
+  "positions": [
+    // Array of tool positions
+  ]
+}
+
+3. Position Validation
+-------------------
+X range: -500 to 0
+Y range: -300 to 0
+Z range: -20 to 0
+Tool numbers: 1-6
+
+4. Required UI Components
+----------------------
+- Tool position display grid
+- Status dashboard
+- Error notifications
+- Position input form
+- Occupancy toggles
+- Connection status indicator
+- Serial log display
+
+5. WebSocket Integration
+---------------------
+- Connect to ws://[ip]:[port+1]
+- Implement 5-second ping/pong
+- Show connection status
+- Handle disconnects
+- Auto-reconnect logic
+
+6. Error Handling
+---------------
+- Position validation errors
+- Collision warnings
+- Connection issues
+- Configuration errors
+- Motion conflicts
 
 NOTES
 =====

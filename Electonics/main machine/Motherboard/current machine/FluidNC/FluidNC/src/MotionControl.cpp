@@ -6,7 +6,7 @@
 #include "MotionControl.h"
 #include "Machine/MachineConfig.h"
 #include "Machine/Homing.h"  // run_cycles
-#include "Machine/ToolConfig.h"  // Add this line
+#include "WebUI/ToolConfig.h"  // Add this line
 #include "Limits.h"          // limits_soft_check
 #include "Report.h"          // report_over_counter
 #include "Protocol.h"        // protocol_execute_realtime
@@ -19,11 +19,11 @@
 #include <cmath>
 
 
-#define PROBE_POSITION_X 100.0f  // Example X-axis probing position
-#define PROBE_POSITION_Y 150.0f  // Example Y-axis probing position
-#define PROBE_POSITION_Z 0.0f    // Example Z-axis probing height (start of the probing)
+// #define PROBE_POSITION_X 100.0f  // Example X-axis probing position
+// #define PROBE_POSITION_Y 150.0f  // Example Y-axis probing position
+// #define PROBE_POSITION_Z 0.0f    // Example Z-axis probing height (start of the probing)
 
-float probe_position[MAX_N_AXIS] = { PROBE_POSITION_X, PROBE_POSITION_Y, PROBE_POSITION_Z };
+// float probe_position[MAX_N_AXIS] = { PROBE_POSITION_X, PROBE_POSITION_Y, PROBE_POSITION_Z }; // Remove unused variable
 
 
 // M_PI is not defined in standard C/C++ but some compilers
@@ -41,7 +41,7 @@ void mc_init() {
     mc_pl_data_inflight = NULL;
     
     // Load tool config at startup
-    auto& toolConfig = Machine::ToolConfig::getInstance();
+    auto& toolConfig = WebUI::ToolConfig::getInstance();
     if (!toolConfig.loadConfig()) {
         log_error("Failed to load tool configuration");
     }
@@ -125,10 +125,7 @@ static bool mc_linear_no_check(float* target, plan_line_data_t* pl_data, float* 
 
 
 bool mc_linear(float* target, plan_line_data_t* pl_data, float* position) {
-    if (pen_change) {
-        log_debug("Pen change Z movement - current: " << position[Z_AXIS] << " target: " << target[Z_AXIS]);
-    }
-    
+   
     if (!pl_data->is_jog && !pl_data->limits_checked) {  // soft limits for jogs have already been dealt with
         if (config->_kinematics->invalid_line(target)) {
             return false;
@@ -547,15 +544,15 @@ void mc_critical(ExecAlarm alarm) {
 
 // automatic pen change execution
 bool mc_pen_change(plan_line_data_t* pl_data) {
-    log_debug("Setting pen_change flag to true");
+    // log_debug("Setting pen_change flag to true");
 
     static int current_loaded_pen = 0;
     int nextPen = pl_data->penNumber;
-    auto& toolConfig = Machine::ToolConfig::getInstance();
+    auto& toolConfig = WebUI::ToolConfig::getInstance();
 
     // Get current Z position for debugging
     float current_z = gc_state.position[Z_AXIS];
-    log_debug("Current Z position before pen change: " << current_z);
+    // log_debug("Current Z position before pen change: " << current_z);
 
     bool success = true;  // Track success/failure
 
@@ -576,7 +573,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         // If current pen and next pen are the same, just redock it
         if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
             float dropPos[MAX_N_AXIS];
-            log_debug("Attempting to get tool position for pen " << nextPen);
+            // log_debug("Attempting to get tool position for pen " << nextPen);
             if (!toolConfig.getToolPosition(current_loaded_pen, dropPos)) {
                 log_error("Invalid pen position");
                 return false;
@@ -588,7 +585,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             float afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             // 2. Move Y to current pen position
             currentPos[Y_AXIS] = dropPos[Y_AXIS];
@@ -606,7 +603,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             toolConfig.setToolOccupied(current_loaded_pen, true);  // Mark as docked
 
@@ -627,7 +624,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         // First pickup (no pen loaded)
         if (current_loaded_pen == 0 && nextPen > 0) {
             float pickupPos[MAX_N_AXIS];
-            log_debug("Attempting to get tool position for pen " << nextPen);
+            // log_debug("Attempting to get tool position for pen " << nextPen);
             if (!toolConfig.getToolPosition(nextPen, pickupPos)) {
                 log_error("Invalid pen pickup position"); 
                 return false;
@@ -639,7 +636,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             float afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             // 2. Move Y to pen position
             currentPos[Y_AXIS] = pickupPos[Y_AXIS];
@@ -659,7 +656,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             // 5. Retract X by 50mm
             currentPos[X_AXIS] += 50.0f;
@@ -688,7 +685,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             float afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             // 2. Move Y to current pen return position
             currentPos[Y_AXIS] = dropPos[Y_AXIS];
@@ -706,7 +703,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             toolConfig.setToolOccupied(current_loaded_pen, true);  // Mark old pen as docked
 
@@ -722,7 +719,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             // 7. After Y and Z complete, move X to dock
             currentPos[X_AXIS] = pickupPos[X_AXIS]; 
@@ -737,7 +734,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
             if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
             protocol_buffer_synchronize();
             afterZ = gc_state.position[Z_AXIS];
-            log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
+            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
 
             // 9. Move X back 50mm
             currentPos[X_AXIS] += 50.0f;
@@ -758,7 +755,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         log_error("Exception during pen change");
     }
 
-    log_debug("Setting pen_change flag to false");
+    // log_debug("Setting pen_change flag to false");
         protocol_buffer_synchronize();
         plan_reset();
         plan_sync_position();
@@ -767,7 +764,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
 }
 
 void mc_pick_pen(int penNumber) {
-    auto& toolConfig = Machine::ToolConfig::getInstance();
+    auto& toolConfig = WebUI::ToolConfig::getInstance();
     plan_reset();
     plan_sync_position();
 
@@ -782,7 +779,7 @@ void mc_pick_pen(int penNumber) {
 }
 
 void mc_drop_pen(int penNumber) {
-    auto& toolConfig = Machine::ToolConfig::getInstance();
+    auto& toolConfig = WebUI::ToolConfig::getInstance();
     plan_reset();
     plan_sync_position();
 

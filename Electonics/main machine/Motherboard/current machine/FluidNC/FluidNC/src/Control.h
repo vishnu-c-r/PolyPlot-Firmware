@@ -3,6 +3,7 @@
 
 #pragma once
 
+// #include "Protocol.h"  // Add this include at the top
 #include "Configuration/Configurable.h"
 #include "ControlPin.h"
 #include <vector>

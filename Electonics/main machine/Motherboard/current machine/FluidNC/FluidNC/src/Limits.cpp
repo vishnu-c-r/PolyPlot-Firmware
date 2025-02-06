@@ -103,10 +103,6 @@ float limitsMaxPosition(size_t axis) {
     // Only apply pen_change travel limits to X and Y axes, not Z
     auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
-    log_debug("Axis " << axis << " limits check - pen_change: " << pen_change 
-              << " maxtravel: " << maxtravel << " mpos: " << mpos 
-              << " axis: " << (axis == Z_AXIS ? "Z" : (axis == X_AXIS ? "X" : "Y")));
-
     return (!homing || homing->_positiveDirection) ? mpos : mpos + maxtravel;
 }
 

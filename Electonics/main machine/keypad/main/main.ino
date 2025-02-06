@@ -96,6 +96,13 @@ ButtonState playPauseButton;
 // Add this global variable near the top
 bool alarm14Active = false;
 
+// Add after other state declarations
+bool inStartupPhase = true;
+bool homingComplete = false;
+
+// OPTIMIZATION: Add a dedicated flag for homing (instead of checking current_machine_state text)
+bool isHoming = false;
+
 void setup() {
     // Initialize primary UART communication with proper pin swap for ATtiny1614
     Serial.begin(115200);
@@ -124,10 +131,10 @@ void setup() {
     
     LEDControl::LedColors::init(pixels);
     
-    // Set initial LED state to IDLE
+    // Set initial LED state to IDLE using COLOR_GREEN instead of non-existent COLOR_IDLE
     machineState = IDLE;
     for (int i = 0; i < NUM_PIXELS; i++) {
-        pixels.setPixelColor(i, LEDControl::LedColors::COLOR_IDLE);
+        pixels.setPixelColor(i, LEDControl::LedColors::COLOR_GREEN);
     }
     pixels.show();
 
@@ -272,15 +279,13 @@ void handleButtons() {
     // ...existing code...
     // Handle LED updates based on state
     if (machineState == RUNNING || machineState == JOGGING) {
-        // During running/jogging state, set button LEDs
-        uint32_t baseColor = (machineState == JOGGING) ? 
-                            LEDControl::LedColors::COLOR_JOG : 
-                            LEDControl::LedColors::COLOR_RUNNING;
-        
-        pixels.setPixelColor(LED_UP, upButton.currentState ? LEDControl::LedColors::COLOR_PRESSED : baseColor);
-        pixels.setPixelColor(LED_RIGHT, rightButton.currentState ? LEDControl::LedColors::COLOR_PRESSED : baseColor);
-        pixels.setPixelColor(LED_DOWN, downButton.currentState ? LEDControl::LedColors::COLOR_PRESSED : baseColor);
-        pixels.setPixelColor(LED_LEFT, leftButton.currentState ? LEDControl::LedColors::COLOR_PRESSED : baseColor);
+        // Use available constants:
+        uint32_t baseColor = (machineState == JOGGING) ? LEDControl::LedColors::COLOR_GREEN : LEDControl::LedColors::COLOR_GREEN;
+        // For pressed state, use COLOR_ORANGE instead of non-existent COLOR_PRESSED
+        pixels.setPixelColor(LED_UP, upButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
+        pixels.setPixelColor(LED_RIGHT, rightButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
+        pixels.setPixelColor(LED_DOWN, downButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
+        pixels.setPixelColor(LED_LEFT, leftButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
         pixels.setPixelColor(LED_PLAYPAUSE, baseColor);
     }
 
@@ -357,118 +362,78 @@ void handleButtons() {
 }
 
 void updateLEDs() {
-    static unsigned long fadeTimer = 0;
-    static int fadeValue = 0;
-    static int fadeStep = 5;
-    uint32_t fadeColor = 0;  // Declare at top level
+    if (inStartupPhase && !isHoming) {
+        LEDControl::LedColors::startupAnimation();
+        return;
+    }
 
-    // Clear all LEDs first
-    pixels.clear();
+    if (isHoming) {
+        LEDControl::LedColors::homingAnimation();
+        // Optionally, set inStartupPhase to false when homing starts.
+        return;
+    }
 
+    // Normal LED patterns: update pixels without individual calls to show()
     switch (machineState) {
         case IDLE:
-            // Cyan color for idle
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_IDLE);
+            for (int i = 0; i < 4; i++) {
+                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_GREEN);
             }
+            pixels.setPixelColor(LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
             break;
 
         case RUNNING:
-            // Purple for running
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_RUNNING);
-            }
-            break;
-
         case JOGGING:
-            // Blue for jogging
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_JOG);
+            for (int i = 0; i < 4; i++) {
+                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
             }
+            LEDControl::LedColors::runningAnimation(true);
             break;
 
         case PAUSED:
-            // Update fade timing for orange pulsing
-            if (millis() - fadeTimer > 50) {
-                fadeTimer = millis();
-                fadeValue += fadeStep;
-                if (fadeValue >= 255) {
-                    fadeValue = 255;
-                    fadeStep = -5;
-                } else if (fadeValue <= 0) {
-                    fadeValue = 0;
-                    fadeStep = 5;
-                }
+            for (int i = 0; i < 4; i++) {
+                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
             }
-            
-            // Calculate fade color (orange)
-            fadeColor = pixels.Color(
-                map(fadeValue, 0, 255, 0, 255),    // Red
-                map(fadeValue, 0, 255, 0, 100),    // Green
-                0                                   // Blue
-            );
-            
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, fadeColor);
-            }
+            LEDControl::LedColors::pausedAnimation();
             break;
 
         case ALARM:
-            // Red for alarm state
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_ERROR);
-            }
+            LEDControl::LedColors::startupAnimation();
             break;
 
         case COMPLETE:
-            // Green for completion
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_COMPLETE);
-            }
-            break;
-
-        default:
-            // Set default color (e.g., off)
-            for (int i = 0; i < NUM_PIXELS; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
-            }
+            LEDControl::LedColors::readyBlinkAnimation();
             break;
     }
-
-    // Show pressed button states
-    if (machineState == RUNNING || machineState == JOGGING) {
-        if (upButton.currentState) pixels.setPixelColor(LED_UP, LEDControl::LedColors::COLOR_PRESSED);
-        if (rightButton.currentState) pixels.setPixelColor(LED_RIGHT, LEDControl::LedColors::COLOR_PRESSED);
-        if (downButton.currentState) pixels.setPixelColor(LED_DOWN, LEDControl::LedColors::COLOR_PRESSED);
-        if (leftButton.currentState) pixels.setPixelColor(LED_LEFT, LEDControl::LedColors::COLOR_PRESSED);
-    }
-
-    pixels.show();
+    pixels.show(); // Update once at the end.
 }
 
 // Callback function for machine state changes
 void show_state(const char* state) {
     strncpy(current_machine_state, state, sizeof(current_machine_state));
     
-    // Update machine state with more granular parsing
     if (strstr(state, "Run") == state) {
         machineState = RUNNING;
         alarm14Active = false;
+        isHoming = false;
     } else if (strstr(state, "Hold") == state) {
         machineState = PAUSED;
+        isHoming = false;
     } else if (strstr(state, "Idle") == state) {
         machineState = IDLE;
         alarm14Active = false;
+        isHoming = false;
     } else if (strstr(state, "Alarm") == state) {
         machineState = ALARM;
-        if (_alarm14) {
-            alarm14Active = true;
-        }
+        // BUG FIX: Replace _alarm14 with a proper flag or remove if unused.
+        alarm14Active = false; // or define and use a proper _alarm14 flag
+        isHoming = false;
     } else if (strstr(state, "Jog") == state) {
         machineState = JOGGING;
+        isHoming = false;
     } else if (strstr(state, "Home") == state) {
-        machineState = COMPLETE;
-        alarm14Active = false;
+        // Enter homing mode instead of COMPLETE immediately
+        isHoming = true;
     }
     
     // Force immediate LED update to reflect new state

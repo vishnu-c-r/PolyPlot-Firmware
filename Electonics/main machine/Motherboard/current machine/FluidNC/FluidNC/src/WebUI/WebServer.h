@@ -11,6 +11,8 @@
 #    include "../Settings.h"
 #    include "Authentication.h"  // AuthenticationLevel
 #    include "Commands.h"
+#    include "PenConfig.h"
+#    include "ToolConfig.h"  // Update include path
 
 class WebSocketsServer;
 class WebServer;
@@ -122,21 +124,21 @@ namespace WebUI {
         static void sendWithOurAddress(const char* s, int code);
         static void sendCaptivePortal();
         static void send404Page();
-        static void handleGetPenConfig();    // Change to static
-        static void handleSetPenConfig();    // Change to static
-        static void handleDeletePen();       // Change to static
-        static void serveStatic(const char* uri, const char* path, const char* cache_header); 
+        static void handleGetPenConfig();  
+        static void handleSetPenConfig();  
+        static void handleDeletePen();     
+        // static void serveStatic(const char* uri, const char* path, const char* cache_header); 
         static int getPageid();
 
-        static const uint32_t WEBSOCKET_TIMEOUT = 120000;  // 2 minutes timeout
+        static const uint32_t WEBSOCKET_TIMEOUT = 120000; 
         static const uint8_t MAX_RETRY_ATTEMPTS = 3;
         static uint8_t retry_count;
         static uint32_t last_ws_activity;
-        
-        void resetWebSocket();
-        bool checkWebSocketTimeout();
-        static void setCORSHeaders();
-        static void enableCachingHeaders();
+        static void addCORSHeaders();  
+        static void handleGetToolConfig();     
+        static void handleSetToolConfig();     
+        static void handleUpdateToolPosition();
+        static void handleGetToolStatus();     
     };
 
     extern Web_Server webServer;

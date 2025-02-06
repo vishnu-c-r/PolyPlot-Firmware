@@ -1,41 +1,71 @@
 #include "ToolConfig.h"
 #include "../FileStream.h"
 #include "../GCode.h"  // For MAX_PENS
+#include "JSONEncoder.h"
 
 namespace WebUI {
 
     bool ToolConfig::loadConfig() {
         try {
-            FileStream file(configPath, "r");
-            std::string jsonStr;
-
-            char buf[256];
-            size_t len;
-            while ((len = file.read(buf, sizeof(buf))) > 0) {
-                jsonStr.append(buf, len);
+            std::error_code ec;
+            
+            // Create config directory if it doesn't exist
+            if (!std::filesystem::exists("/sd/config", ec)) {
+                std::filesystem::create_directory("/sd/config", ec);
             }
 
-            std::vector<ToolPosition> backup = positions;
-            bool parsed = fromJSON(jsonStr);
-            if (!parsed) {
-                log_error("Failed to parse JSON. Keeping old positions.");
-                positions = backup;   // Restore old positions
-                return false; // Avoid clearing or saving
+            // If file doesn't exist, create default tool configuration
+            if (!std::filesystem::exists(configPath, ec)) {
+                // Create default tool configuration with 6 tools
+                tools.clear();
+                for(int i = 1; i <= 6; i++) {
+                    Tool tool;
+                    tool.number = i;
+                    tool.x = TOOL_X_POSITION;  // Use constant from header
+                    tool.y = -33.5f + ((i-1) * TOOL_Y_SPACING);  // Calculate Y position
+                    tool.z = TOOL_Z_LEVEL;     // Use constant from header
+                    tool.occupied = false;      // Initially empty
+                    tools.push_back(tool);
+                }
+                // Save the default configuration
+                return saveConfig();
             }
 
-            return true;
-        } catch (const Error err) {
-            log_error("Failed to load tool config. Starting with empty configuration.");
-            positions.clear();
+            {  // Scope for automatic file closure
+                FileStream file(configPath, "r");
+                if (!file) {
+                    log_error("Failed to open tool config file");
+                    return false;
+                }
+
+                std::string jsonStr;
+                char buf[256];
+                size_t len;
+                while ((len = file.read(buf, sizeof(buf))) > 0) {
+                    jsonStr.append(buf, len);
+                }
+                // File closed automatically here
+                
+                if (jsonStr.empty()) {
+                    return true;  // Empty file is valid
+                }
+
+                return fromJSON(jsonStr);
+            }
+
+        } catch (const Error& err) {
+            log_error("Error loading tool config: " << (int)err);
             return false;
         }
     }
 
     bool ToolConfig::saveConfig() {
         try {
-            FileStream file(configPath, "w");
-            std::string jsonStr = toJSON();
-            file.write(reinterpret_cast<const uint8_t*>(jsonStr.c_str()), jsonStr.length());
+            {  // Scope for automatic file closure
+                FileStream file(configPath, "w");
+                std::string jsonStr = toJSON();
+                file.write(reinterpret_cast<const uint8_t*>(jsonStr.c_str()), jsonStr.length());
+            }  // File closed automatically here
             return true;
         } catch (const Error err) {
             log_error("Failed to save tool config");
@@ -43,67 +73,57 @@ namespace WebUI {
         }
     }
 
-    ToolPosition ToolConfig::getPosition(int toolNumber) {
-        for (const auto& pos : positions) {
-            if (pos.number == toolNumber) {
-                return pos;
-            }
+    bool ToolConfig::addTool(const Tool& tool) {
+        if (getTool(tool.number)) {
+            return false;
         }
-        // Return a safe fallback position
-        return {toolNumber, 0, 0, 0, false};
-    }
-
-    bool ToolConfig::updatePosition(const ToolPosition& position) {
-        for (auto& pos : positions) {
-            if (pos.number == position.number) {
-                pos = position;
-                return true;
-            }
-        }
-        positions.push_back(position);
+        tools.push_back(tool);
         return true;
     }
 
-    bool ToolConfig::isOccupied(int toolNumber) {
-        for (const auto& pos : positions) {
-            if (pos.number == toolNumber) {
-                return pos.occupied;
+    bool ToolConfig::updateTool(const Tool& tool) {
+        for (auto& existingTool : tools) {
+            if (existingTool.number == tool.number) {
+                existingTool = tool;
+                return true;
             }
         }
         return false;
     }
 
-    void ToolConfig::setOccupied(int toolNumber, bool state) {
-        bool foundPen = false;
-        for (auto& pos : positions) {
-            if (pos.number == toolNumber) {
-                pos.occupied = state; // Actually set the new state
-                foundPen = true;
-                break;
+    bool ToolConfig::deleteTool(int number) {
+        for (auto it = tools.begin(); it != tools.end(); ++it) {
+            if (it->number == number) {
+                tools.erase(it);
+                return true;
             }
         }
-        // Optionally, if pen not found, store a new entry:
-        if (!foundPen) {
-            // Match struct {int number; float x; float y; float z; bool occupied;}
-            positions.push_back({ toolNumber, 0.0f, 0.0f, 0.0f, state });
+        return false;
+    }
+
+    Tool* ToolConfig::getTool(int number) {
+        for (auto& tool : tools) {
+            if (tool.number == number) {
+                return &tool;
+            }
         }
-        saveConfig();
+        return nullptr;
     }
 
     std::string ToolConfig::toJSON() {
         std::string output;
-        JSONencoder j(&output);
+        JSONencoder j(&output);  // Add WebUI namespace
 
         j.begin();
         j.begin_array("tools");
 
-        for (const auto& pos : positions) {
+        for (const auto& tool : tools) {
             j.begin_object();
-            j.member("number", std::to_string(pos.number).c_str());
-            j.member("x", std::to_string(pos.x).c_str());
-            j.member("y", std::to_string(pos.y).c_str());
-            j.member("z", std::to_string(pos.z).c_str());
-            j.member("occupied", pos.occupied ? "true" : "false");
+            j.member("number", std::to_string(tool.number).c_str());
+            j.member("x", std::to_string(tool.x).c_str());
+            j.member("y", std::to_string(tool.y).c_str());
+            j.member("z", std::to_string(tool.z).c_str());
+            j.member("occupied", tool.occupied ? "true" : "false");
             j.end_object();
         }
 
@@ -113,20 +133,11 @@ namespace WebUI {
     }
 
     bool ToolConfig::fromJSON(const std::string& jsonStr) {
-        // Keep all current positions in memory to merge
-        std::vector<ToolPosition> mergedPositions = positions;
+        tools.clear();
 
-        // Parse new data into temp
-        std::vector<ToolPosition> temp;
-        
-        // Find the tools array
-        size_t arrayStart = jsonStr.find("\"tools\":");
+        size_t arrayStart = jsonStr.find("[");
         if (arrayStart == std::string::npos) {
-            return false;
-        }
-
-        arrayStart = jsonStr.find("[", arrayStart);
-        if (arrayStart == std::string::npos) {
+            log_error("No array start found in JSON");
             return false;
         }
 
@@ -136,76 +147,136 @@ namespace WebUI {
             if (end == std::string::npos) break;
 
             std::string obj = jsonStr.substr(pos, end - pos + 1);
-            ToolPosition toolPos;
+            // log_debug("Parsing tool object: " << obj);
+            
+            Tool tool;
+            bool validTool = true;
 
-            // Parse number
-            if (!parseJsonNumber(obj, "number", toolPos.number)) {
-                continue;
+            // Parse tool number
+            size_t numPos = obj.find("\"number\":");
+            if (numPos != std::string::npos) {
+                std::string numStr = obj.substr(numPos + 9);
+                // Remove quotes if present
+                if (numStr[0] == '"') {
+                    numStr = numStr.substr(1, numStr.find('"', 1) - 1);
+                }
+                tool.number = atoi(numStr.c_str());
+                // log_debug("Parsed tool number: " << tool.number);
+            } else {
+                validTool = false;
             }
 
-            // Parse x
-            if (!parseJsonFloat(obj, "x", toolPos.x)) {
-                continue;
+            // Parse X coordinate
+            size_t xPos = obj.find("\"x\":");
+            if (xPos != std::string::npos) {
+                std::string xStr = obj.substr(xPos + 4);
+                if (xStr[0] == '"') {
+                    xStr = xStr.substr(1, xStr.find('"', 1) - 1);
+                }
+                tool.x = atof(xStr.c_str());
+                // log_debug("Parsed X: " << tool.x);
+            } else {
+                validTool = false;
             }
 
-            // Parse y
-            if (!parseJsonFloat(obj, "y", toolPos.y)) {
-                continue;
+            // Parse Y coordinate
+            size_t yPos = obj.find("\"y\":");
+            if (yPos != std::string::npos) {
+                std::string yStr = obj.substr(yPos + 4);
+                if (yStr[0] == '"') {
+                    yStr = yStr.substr(1, yStr.find('"', 1) - 1);
+                }
+                tool.y = atof(yStr.c_str());
+                // log_debug("Parsed Y: " << tool.y);
+            } else {
+                validTool = false;
             }
 
-            // Parse z
-            if (!parseJsonFloat(obj, "z", toolPos.z)) {
-                continue;
+            // Parse Z coordinate with more detailed logging
+            size_t zPos = obj.find("\"z\":");
+            if (zPos != std::string::npos) {
+                std::string zStr = obj.substr(zPos + 4);
+                // log_debug("Raw Z string: " << zStr);
+                if (zStr[0] == '"') {
+                    zStr = zStr.substr(1, zStr.find('"', 1) - 1);
+                    // log_debug("Unquoted Z string: " << zStr);
+                }
+                tool.z = atof(zStr.c_str());
+                if (tool.z == 0.0f && zStr != "0" && zStr != "0.0") {
+                    log_error("Z value parsing failed for input: " << zStr);
+                    validTool = false;
+                } else {
+                    // log_debug("Successfully parsed Z value: " << tool.z);
+                }
+            } else {
+                log_error("No Z coordinate found in tool data");
+                validTool = false;
             }
 
-            // Parse occupied
-            size_t occPos = obj.find("\"occupied\":");
-            if (occPos != std::string::npos) {
-                std::string occStr = obj.substr(occPos + 10, 5);
-                toolPos.occupied = (occStr.find("true") != std::string::npos);
+            // Parse occupied status
+            size_t occupiedPos = obj.find("\"occupied\":");
+            if (occupiedPos != std::string::npos) {
+                std::string occupiedStr = obj.substr(occupiedPos + 10);
+                if (occupiedStr[0] == '"') {
+                    occupiedStr = occupiedStr.substr(1, occupiedStr.find('"', 1) - 1);
+                }
+                tool.occupied = (occupiedStr == "true");
+                // log_debug("Parsed occupied: " << tool.occupied);
             }
 
-            temp.push_back(toolPos);
+            if (validTool) {
+                tools.push_back(tool);
+                // log_debug("Added tool " << tool.number);
+            } else {
+                log_error("Invalid tool data in JSON object");
+            }
+            
             pos = end + 1;
         }
 
-        // For each parsed entry, update or insert
-        for (auto &toolPos : temp) {
-            bool found = false;
-            for (auto &existing : mergedPositions) {
-                if (existing.number == toolPos.number) {
-                    // Only update if parse was valid
-                    existing.x = toolPos.x;
-                    existing.y = toolPos.y;
-                    existing.z = toolPos.z;
-                    existing.occupied = toolPos.occupied;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                mergedPositions.push_back(toolPos);
-            }
-        }
+        // // log_debug("Loaded " << tools.size() << " tools from config");
+        return !tools.empty();
+    }
 
-        // If we successfully parsed at least one tool, replace positions
-        if (!temp.empty()) {
-            positions = mergedPositions;
-            return true;
+    // Functions to replace Pen namespace functionality
+    bool ToolConfig::getToolPosition(int toolNumber, float* position) {
+        Tool* tool = getTool(toolNumber);
+        if (!tool) {
+            log_error("Tool " << toolNumber << " not found in config");
+            return false;
         }
-        return false;
+        position[0] = tool->x;
+        position[1] = tool->y; 
+        position[2] = tool->z;
+        // log_debug("Tool " << toolNumber << " position: x=" << tool->x << " y=" << tool->y << " z=" << tool->z);
+        return true;
+    }
+
+    bool ToolConfig::isToolOccupied(int toolNumber) {
+        Tool* tool = getTool(toolNumber);
+        return tool ? tool->occupied : false;
+    }
+
+    void ToolConfig::setToolOccupied(int toolNumber, bool state) {
+        Tool* tool = getTool(toolNumber);
+        if (tool) {
+            tool->occupied = state;
+            saveConfig();
+        }
     }
 
     bool ToolConfig::saveCurrentState(int currentPen) {
         try {
-            FileStream file(stateFile, "w");
-            std::string output;
-            JSONencoder j(&output);  // Fix: Pass string pointer to constructor
-            j.begin();
-            j.member("currentPen", std::to_string(currentPen).c_str());
-            j.member("timestamp", std::to_string(esp_timer_get_time()).c_str());
-            j.end();
-            file.write(reinterpret_cast<const uint8_t*>(output.c_str()), output.length());  // Fix: Use output string
+            {  // Scope for automatic file closure
+                FileStream file(stateFile, "w");
+                std::string output;
+                JSONencoder j(&output);  // Fix: Pass string pointer to constructor
+                j.begin();
+                j.member("currentPen", std::to_string(currentPen).c_str());
+                j.member("timestamp", std::to_string(esp_timer_get_time()).c_str());
+                j.end();
+                file.write(reinterpret_cast<const uint8_t*>(output.c_str()), output.length());  // Fix: Use output string
+            }  // File closed automatically here
             return true;
         } catch (const Error err) {
             log_error("Failed to save pen state");
@@ -215,17 +286,20 @@ namespace WebUI {
 
     int ToolConfig::getLastKnownState() {
         try {
-            FileStream file(stateFile, "r");
-            std::string jsonStr;
-            char buf[256];
-            size_t len;
-            while ((len = file.read(buf, sizeof(buf))) > 0) {
-                jsonStr.append(buf, len);
-            }
-            
-            size_t penPos = jsonStr.find("\"currentPen\":");
-            if (penPos != std::string::npos) {
-                return atoi(jsonStr.substr(penPos + 12).c_str());
+            {  // Scope for automatic file closure
+                FileStream file(stateFile, "r");
+                std::string jsonStr;
+                char buf[256];
+                size_t len;
+                while ((len = file.read(buf, sizeof(buf))) > 0) {
+                    jsonStr.append(buf, len);
+                }
+                // File closed automatically here
+                
+                size_t penPos = jsonStr.find("\"currentPen\":");
+                if (penPos != std::string::npos) {
+                    return atoi(jsonStr.substr(penPos + 12).c_str());
+                }
             }
         } catch (const Error err) {
             log_info("No saved pen state found");
@@ -236,17 +310,21 @@ namespace WebUI {
     bool ToolConfig::checkCollisionRisk(int fromPen, int toPen) {
         if (fromPen == toPen) return false;
         
-        auto fromPos = getPosition(fromPen);
-        auto toPos = getPosition(toPen);
+        auto fromPos = getTool(fromPen);
+        auto toPos = getTool(toPen);
+        if (!fromPos || !toPos) return false;
         
         // Check if movement path crosses other pen positions
-        for (const auto& pos : positions) {
+        // Based on your JSON, pens are arranged vertically along X=-496.0
+        // with Y positions at intervals of about 41.2mm
+        for (const auto& pos : tools) {
             if (pos.number == fromPen || pos.number == toPen) continue;
             
-            // Simple collision check - any pen position between source and destination
-            if (pos.y > std::min(fromPos.y, toPos.y) && 
-                pos.y < std::max(fromPos.y, toPos.y) &&
-                std::abs(pos.x - fromPos.x) < 10.0f) { // 10mm safety margin
+            // Check if path intersects with another pen position
+            float minY = std::min(fromPos->y, toPos->y);
+            float maxY = std::max(fromPos->y, toPos->y);
+            
+            if (pos.y > minY && pos.y < maxY) {
                 log_error("Collision risk detected with pen " << pos.number);
                 return true;
             }
@@ -254,14 +332,21 @@ namespace WebUI {
         return false;
     }
 
-    bool ToolConfig::validatePosition(const ToolPosition& pos) {
-        // Check for valid ranges based on machine limits
-        if (pos.x < -500 || pos.x > 0 ||      // X range
-            pos.y < -300 || pos.y > 0 ||      // Y range
-            pos.z < -20 || pos.z > 0) {       // Z range
+    bool ToolConfig::validatePosition(const Tool& pos) {
+        // Check for valid ranges based on your toolconfig.json values
+        if (pos.x < -500 || pos.x > 0 ||           // X range
+            pos.y < -300 || pos.y > 0 ||           // Y range based on your values (-33.5 to -239.5)
+            pos.z < -20 || pos.z > 0) {            // Z range based on your -20.0 value
             log_error("Position out of valid range");
             return false;
         }
+        
+        // Check tool number range (1-6 based on your JSON)
+        if (pos.number < 1 || pos.number > 6) {
+            log_error("Invalid tool number");
+            return false;
+        }
+        
         return true;
     }
 
@@ -299,7 +384,7 @@ namespace WebUI {
             }
             // Handle both quoted and unquoted numbers
             if (found < json.size()) {
-                if (json[found] == '"') {
+                if (found == '"') {
                     found++; // Skip opening quote
                     value = std::strtof(json.substr(found).c_str(), nullptr);
                     return true;
@@ -310,5 +395,58 @@ namespace WebUI {
             }
         }
         return false;
+    }
+
+    ToolStatus ToolConfig::getStatus() {
+        ToolStatus status;
+        
+        // Get current pen from state file
+        status.currentPen = getLastKnownState();
+        status.totalPens = MAX_TOOLS;
+        
+        // Build pen status array
+        status.penStatus.resize(MAX_TOOLS);
+        for (int i = 0; i < MAX_TOOLS; i++) {
+            status.penStatus[i] = isToolOccupied(i + 1);
+        }
+
+        // TODO: Connect to motion control system
+        // status.inMotion = Machine::MotionControl::isMoving();
+        status.inMotion = false;  // Temporary until motion control integration
+
+        // TODO: Implement error tracking
+        status.error = false;
+        status.lastError = "";
+
+        // Report status through serial interface
+        reportStatus();
+        
+        return status;
+    }
+
+    void ToolConfig::reportStatus() {
+        // Report current tool status through serial interface
+        log_info("Tool Status Report:");
+        log_info("Current Pen: " << getLastKnownState());
+        log_info("Total Tools: " << MAX_TOOLS);
+        
+        // Report individual tool states
+        for (int i = 1; i <= MAX_TOOLS; i++) {
+            auto* pos = getTool(i);
+            if (pos) {
+                log_info("Tool " << i << ": " 
+                        << (pos->occupied ? "Occupied" : "Empty") 
+                        << " at X:" << pos->x 
+                        << " Y:" << pos->y 
+                        << " Z:" << pos->z);
+            } else {
+                log_info("Tool " << i << ": Not configured");
+            }
+        }
+
+        // Report any errors
+        if (tools.empty()) {
+            log_warn("No tool positions configured");
+        }
     }
 }

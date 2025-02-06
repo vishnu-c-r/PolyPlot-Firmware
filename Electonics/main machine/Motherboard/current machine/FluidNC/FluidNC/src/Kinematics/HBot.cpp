@@ -60,8 +60,8 @@ namespace Kinematics {
 
     bool HBot::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         // Add debug logging to track motion
-        log_debug("HBot motion - target: " << target[X_AXIS] << "," << target[Y_AXIS] 
-                 << " position: " << position[X_AXIS] << "," << position[Y_AXIS]);
+        // log_debug("HBot motion - target: " << target[X_AXIS] << "," << target[Y_AXIS] 
+        //          << " position: " << position[X_AXIS] << "," << position[Y_AXIS]);
         
         auto n_axis = config->_axes->_numberAxis;
 

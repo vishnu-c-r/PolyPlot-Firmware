@@ -36,6 +36,7 @@
 #    include <list>
 
 #    include "PenConfig.h"
+#    include "ToolConfig.h"  // Update include path
 
 namespace WebUI {
     const byte DNS_PORT = 53;
@@ -193,9 +194,28 @@ namespace WebUI {
         }
 
         // Add pen configuration endpoints
-        // Update pen configuration endpoints to use static methods directly
+        _webserver->on("/penconfig", HTTP_OPTIONS, [this]() {
+            addCORSHeaders();
+            _webserver->send(204);
+        });
         _webserver->on("/penconfig", HTTP_GET, handleGetPenConfig);
         _webserver->on("/penconfig", HTTP_POST, handleSetPenConfig);
+        _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
+
+        // Add tool configuration endpoints
+        _webserver->on("/toolconfig", HTTP_OPTIONS, [this]() {
+            addCORSHeaders();
+            _webserver->send(204);
+        });
+        _webserver->on("/toolconfig", HTTP_GET, handleGetToolConfig);
+        _webserver->on("/toolconfig", HTTP_POST, handleSetToolConfig);
+        _webserver->on("/toolconfig/position", HTTP_POST, handleUpdateToolPosition);
+        _webserver->on("/toolconfig/status", HTTP_GET, handleGetToolStatus);
+
+        // Add explicit routes for JS module and CSS files with correct MIME types
+
+
+        // Add generic handler for other assets in /ui/assets/
         _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
 
         // Add explicit routes for JS module and CSS files with correct MIME types
@@ -258,7 +278,7 @@ namespace WebUI {
         _webserver->on("/admin.html", HTTP_GET, [this]() {
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
             _webserver->sendHeader("Content-Encoding", "gzip");
-            myStreamFile("/admin.html.gz");
+            myStreamFile("/ui/admin.html.gz");
         });
 
         _webserver->on("/ui/index.html", HTTP_GET, [this]() {
@@ -270,7 +290,7 @@ namespace WebUI {
         // Handle all assets dynamically, ignoring hashes in filenames
         _webserver->on("/assets/", HTTP_GET, [this]() {
             String path = _webserver->uri();  // Define 'path' before using it
-            log_debug("Asset request: " << path.c_str());
+            // log_debug("Asset request: " << path.c_str());
             _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
             _webserver->sendHeader("Access-Control-Allow-Origin", "*");
 
@@ -372,23 +392,23 @@ namespace WebUI {
 
     bool Web_Server::myStreamFile(const char* path, bool download) {
         std::error_code ec;
-        log_debug("Trying to serve file: " << path); // Add debug logging
+        // log_debug("Trying to serve file: " << path); 
 
         // Try to open the file from the SD card first
         FluidPath sdPath { path, sdName, ec };
         if (!ec) {
-            log_debug("Found file on SD: " << sdPath.c_str());
+            // log_debug("Found file on SD: " << sdPath.c_str());
             return streamFileFromPath(sdPath, download);
         }
-        log_debug("SD file error: " << ec.message());
+        // log_debug("SD file error: " << ec.message());
 
         // If the file isn't on the SD card, fallback to SPIFFS
         FluidPath spiffsPath { path, localfsName, ec };
         if (!ec) {
-            log_debug("Found file on SPIFFS: " << spiffsPath.c_str());
+            // log_debug("Found file on SPIFFS: " << spiffsPath.c_str());
             return streamFileFromPath(spiffsPath, download);
         }
-        log_debug("SPIFFS file error: " << ec.message());
+        // log_debug("SPIFFS file error: " << ec.message());
 
         return false;
     }
@@ -427,19 +447,19 @@ namespace WebUI {
                 if (file) {
                     delete file;
                 }
-                log_debug(fpath.c_str() << " not found");
+                // log_debug(fpath.c_str() << " not found");
                 return false;
             }
         }
 
         // Try to get hash
         std::string hash = HashFS::hash(actualPath);
-        log_debug("File hash: " << (hash.length() ? hash : "none") << " for " << actualPath);
+        // log_debug("File hash: " << (hash.length() ? hash : "none") << " for " << actualPath);
 
         // Check if client has valid cached version
         if (hash.length() && _webserver->hasHeader("If-None-Match")) {
             if (std::string(_webserver->header("If-None-Match").c_str()) == hash) {
-                log_debug(actualPath << " is cached by client");
+                // log_debug(actualPath << " is cached by client");
                 _webserver->send(304);
                 return true;
             }
@@ -491,7 +511,7 @@ namespace WebUI {
             delete file;
         }
 
-        log_debug("Served " << actualPath << " with type " << contentType);
+        // log_debug("Served " << actualPath << " with type " << contentType);
         return success;
     }
 
@@ -536,7 +556,7 @@ namespace WebUI {
     void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
         if (path == "/admin") {
-            if (myStreamFile("/admin.html"))
+            if (myStreamFile("/ui/admin.html"))
                 return;
         } else if (path == "/tab") {
             if (myStreamFile("/tab.html"))
@@ -547,7 +567,6 @@ namespace WebUI {
             if (myStreamFile("/ui/index.html")) {
                 return;
             }
-            log_debug("Failed to serve index.html"); // Add debug logging
         }
         
         // If we did not send any HTML, send the default content
@@ -1172,13 +1191,13 @@ namespace WebUI {
                 }
             } else if (action == "deletedir") {
                 stdfs::path dirpath { fpath / filename };
-                log_debug("Deleting directory " << dirpath);
+                // log_debug("Deleting directory " << dirpath);
                 int count = stdfs::remove_all(dirpath, ec);
                 if (count > 0) {
                     sstatus = filename + " deleted";
                     HashFS::report_change();
                 } else {
-                    log_debug("remove_all returned " << count);
+                    // log_debug("remove_all returned " << count);
                     sstatus = "Cannot delete ";
                     sstatus += filename + " " + ec.message();
                 }
@@ -1319,7 +1338,7 @@ namespace WebUI {
             std::string pathname = _uploadFile->fpath();
             delete _uploadFile;
             _uploadFile = nullptr;
-            log_debug("pathname " << pathname);
+            // log_debug("pathname " << pathname);
 
             FluidPath filepath { pathname, "" };
 
@@ -1570,7 +1589,14 @@ namespace WebUI {
     }
 #    endif
 
+    void Web_Server::addCORSHeaders() {
+        _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+        _webserver->sendHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+        _webserver->sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
+
     void Web_Server::handleGetPenConfig() {
+        addCORSHeaders();
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->send(401, "text/plain", "Authentication failed");
@@ -1583,6 +1609,7 @@ namespace WebUI {
     }
 
     void Web_Server::handleSetPenConfig() {
+        addCORSHeaders();
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
@@ -1609,6 +1636,7 @@ namespace WebUI {
     }
 
     void Web_Server::handleDeletePen() {
+        addCORSHeaders();
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
@@ -1629,6 +1657,162 @@ namespace WebUI {
         } else {
             _webserver->send(404, "application/json", "{\"error\":\"Pen not found\"}");
         }
+    }
+
+    // GET /toolconfig
+    // Retrieves the complete tool configuration
+    // Returns JSON containing all tool positions and their states
+    void Web_Server::handleGetToolConfig() {
+        addCORSHeaders();
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "text/plain", "Authentication failed");
+            return;
+        }
+
+        ToolConfig& config = ToolConfig::getInstance();
+        config.loadConfig();  // Load latest config from file
+        _webserver->send(200, "application/json", config.toJSON().c_str());
+    }
+
+    // POST /toolconfig
+    // Updates the entire tool configuration
+    // Expects JSON in the request body containing complete tool configuration
+    void Web_Server::handleSetToolConfig() {
+        addCORSHeaders();
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
+            return;
+        }
+
+        if (!_webserver->hasArg("plain")) {
+            _webserver->send(400, "application/json", "{\"error\":\"Missing tool configuration data\"}");
+            return;
+        }
+
+        std::string jsonData = _webserver->arg("plain").c_str();
+        ToolConfig& config = ToolConfig::getInstance();
+        
+        if (config.fromJSON(jsonData)) {
+            if (config.saveConfig()) {
+                _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                _webserver->send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
+            }
+        } else {
+            _webserver->send(400, "application/json", "{\"error\":\"Invalid tool configuration data\"}");
+        }
+    }
+
+    // POST /toolconfig/position
+    // Updates the position of a specific tool
+    // Expects JSON in format: {"number": X, "x": X, "y": Y, "z": Z, "occupied": true/false}
+    void Web_Server::handleUpdateToolPosition() {
+        addCORSHeaders();
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
+            return;
+        }
+
+        if (!_webserver->hasArg("plain")) {
+            _webserver->send(400, "application/json", "{\"error\":\"Missing position data\"}");
+            return;
+        }
+
+        std::string jsonData = _webserver->arg("plain").c_str();
+        ToolConfig& config = ToolConfig::getInstance();
+        
+        Tool position;  // Changed from ToolPosition to Tool
+        try {
+            // Parse each field from the JSON
+            int number;
+            float x, y, z;
+            bool occupied;
+
+            // Use helper functions to parse the JSON fields
+            if (!config.parseJsonNumber(jsonData, "number", number) ||
+                !config.parseJsonFloat(jsonData, "x", x) ||
+                !config.parseJsonFloat(jsonData, "y", y) ||
+                !config.parseJsonFloat(jsonData, "z", z)) {
+                _webserver->send(400, "application/json", "{\"error\":\"Invalid position format\"}");
+                return;
+            }
+
+            // Build the position object
+            position.number = number;
+            position.x = x;
+            position.y = y;
+            position.z = z;
+            position.occupied = (jsonData.find("\"occupied\":true") != std::string::npos);
+
+            // Validate position against known ranges
+            if (!config.validatePosition(position)) {
+                _webserver->send(400, "application/json", "{\"error\":\"Position values out of valid range\"}");
+                return;
+            }
+
+            // Safety check for potential collisions
+            if (config.checkCollisionRisk(0, position.number)) {
+                _webserver->send(409, "application/json", "{\"error\":\"Movement would risk collision\"}");
+                return;
+            }
+
+            // Update the position if all checks pass
+            if (config.updateTool(position)) {  // Changed from updatePosition to updateTool
+                _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                _webserver->send(500, "application/json", "{\"error\":\"Failed to update position\"}");
+            }
+        } catch (...) {
+            _webserver->send(400, "application/json", "{\"error\":\"Failed to parse position data\"}");
+        }
+    }
+
+    // GET /toolconfig/status
+    // Returns current status of all tools including positions and states
+    // Used for real-time monitoring of tool positions and states
+    void Web_Server::handleGetToolStatus() {
+        addCORSHeaders();
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "text/plain", "Authentication failed");
+            return;
+        }
+
+        ToolConfig& config = ToolConfig::getInstance();
+        ToolStatus status = config.getStatus();
+        
+        std::string output;
+        JSONencoder j(&output);
+        j.begin();
+        j.member("currentPen", std::to_string(status.currentPen).c_str());
+        j.member("totalPens", "6");  // From toolconfig.json
+        j.member("inMotion", status.inMotion ? "true" : "false");
+        j.member("error", status.error ? "true" : "false");
+        if (status.error) {
+            j.member("lastError", status.lastError.c_str());
+        }
+        
+        // Include full position information for all tools
+        j.begin_array("positions");
+        for (int i = 1; i <= 6; i++) {  // Iterate through all tools
+            Tool* pos = config.getTool(i);  // Changed from getPosition to getTool
+            if (pos) {
+                j.begin_object();
+                j.member("number", std::to_string(i).c_str());
+                j.member("x", std::to_string(pos->x).c_str());
+                j.member("y", std::to_string(pos->y).c_str());
+                j.member("z", std::to_string(pos->z).c_str());
+                j.member("occupied", pos->occupied ? "true" : "false");
+                j.end_object();
+            }
+        }
+        j.end_array();
+        
+        j.end();
+        _webserver->send(200, "application/json", output.c_str());
     }
 #endif
 }  // namespace web_server

@@ -1075,7 +1075,7 @@ const ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
 
 const NoArgEvent safetyDoorEvent { request_safety_door };
 const NoArgEvent feedHoldEvent { protocol_do_feedhold };
-const NoArgEvent CancelJobEvent{ protocol_do_cancel_job };
+const ArgEvent CancelJobEvent { (void (*)(void*))protocol_do_cancel_job };  // Add this line
 const NoArgEvent cycleStartEvent { protocol_do_cycle_start };
 const NoArgEvent cycleStopEvent { protocol_do_cycle_stop };
 const NoArgEvent motionCancelEvent { protocol_do_motion_cancel };

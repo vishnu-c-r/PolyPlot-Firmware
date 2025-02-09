@@ -12,13 +12,13 @@ Control::Control() {
     _pins.push_back(new ControlPin(&rtResetEvent, "reset_pin", 'R'));
     _pins.push_back(new ControlPin(&feedHoldEvent, "feed_hold_pin", 'H'));
     _pins.push_back(new ControlPin(&cycleStartEvent, "cycle_start_pin", 'S'));
-    _pins.push_back(new ControlPin(&CancelJobEvent, "cancel_job_pin", 'C'));
     _pins.push_back(new ControlPin(&macro0Event, "macro0_pin", '0'));
     _pins.push_back(new ControlPin(&macro1Event, "macro1_pin", '1'));
     _pins.push_back(new ControlPin(&macro2Event, "macro2_pin", '2'));
     _pins.push_back(new ControlPin(&macro3Event, "macro3_pin", '3'));
     _pins.push_back(new ControlPin(&faultPinEvent, "fault_pin", 'F'));
     _pins.push_back(new ControlPin(&faultPinEvent, "estop_pin", 'E'));
+    _pins.push_back(new ControlPin(&cancelJobEvent, "cancel_pin", 'C'));  // 'C' for Cancel
 }
 
 void Control::init() {

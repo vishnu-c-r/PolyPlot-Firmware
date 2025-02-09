@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include "GrblParserC.h"
 #include <Adafruit_NeoPixel.h>
-#include "LedConfig.hpp"  // Update to .hpp extension
+#include "LedConfig.hpp"
+#include "main.h" // Include main.h
 
 // Forward declare the ButtonState struct
 struct ButtonState;
@@ -33,7 +34,7 @@ Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 uint8_t currentBrightness = DEFAULT_BRIGHTNESS;
 
 // Machine state enumeration
-enum MachineState { RUNNING, PAUSED, IDLE, JOGGING, ALARM, COMPLETE };
+enum MachineState { RUNNING, PAUSED, IDLE, JOGGING, HOMING, ALARM, COMPLETE };  // Added HOMING
 MachineState machineState = IDLE;  // Changed from RUNNING to IDLE
 
 // UART functions required by GrblParserC
@@ -60,14 +61,13 @@ int milliseconds() {
 // Add these global variables near the top
 String inputBuffer = "";
 bool messageComplete = false;
-char current_machine_state[20] = "Unknown";  // Add this variable definition
 
 // Add these declarations near the top of the file after the #include statements
 void fnc_send_play_command();
 void fnc_send_pause_command();
 void fnc_send_cancel_command();
 void fnc_send_home_command();
-extern char current_machine_state[20];
+char current_machine_state[20] = "Unknown";  // Define the variable here
 
 // Add these constants after other #define statements
 #define BUTTON_HOLD_DELAY 500        // Default hold delay for jog buttons
@@ -102,6 +102,9 @@ bool homingComplete = false;
 
 // OPTIMIZATION: Add a dedicated flag for homing (instead of checking current_machine_state text)
 bool isHoming = false;
+
+// Add near other state variables
+bool justFinishedHoming = false;  // Add this flag
 
 void setup() {
     // Initialize primary UART communication with proper pin swap for ATtiny1614
@@ -156,23 +159,16 @@ void setup() {
 void handleSerialData() {
     while (Serial.available()) {
         char inChar = (char)Serial.read();
-        
-        // Add character to buffer if not newline
-        if (inChar != '\n') {
+        if (inChar == '\n' || inputBuffer.length() >= REPORT_BUFFER_LEN - 1) {
+            messageComplete = true;
+        } else {
             inputBuffer += inChar;
         }
-        // If newline received, set flag
-        else {
-            messageComplete = true;
-        }
     }
-
-    // Process complete message
     if (messageComplete) {
         // Process the message here
-        // You can add your message handling logic
-        
-        // Clear buffer for next message
+        Serial.print(F("Received: "));
+        Serial.println(inputBuffer);
         inputBuffer = "";
         messageComplete = false;
     }
@@ -361,57 +357,100 @@ void handleButtons() {
     }
 }
 
+// Replace the updateLEDs() function with the following version:
+
 void updateLEDs() {
-    if (inStartupPhase && !isHoming) {
-        LEDControl::LedColors::startupAnimation();
-        return;
+    static MachineState prevState = machineState;
+    static bool transitionActive = false;
+    static unsigned long transitionStart = 0;
+    const uint16_t TRANSITION_DURATION = 300;  // Short transition
+
+    // Start transition when state changes (skip for ALARM)
+    if ((machineState != prevState) && (machineState != ALARM)) {
+        transitionActive = true;
+        transitionStart = millis();
+        prevState = machineState;
     }
 
-    if (isHoming) {
-        LEDControl::LedColors::homingAnimation();
-        // Optionally, set inStartupPhase to false when homing starts.
-        return;
+    auto interp = [&](uint32_t from, uint32_t to, uint8_t progress) -> uint32_t {
+        auto getR = [](uint32_t col) -> uint8_t { return (col >> 16) & 0xFF; };
+        auto getG = [](uint32_t col) -> uint8_t { return (col >> 8) & 0xFF; };
+        auto getB = [](uint32_t col) -> uint8_t { return col & 0xFF; };
+        uint8_t r = getR(from) + ((getR(to) - getR(from)) * progress) / 255;
+        uint8_t g = getG(from) + ((getG(to) - getG(from)) * progress) / 255;
+        uint8_t b = getB(from) + ((getB(to) - getB(from)) * progress) / 255;
+        return pixels.Color(r, g, b);
+    };
+
+    if (transitionActive) {
+        uint32_t targetColor;
+        switch (machineState) {
+            case IDLE:    targetColor = LEDControl::LedColors::COLOR_GREEN; break;
+            case RUNNING: targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
+            case PAUSED:  targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
+            case HOMING:  targetColor = pixels.Color(0, 255, 255); break; // Cyan
+            default:      targetColor = LEDControl::LedColors::COLOR_OFF; break;
+        }
+        uint32_t fromColor = pixels.getPixelColor(0);
+        uint32_t newColor;
+        uint32_t elapsed = millis() - transitionStart;
+        if (elapsed >= TRANSITION_DURATION) {
+            transitionActive = false;
+            newColor = targetColor;
+        } else {
+            uint8_t progress = (elapsed * 255UL) / TRANSITION_DURATION;
+            newColor = interp(fromColor, targetColor, progress);
+        }
+        for (int i = 0; i < NUM_PIXELS; i++) {
+            pixels.setPixelColor(i, newColor);
+        }
+        pixels.show();
+        return;  // Skip state animations until transition finishes
     }
 
-    // Normal LED patterns: update pixels without individual calls to show()
-    switch (machineState) {
-        case IDLE:
+    // State-specific animations when not transitioning:
+    if (machineState == IDLE) {
+        if (justFinishedHoming) {
+            // Special post-homing green blink
+            LEDControl::LedColors::readyBlinkAnimation();
+            if (LEDControl::LedColors::blinkCount >= 3) {  // After 3 blinks
+                justFinishedHoming = false;  // Reset flag
+                LEDControl::LedColors::blinkCount = 0;
+            }
+        } else {
+            // Normal IDLE state display
+            int arrowLEDs[4] = {LED_UP, LED_RIGHT, LED_DOWN, LED_LEFT};
             for (int i = 0; i < 4; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_GREEN);
+                pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_GREEN);
             }
             pixels.setPixelColor(LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
-            break;
-
-        case RUNNING:
-        case JOGGING:
-            for (int i = 0; i < 4; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
-            }
-            LEDControl::LedColors::runningAnimation(true);
-            break;
-
-        case PAUSED:
-            for (int i = 0; i < 4; i++) {
-                pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
-            }
-            LEDControl::LedColors::pausedAnimation();
-            break;
-
-        case ALARM:
-            LEDControl::LedColors::startupAnimation();
-            break;
-
-        case COMPLETE:
-            LEDControl::LedColors::readyBlinkAnimation();
-            break;
+        }
+    } else if (machineState == RUNNING) {
+        // RUNNING: arrow LEDs off; PLAY/PAUSE blinks (handled by runningAnimation)
+        for (int i = 0; i < 4; i++) {
+            pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
+        }
+        LEDControl::LedColors::runningAnimation(false);
+    } else if (machineState == PAUSED) {
+        // PAUSED: arrow LEDs off; PLAY/PAUSE breathes (handled by pausedAnimation)
+        for (int i = 0; i < 4; i++) {
+            pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
+        }
+        LEDControl::LedColors::pausedAnimation();
+    } else if (machineState == HOMING) {
+        LEDControl::LedColors::homingAnimation();
+    } else if (machineState == ALARM) {
+        LEDControl::LedColors::alarmAnimation();
     }
-    pixels.show(); // Update once at the end.
+
+    pixels.show();
 }
 
 // Callback function for machine state changes
 void show_state(const char* state) {
     strncpy(current_machine_state, state, sizeof(current_machine_state));
     
+    // Parse incoming state and update machine state with proper transition handling
     if (strstr(state, "Run") == state) {
         machineState = RUNNING;
         alarm14Active = false;
@@ -421,21 +460,22 @@ void show_state(const char* state) {
         isHoming = false;
     } else if (strstr(state, "Idle") == state) {
         machineState = IDLE;
+        if (isHoming) {
+            justFinishedHoming = true;  // Trigger post-homing LED sequence
+        }
         alarm14Active = false;
         isHoming = false;
     } else if (strstr(state, "Alarm") == state) {
         machineState = ALARM;
-        // BUG FIX: Replace _alarm14 with a proper flag or remove if unused.
         alarm14Active = false; // or define and use a proper _alarm14 flag
         isHoming = false;
     } else if (strstr(state, "Jog") == state) {
         machineState = JOGGING;
         isHoming = false;
     } else if (strstr(state, "Home") == state) {
-        // Enter homing mode instead of COMPLETE immediately
+        machineState = HOMING;
         isHoming = true;
     }
-    
     // Force immediate LED update to reflect new state
     updateLEDs();
 }

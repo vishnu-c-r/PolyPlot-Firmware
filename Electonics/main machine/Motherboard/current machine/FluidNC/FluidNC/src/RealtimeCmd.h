@@ -20,7 +20,6 @@ enum class Cmd : uint8_t {
     StatusReport          = '?',
     CycleStart            = '~',
     FeedHold              = '!',
-    CancelJob             = '*', // Cancel the current job
     SafetyDoor            = 0x84,
     JogCancel             = 0x85,
     DebugReport           = 0x86,  // Only when DEBUG_REPORT_REALTIME enabled, sends debug report in '{}' braces.
@@ -40,6 +39,7 @@ enum class Cmd : uint8_t {
     CoolantFloodOvrToggle = 0xA0,
     CoolantMistOvrToggle  = 0xA1,
     // Channel Extender uses the Bx range; see Channel.h
+    CancelJob             = '*',  // Add the new command
 };
 
 class Channel;

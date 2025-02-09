@@ -22,9 +22,6 @@ void execute_realtime_command(Cmd command, Channel& channel) {
         case Cmd::FeedHold:
             protocol_send_event(&feedHoldEvent);
             break;
-        case Cmd::CancelJob:
-            protocol_send_event(&CancelJobEvent);
-            break;
         case Cmd::SafetyDoor:
             protocol_send_event(&safetyDoorEvent);
             break;
@@ -81,6 +78,9 @@ void execute_realtime_command(Cmd command, Channel& channel) {
         case Cmd::Macro3:
             protocol_send_event(&macro3Event);
             break;
+        case Cmd::CancelJob:
+            protocol_send_event(&cancelJobEvent);
+            break;
     }
 }
 
@@ -90,5 +90,14 @@ bool is_realtime_command(uint8_t data) {
         return true;
     }
     auto cmd = static_cast<Cmd>(data);
-    return cmd == Cmd::Reset || cmd == Cmd::StatusReport || cmd == Cmd::CycleStart || cmd == Cmd::FeedHold || cmd == Cmd::CancelJob; 
+    return cmd == Cmd::Reset || cmd == Cmd::StatusReport || cmd == Cmd::CycleStart || cmd == Cmd::FeedHold; 
+    switch (data) {
+        case '?':
+        case '~':
+        case '!':
+        case '*':  // Add the new command character
+            return true;
+        default:
+            return false;
+    }
 }

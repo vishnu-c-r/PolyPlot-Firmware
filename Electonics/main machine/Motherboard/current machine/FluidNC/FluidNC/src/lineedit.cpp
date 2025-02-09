@@ -451,9 +451,6 @@ bool Lineedit::realtime(int c) {
             // the same as what people are usually accustomed to.
             show_realtime_command("");
             break;
-        case '*':
-            show_realtime_command("[CancelJob]");
-            break;
         case CTRL('x'):
             show_realtime_command("[Reset]");
             break;

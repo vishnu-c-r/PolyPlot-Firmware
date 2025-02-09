@@ -89,12 +89,10 @@ extern const ArgEvent rapidOverrideEvent;
 extern const ArgEvent accessoryOverrideEvent;
 extern const ArgEvent limitEvent;
 extern const ArgEvent faultPinEvent;
-
 extern const ArgEvent reportStatusEvent;
 
 extern const NoArgEvent safetyDoorEvent;
 extern const NoArgEvent feedHoldEvent;
-extern const ArgEvent CancelJobEvent;  // Change this to ArgEvent
 extern const NoArgEvent cycleStartEvent;
 extern const NoArgEvent cycleStopEvent;
 extern const NoArgEvent motionCancelEvent;
@@ -104,6 +102,7 @@ extern const NoArgEvent debugEvent;
 extern const NoArgEvent unhomedEvent;
 extern const NoArgEvent startEvent;
 extern const NoArgEvent restartEvent;
+extern const NoArgEvent cancelJobEvent;
 
 extern const NoArgEvent runStartupLinesEvent;
 

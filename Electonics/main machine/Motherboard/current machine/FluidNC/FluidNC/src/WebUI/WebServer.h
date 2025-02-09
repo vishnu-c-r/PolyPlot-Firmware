@@ -130,7 +130,7 @@ namespace WebUI {
         // static void serveStatic(const char* uri, const char* path, const char* cache_header); 
         static int getPageid();
 
-        static const uint32_t WEBSOCKET_TIMEOUT = 120000; 
+        static const uint32_t WEBSOCKET_TIMEOUT = 60000; 
         static const uint8_t MAX_RETRY_ATTEMPTS = 3;
         static uint8_t retry_count;
         static uint32_t last_ws_activity;

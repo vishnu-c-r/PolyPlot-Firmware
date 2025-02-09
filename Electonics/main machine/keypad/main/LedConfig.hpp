@@ -3,26 +3,45 @@
 #ifdef __cplusplus
 #include <Adafruit_NeoPixel.h>
 
-// LED positions - Original mapping
+// Physical LED mapping on device
 #define LED_UP 0        
-#define LED_RIGHT 4     // Keep at 4
+#define LED_RIGHT 4     
 #define LED_DOWN 2      
-#define LED_LEFT 1      // Keep at 1
-#define LED_PLAYPAUSE 3 // Keep at 3
+#define LED_LEFT 1      
+#define LED_PLAYPAUSE 3 
+
+// Animation timing parameters (all values in milliseconds)
+#define BLINK_INTERVAL_MS 333      // Period for status blinks
+#define BREATHING_RISE 2000        // Time to reach full brightness
+#define BREATHING_FALL 1000        // Time to fade to minimum
+#define HOMING_UPDATE_INTERVAL 15  // Animation frame time
 
 // Default LED settings
 #define NUM_PIXELS 5
 #define DEFAULT_BRIGHTNESS 70
 
 // Add new timing constants
-#define BLINK_INTERVAL_MS 333      // For green blink (3 blinks in 1 second)
 #define FADE_INTERVAL_MS 50        // For breathing effect
 #define FLICKER_INTERVAL_MS 100    // For orange flicker
+
+#define ON_TIME 700   // Time in ms for which the LED is on
+#define OFF_TIME 300  // Time in ms for which the LED is off
+
+// Homing animation settings
+#define HOMING_TRANSITION_STEP 5     // Step size for smooth transition
+#define HOMING_BRIGHTNESS_PERIOD 2000 // Brightness modulation period in ms
+#define HOMING_MIN_BRIGHTNESS 20      // Minimum brightness for homing
+
+// Paused animation settings
+#define PAUSED_BREATHING_RISE 2000   // Breathing rise time in ms
+#define PAUSED_BREATHING_FALL 1000   // Breathing fall time in ms
+#define PAUSED_MIN_BRIGHTNESS 5      // Minimum brightness for paused
 
 namespace LEDControl {
     class LedColors {
     private:
         static Adafruit_NeoPixel* pixelsPtr;
+        static unsigned long initStart;  // Add this declaration
 
     public:
         // New LED scheme
@@ -49,16 +68,26 @@ namespace LEDControl {
         static uint8_t fadeValue;
         static int8_t fadeStep;
         
+        // New animation methods for machine initialization:
+        static void machineInitAnimation();
+        static void transitionToReadyAnimation();
+        
         // Add new animation methods
         static void startupAnimation();
         static void homingAnimation();
         static void readyBlinkAnimation();
         static void runningAnimation(bool flicker);
         static void pausedAnimation();
+        // New alarm animation for flashing red.
+        static void alarmAnimation();
         
         // Add timing variables
         static unsigned long lastAnimationUpdate;
         static unsigned long flickerTimer;
+
+        // Add these missing function declarations
+        static void idleAnimation();
+        static void transitionStateColor(uint32_t fromColor, uint32_t toColor, uint16_t duration);
     };
 }
 #endif

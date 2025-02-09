@@ -51,8 +51,6 @@ const char* alarmString(ExecAlarm alarmNumber) {
 
 static volatile bool rtSafetyDoor;
 
-static volatile bool rtCancelJob;
-
 volatile bool runLimitLoop;  // Interface to show_limits()
 
 static void protocol_exec_rt_suspend();
@@ -60,13 +58,10 @@ static void protocol_exec_rt_suspend();
 static char line[LINE_BUFFER_SIZE];     // Line to be executed. Zero-terminated.
 static char comment[LINE_BUFFER_SIZE];  // Line to be executed. Zero-terminated.
 
-
-
 void protocol_reset() {
-    probing                = false;
-    soft_limit             = false;
-    rtSafetyDoor           = false;
-    
+    probing      = false;
+    soft_limit   = false;
+    rtSafetyDoor = false;
 }
 
 static int32_t idleEndTime = 0;
@@ -758,7 +753,7 @@ static void protocol_do_cycle_start() {
         case State::Hold:
             // Cycle start only when IDLE or when a hold is complete and ready to resume.
             if (sys.suspend.bit.holdComplete) {
-                    protocol_do_initiate_cycle();
+                protocol_do_initiate_cycle();
             }
             break;
         case State::ConfigAlarm:
@@ -882,11 +877,6 @@ void protocol_exec_rt_system() {
     if (rtSafetyDoor) {
         protocol_do_safety_door();
     }
-    if (sys.rtCancelJob) {
-        sys.rtCancelJob = false;  // Reset the flag
-        protocol_do_cancel_job(); // Call the cancel job function
-    }
-
     protocol_handle_events();
 
     // Reload step segment buffer
@@ -1004,7 +994,6 @@ static void protocol_do_rapid_override(void* percentvp) {
     }
 }
 
-
 static void protocol_do_accessory_override(void* type) {
     switch (int(type)) {
         case AccessoryOverride::FloodToggle:
@@ -1075,7 +1064,6 @@ const ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
 
 const NoArgEvent safetyDoorEvent { request_safety_door };
 const NoArgEvent feedHoldEvent { protocol_do_feedhold };
-const ArgEvent CancelJobEvent { (void (*)(void*))protocol_do_cancel_job };  // Add this line
 const NoArgEvent cycleStartEvent { protocol_do_cycle_start };
 const NoArgEvent cycleStopEvent { protocol_do_cycle_stop };
 const NoArgEvent motionCancelEvent { protocol_do_motion_cancel };
@@ -1084,6 +1072,7 @@ const NoArgEvent debugEvent { report_realtime_debug };
 const NoArgEvent startEvent { protocol_do_start };
 const NoArgEvent restartEvent { protocol_do_restart };
 const NoArgEvent runStartupLinesEvent { protocol_run_startup_lines };
+const NoArgEvent cancelJobEvent { protocol_do_cancel_job };
 
 const NoArgEvent rtResetEvent { protocol_do_rt_reset };
 

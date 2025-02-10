@@ -15,23 +15,11 @@ void updateLEDs();
 //controller used: Attiny1614
 //pinout: https://www.microchip.com/wwwproducts/en/ATtiny1614
 
-// Pin definitions (using existing ones)
-#define BUTTON_UP 9
-#define BUTTON_RIGHT 8  
-#define BUTTON_DOWN 1
-#define BUTTON_LEFT 0
-#define BUTTON_PLAYPAUSE 3
-#define NEOPIXEL_PIN 10
-
 // Configurable settings
 #define JOG_FEEDRATE 10000      // Feedrate for jogging in mm/min
-#define NUM_PIXELS 5          // Number of NeoPixels
 
-// Create Neopixel object
-Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-
-// Add brightness control
-uint8_t currentBrightness = DEFAULT_BRIGHTNESS;
+// Use class constants instead of #defines
+Adafruit_NeoPixel pixels(LEDControl::LedColors::NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Machine state enumeration
 enum MachineState { RUNNING, PAUSED, IDLE, JOGGING, HOMING, ALARM, COMPLETE };  // Added HOMING
@@ -69,12 +57,6 @@ void fnc_send_cancel_command();
 void fnc_send_home_command();
 char current_machine_state[20] = "Unknown";  // Define the variable here
 
-// Add these constants after other #define statements
-#define BUTTON_HOLD_DELAY 500        // Default hold delay for jog buttons
-#define HOME_HOLD_DELAY 1000         // Longer hold delay for home command
-#define SHORT_JOG_DISTANCE 1     // Distance for single click (mm)
-#define LONG_JOG_DISTANCE 1000   // Distance for continuous jog (mm)
-
 // Define the ButtonState struct
 struct ButtonState {
     bool currentState = false;
@@ -95,10 +77,6 @@ ButtonState playPauseButton;
 
 // Add this global variable near the top
 bool alarm14Active = false;
-
-// Add after other state declarations
-bool inStartupPhase = true;
-bool homingComplete = false;
 
 // OPTIMIZATION: Add a dedicated flag for homing (instead of checking current_machine_state text)
 bool isHoming = false;
@@ -121,25 +99,25 @@ void setup() {
     // Initialize Neopixels with test pattern
     pixels.begin();
     pixels.clear();
-    pixels.setBrightness(DEFAULT_BRIGHTNESS);
+    pixels.setBrightness(LEDControl::LedColors::DEFAULT_BRIGHTNESS);
      
     // Test pattern - flash all LEDs white
-    for (int i = 0; i < NUM_PIXELS; i++) {
-        pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+    for (int i = 0; i < LEDControl::LedColors::NUM_PIXELS; i++) {
+        pixels.setPixelColor(i, LEDControl::LedColors::COLOR_RED);
     }
     pixels.show();
-    delay(500);
+    delay(1000);
     pixels.clear();
     pixels.show();
     
     LEDControl::LedColors::init(pixels);
     
     // Set initial LED state to IDLE using COLOR_GREEN instead of non-existent COLOR_IDLE
-    machineState = IDLE;
-    for (int i = 0; i < NUM_PIXELS; i++) {
-        pixels.setPixelColor(i, LEDControl::LedColors::COLOR_GREEN);
-    }
-    pixels.show();
+    machineState = HOMING;
+    // for (int i = 0; i < NUM_PIXELS; i++) {
+    //     pixels.setPixelColor(i, LEDControl::LedColors::COLOR_RED);
+    // }
+    // pixels.show();
 
     // Wait for FluidNC to be ready
     fnc_wait_ready();
@@ -167,8 +145,8 @@ void handleSerialData() {
     }
     if (messageComplete) {
         // Process the message here
-        Serial.print(F("Received: "));
-        Serial.println(inputBuffer);
+        // Serial.print(F("Received: "));
+        // Serial.println(inputBuffer);
         inputBuffer = "";
         messageComplete = false;
     }
@@ -253,41 +231,22 @@ void handleButtons() {
     // Handle Play/Pause button first
     if (playPauseButton.isPressed) {
         if (playPauseButton.isHeld && !playPauseButton.longPressCommandSent) {
-            // Handle long press for home
-            fnc_send_home_command();
+            // Handle long press for home - Fixed homing command
+            fnc_send_line("$H", 100);  // Send homing command directly
             playPauseButton.longPressCommandSent = true;
         } else if (!playPauseButton.isHeld) {
             // Handle short press for play/pause
             if (machineState == RUNNING || machineState == JOGGING) {
-                // Send pause command directly
                 fnc_putchar((uint8_t)FeedHold);
             } else if (machineState == PAUSED || machineState == IDLE) {
-                // Send cycle start command directly
                 fnc_putchar((uint8_t)CycleStart);
             }
-            // Clear the press state
             playPauseButton.isPressed = false;
         }
-        return;  // Exit after handling play/pause button
+        return;
     }
 
-    // Rest of button handling for jog commands
-    // ...existing code...
-    // Handle LED updates based on state
-    if (machineState == RUNNING || machineState == JOGGING) {
-        // Use available constants:
-        uint32_t baseColor = (machineState == JOGGING) ? LEDControl::LedColors::COLOR_GREEN : LEDControl::LedColors::COLOR_GREEN;
-        // For pressed state, use COLOR_ORANGE instead of non-existent COLOR_PRESSED
-        pixels.setPixelColor(LED_UP, upButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
-        pixels.setPixelColor(LED_RIGHT, rightButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
-        pixels.setPixelColor(LED_DOWN, downButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
-        pixels.setPixelColor(LED_LEFT, leftButton.currentState ? LEDControl::LedColors::COLOR_ORANGE : baseColor);
-        pixels.setPixelColor(LED_PLAYPAUSE, baseColor);
-    }
-
-    pixels.show();
-
-    // Only process jog commands when not paused
+    // Process jog commands when not paused
     if (machineState != PAUSED) {
         static uint32_t lastJogTime = 0;
         char jogCommand[32];
@@ -305,10 +264,7 @@ void handleButtons() {
                 upButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            if (!upButton.currentState) {
-                upButton.longPressCommandSent = false;
-            }
-
+            
             if (rightButton.isPressed && !rightButton.isHeld && !rightButton.longPressCommandSent) {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 X%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
                 fnc_send_line(jogCommand, 100);
@@ -320,10 +276,7 @@ void handleButtons() {
                 rightButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            if (!rightButton.currentState) {
-                rightButton.longPressCommandSent = false;
-            }
-
+            
             if (downButton.isPressed && !downButton.isHeld && !downButton.longPressCommandSent) {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 Y-%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
                 fnc_send_line(jogCommand, 100);
@@ -335,10 +288,7 @@ void handleButtons() {
                 downButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            if (!downButton.currentState) {
-                downButton.longPressCommandSent = false;
-            }
-
+            
             if (leftButton.isPressed && !leftButton.isHeld && !leftButton.longPressCommandSent) {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 X-%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
                 fnc_send_line(jogCommand, 100);
@@ -350,27 +300,26 @@ void handleButtons() {
                 leftButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            if (!leftButton.currentState) {
-                leftButton.longPressCommandSent = false;
-            }
         }
     }
 }
 
-// Replace the updateLEDs() function with the following version:
 
 void updateLEDs() {
     static MachineState prevState = machineState;
     static bool transitionActive = false;
     static unsigned long transitionStart = 0;
-    const uint16_t TRANSITION_DURATION = 300;  // Short transition
 
-    // Start transition when state changes (skip for ALARM)
-    if ((machineState != prevState) && (machineState != ALARM)) {
+    // Skip transition between IDLE and JOGGING in either direction
+    bool skipTransition = (machineState == IDLE && prevState == JOGGING) || 
+                         (machineState == JOGGING && prevState == IDLE);
+
+    // Start transition when state changes (skip for ALARM and IDLE<->JOGGING)
+    if ((machineState != prevState) && (machineState != ALARM) && !skipTransition) {
         transitionActive = true;
         transitionStart = millis();
-        prevState = machineState;
     }
+    prevState = machineState;
 
     auto interp = [&](uint32_t from, uint32_t to, uint8_t progress) -> uint32_t {
         auto getR = [](uint32_t col) -> uint8_t { return (col >> 16) & 0xFF; };
@@ -388,20 +337,21 @@ void updateLEDs() {
             case IDLE:    targetColor = LEDControl::LedColors::COLOR_GREEN; break;
             case RUNNING: targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
             case PAUSED:  targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
+            case JOGGING: targetColor = LEDControl::LedColors::COLOR_GREEN; break; // Add this case explicitly
             case HOMING:  targetColor = pixels.Color(0, 255, 255); break; // Cyan
             default:      targetColor = LEDControl::LedColors::COLOR_OFF; break;
         }
         uint32_t fromColor = pixels.getPixelColor(0);
         uint32_t newColor;
         uint32_t elapsed = millis() - transitionStart;
-        if (elapsed >= TRANSITION_DURATION) {
+        if (elapsed >= LEDControl::LedColors::TRANSITION_DURATION) {
             transitionActive = false;
             newColor = targetColor;
         } else {
-            uint8_t progress = (elapsed * 255UL) / TRANSITION_DURATION;
+            uint8_t progress = (elapsed * 255UL) / LEDControl::LedColors::TRANSITION_DURATION;
             newColor = interp(fromColor, targetColor, progress);
         }
-        for (int i = 0; i < NUM_PIXELS; i++) {
+        for (int i = 0; i < LEDControl::LedColors::NUM_PIXELS; i++) {
             pixels.setPixelColor(i, newColor);
         }
         pixels.show();
@@ -419,18 +369,30 @@ void updateLEDs() {
             }
         } else {
             // Normal IDLE state display
-            int arrowLEDs[4] = {LED_UP, LED_RIGHT, LED_DOWN, LED_LEFT};
+            // Update array to use class constants
+            int arrowLEDs[4] = {
+                LEDControl::LedColors::LED_UP,
+                LEDControl::LedColors::LED_RIGHT,
+                LEDControl::LedColors::LED_DOWN,
+                LEDControl::LedColors::LED_LEFT
+            };
             for (int i = 0; i < 4; i++) {
                 pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_GREEN);
             }
-            pixels.setPixelColor(LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
+            pixels.setPixelColor(LEDControl::LedColors::LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
         }
-    } else if (machineState == RUNNING) {
-        // RUNNING: arrow LEDs off; PLAY/PAUSE blinks (handled by runningAnimation)
+    } else if (machineState == RUNNING || machineState == JOGGING) {
+        // Modified: Only light up arrow LEDs for jogging, no color change on button press
+        int arrowLEDs[4] = {
+            LEDControl::LedColors::LED_UP,
+            LEDControl::LedColors::LED_RIGHT,
+            LEDControl::LedColors::LED_DOWN,
+            LEDControl::LedColors::LED_LEFT
+        };
         for (int i = 0; i < 4; i++) {
-            pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
+            pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_GREEN);
         }
-        LEDControl::LedColors::runningAnimation(false);
+        // Don't modify play/pause LED here
     } else if (machineState == PAUSED) {
         // PAUSED: arrow LEDs off; PLAY/PAUSE breathes (handled by pausedAnimation)
         for (int i = 0; i < 4; i++) {

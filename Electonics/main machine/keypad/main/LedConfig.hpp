@@ -29,14 +29,14 @@ namespace LEDControl {
         static uint32_t COLOR_OFF;
 
         // Animation timing constants
-        static const uint16_t BLINK_INTERVAL_MS = 333;
+        static const uint16_t BLINK_INTERVAL_MS = 200;
         static const uint16_t FADE_INTERVAL_MS = 50;
-        static const uint16_t HOMING_UPDATE_INTERVAL = 15;
+        static const uint16_t HOMING_UPDATE_INTERVAL = 30;
         static const uint8_t HOMING_TRANSITION_STEP = 5;
 
         // Add missing timing constant
         static const uint16_t TRANSITION_DURATION = 300;
-        static const uint16_t FLICKER_INTERVAL = 100;
+        static const uint16_t FLICKER_INTERVAL = 150;
 
         // Animation state
         static uint8_t blinkCount;

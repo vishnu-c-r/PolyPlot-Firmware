@@ -107,9 +107,7 @@ void setup() {
     }
     pixels.show();
     delay(1000);
-    pixels.clear();
-    pixels.show();
-    
+        
     LEDControl::LedColors::init(pixels);
     
     // Set initial LED state to IDLE using COLOR_GREEN instead of non-existent COLOR_IDLE

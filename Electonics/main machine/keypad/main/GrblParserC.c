@@ -124,7 +124,7 @@ void fnc_wait_ready() {
     bool machine_ready = false;
     unsigned long start_time = milliseconds();
     
-    while (!machine_ready && (milliseconds() - start_time) < 10000) {
+    while (!machine_ready && (milliseconds() - start_time) < 5000) {
         fnc_realtime(StatusReport);
         
         for (int i = 0; i < 100; i++) {  // Poll for 100ms

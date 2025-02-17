@@ -1,19 +1,21 @@
 #include "LedConfig.hpp"
 
+// Add definitions for the static color members
 namespace LEDControl {
-    // Color definitions
     uint32_t LedColors::COLOR_RED;
     uint32_t LedColors::COLOR_GREEN;
     uint32_t LedColors::COLOR_ORANGE;
     uint32_t LedColors::COLOR_OFF;
     
-    // Animation state variables
+    // Initialize new static members
+    bool LedColors::inStartupMode = true;
+    bool LedColors::inHomingMode = false;
     uint8_t LedColors::blinkCount = 0;
     uint8_t LedColors::fadeValue = 0;
     int8_t LedColors::fadeStep = 5;
     unsigned long LedColors::lastAnimationUpdate = 0;
     unsigned long LedColors::flickerTimer = 0;
-    unsigned long LedColors::initStart = 0;  // Add this definition
+    unsigned long LedColors::initStart = 0;
 
     Adafruit_NeoPixel* LedColors::pixelsPtr = nullptr;
 
@@ -32,45 +34,77 @@ namespace LEDControl {
     }
 
     void LedColors::startupAnimation() {
-        // All LEDs solid red until homing starts
-        for (int i = 0; i < NUM_PIXELS; i++) {
-            pixelsPtr->setPixelColor(i, COLOR_RED);
+        static unsigned long lastUpdate = 0;
+        static float brightness = 0;
+        static bool transitionToOrange = false;
+        static uint32_t currentColor = COLOR_RED;
+        
+        if (millis() - lastUpdate > STARTUP_FADE_INTERVAL) {
+            lastUpdate = millis();
+            
+            // Smoother sinusoidal breathing effect
+            brightness = (sin(millis() * 0.001f) + 1.0f) * 127.5f;  // Range 0-255
+            
+            // After one full breath cycle, start transitioning to orange
+            if (!transitionToOrange && millis() > 3000) {  // After 3 seconds
+                transitionToOrange = true;
+            }
+            
+            // If transitioning to orange, interpolate between red and orange
+            if (transitionToOrange) {
+                currentColor = interp(COLOR_RED, COLOR_ORANGE, brightness);
+            }
+            
+            // Apply the breathing effect
+            uint32_t finalColor;
+            if (transitionToOrange) {
+                finalColor = interp(COLOR_OFF, currentColor, brightness);
+            } else {
+                finalColor = interp(COLOR_OFF, COLOR_RED, brightness);
+            }
+            
+            for (int i = 0; i < NUM_PIXELS; i++) {
+                pixelsPtr->setPixelColor(i, finalColor);
+            }
+            
+            pixelsPtr->show();
         }
-        pixelsPtr->show();
     }
 
     void LedColors::homingAnimation() {
         static unsigned long lastUpdate = 0;
         if (millis() - lastUpdate < HOMING_UPDATE_INTERVAL) return;
         lastUpdate = millis();
-        
-        static uint32_t palette[4];
-        static bool paletteInitialized = false;
-        if (!paletteInitialized) {
-            palette[0] = pixelsPtr->Color(0, 255, 255);   // Cyan
-            palette[1] = pixelsPtr->Color(255, 0, 255);   // Magenta
-            palette[2] = pixelsPtr->Color(255, 160, 0);   // Orange
-            palette[3] = pixelsPtr->Color(128, 0, 128);   // Purple
-            paletteInitialized = true;
-        }
-        
+
+        // Define custom colors
+        static const uint32_t palette[] = {
+            // pixelsPtr->Color(0, 255, 255),   // Cyan
+            // pixelsPtr->Color(255, 0, 255),   // Magenta
+            // pixelsPtr->Color(255, 255, 0),   // Yellow
+            pixelsPtr->Color(255, 100, 0),   // Orange
+            pixelsPtr->Color(255, 20, 147),  // Pink
+            pixelsPtr->Color(0, 0, 200),     // Blue
+            pixelsPtr->Color(255, 20, 147)   // Pink
+        };
+        static const uint8_t paletteSize = sizeof(palette) / sizeof(palette[0]);
+
         static uint8_t progress = 0;
         static int rotationOffset = 0;
-    
+
         // Get the interpolated color between two palette colours
-        int currentIndex = rotationOffset;
-        int nextIndex = (rotationOffset + 1) % 4;
+        int currentIndex = rotationOffset % paletteSize;
+        int nextIndex = (rotationOffset + 1) % paletteSize;
         uint32_t interpColor = interp(palette[currentIndex], palette[nextIndex], progress);
-    
-        // Remove breathing effect and just use the interpolated color directly
+
+        // Apply color to all LEDs
         for (int i = 0; i < NUM_PIXELS; i++) {
             pixelsPtr->setPixelColor(i, interpColor);
         }
-    
+
         progress = min((uint16_t)255, (uint16_t)(progress + HOMING_TRANSITION_STEP));
         if (progress >= 255) {
             progress = 0;
-            rotationOffset = (rotationOffset + 1) % 4;
+            rotationOffset = (rotationOffset + 1) % paletteSize;
         }
         pixelsPtr->show();
     }
@@ -100,40 +134,51 @@ namespace LEDControl {
     }
 
     void LedColors::runningAnimation(bool flicker) {
-        // Turn off arrow keys.
-        pixelsPtr->setPixelColor(LED_UP, COLOR_OFF);
-        pixelsPtr->setPixelColor(LED_RIGHT, COLOR_OFF);
-        pixelsPtr->setPixelColor(LED_DOWN, COLOR_OFF);
-        pixelsPtr->setPixelColor(LED_LEFT, COLOR_OFF);
-        // Flicker Play/Pause LED.
-        if (flicker && (millis() - flickerTimer > FLICKER_INTERVAL)) {
-            flickerTimer = millis();
-            uint8_t brightness = random(180, 255);
-            pixelsPtr->setPixelColor(LED_PLAYPAUSE, pixelsPtr->Color(brightness, brightness / 2, 0));
+        static unsigned long lastBlink = 0;
+        static bool ledState = false;
+
+        if (millis() - lastBlink > FLICKER_INTERVAL_MS) {
+            lastBlink = millis();
+            ledState = !ledState;  // Toggle LED state
+
+            // Turn off arrow keys
+            pixelsPtr->setPixelColor(LED_UP, COLOR_OFF);
+            pixelsPtr->setPixelColor(LED_RIGHT, COLOR_OFF);
+            pixelsPtr->setPixelColor(LED_DOWN, COLOR_OFF);
+            pixelsPtr->setPixelColor(LED_LEFT, COLOR_OFF);
+
+            // Blink play/pause LED between orange and off
+            pixelsPtr->setPixelColor(LED_PLAYPAUSE,
+                                    ledState ? COLOR_ORANGE : COLOR_OFF);
+
+            pixelsPtr->show();  // Make sure to show the changes
         }
-        // Removed redundant pixelsPtr->show() for optimization.
     }
 
     void LedColors::pausedAnimation() {
-        // Ensure arrow keys remain off.
-        pixelsPtr->setPixelColor(LED_UP, COLOR_OFF);
-        pixelsPtr->setPixelColor(LED_RIGHT, COLOR_OFF);
-        pixelsPtr->setPixelColor(LED_DOWN, COLOR_OFF);
-        pixelsPtr->setPixelColor(LED_LEFT, COLOR_OFF);
-        if (millis() - lastAnimationUpdate > FADE_INTERVAL_MS) {
-            lastAnimationUpdate = millis();
-            fadeValue += fadeStep;
-            if (fadeValue >= 255 || fadeValue <= 0) {
-                fadeStep = -fadeStep;
+        static unsigned long lastUpdate = 0;
+        static uint8_t brightness = 0;
+        static int8_t step = 2;  // Reduced from 5 to 2 for smoother transitions
+
+        if (millis() - lastUpdate > FADE_INTERVAL_MS) {
+            lastUpdate = millis();
+
+            // Simple fade up/down
+            brightness += step;
+            if (brightness >= 255) {
+                brightness = 255;  // Clamp at max
+                step = -step;
+            } else if (brightness <= 0) {
+                brightness = 0;  // Clamp at min
+                step = -step;
             }
-            uint32_t color = pixelsPtr->Color(
-                map(fadeValue, 0, 255, 0, 255),
-                map(fadeValue, 0, 255, 0, 100),
-                0
-            );
-            pixelsPtr->setPixelColor(LED_PLAYPAUSE, color);
+
+            // Only affect play/pause LED with orange color
+            pixelsPtr->setPixelColor(LED_PLAYPAUSE,
+                                    pixelsPtr->Color(brightness, brightness / 2, 0));
+
+            pixelsPtr->show();
         }
-        // Removed immediate show() call.
     }
 
     // New method: machine initialization animation.
@@ -184,7 +229,7 @@ namespace LEDControl {
                 transitionDone = true;
                 // Reset blink counter start.
                 blinkCount = 0;
-                transStart = millis(); // restart timer for blinking
+                transStart = millis();  // restart timer for blinking
             }
         } else {
             // Blink three times.
@@ -218,17 +263,5 @@ namespace LEDControl {
                 pixelsPtr->setPixelColor(i, alarmOn ? COLOR_RED : COLOR_OFF);
             }
         }
-        // Note: pixelsPtr->show() is called in main.ino after animation.
-    }
-
-    // Add interpolation method implementation
-    uint32_t LedColors::interp(uint32_t c1, uint32_t c2, uint8_t p) {
-        auto getR = [](uint32_t col) -> uint8_t { return (col >> 16) & 0xFF; };
-        auto getG = [](uint32_t col) -> uint8_t { return (col >> 8) & 0xFF; };
-        auto getB = [](uint32_t col) -> uint8_t { return col & 0xFF; };
-        uint8_t r = getR(c1) + ((getR(c2) - getR(c1)) * p) / 255;
-        uint8_t g = getG(c1) + ((getG(c2) - getG(c1)) * p) / 255;
-        uint8_t b = getB(c1) + ((getB(c2) - getB(c1)) * p) / 255;
-        return pixelsPtr->Color(r, g, b);
     }
 }

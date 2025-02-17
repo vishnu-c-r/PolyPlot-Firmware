@@ -84,51 +84,48 @@ bool isHoming = false;
 // Add near other state variables
 bool justFinishedHoming = false;  // Add this flag
 
-void setup() {
-    // Initialize primary UART communication with proper pin swap for ATtiny1614
-    Serial.begin(115200);
-    delay(1000);  // Give serial time to stabilize
+// Add a new variable at the top with other globals
+bool enableAlarmCheck = false;
+unsigned long startupTime = 0;
 
-    // Initialize buttons as inputs with pull-up resistors
+void setup() {
+    // Initialize hardware
+    Serial.begin(115200);
+    delay(1000);
+
+    // Initialize buttons
     pinMode(BUTTON_UP, INPUT_PULLUP);
     pinMode(BUTTON_RIGHT, INPUT_PULLUP);
     pinMode(BUTTON_DOWN, INPUT_PULLUP);
     pinMode(BUTTON_LEFT, INPUT_PULLUP);
     pinMode(BUTTON_PLAYPAUSE, INPUT_PULLUP);
 
-    // Initialize Neopixels with test pattern
+    // Initialize LEDs and start animation
     pixels.begin();
     pixels.clear();
     pixels.setBrightness(LEDControl::LedColors::DEFAULT_BRIGHTNESS);
-     
-    // Test pattern - flash all LEDs white
-    for (int i = 0; i < LEDControl::LedColors::NUM_PIXELS; i++) {
-        pixels.setPixelColor(i, LEDControl::LedColors::COLOR_RED);
-    }
-    pixels.show();
-    delay(1000);
-        
     LEDControl::LedColors::init(pixels);
     
-    // Set initial LED state to IDLE using COLOR_GREEN instead of non-existent COLOR_IDLE
-    machineState = HOMING;
-    // for (int i = 0; i < NUM_PIXELS; i++) {
-    //     pixels.setPixelColor(i, LEDControl::LedColors::COLOR_RED);
-    // }
-    // pixels.show();
-
-    // Wait for FluidNC to be ready
+    // Run startup animation for 3 seconds before checking machine state
+    unsigned long startTime = millis();
+    while (millis() - startTime < 3000) {
+        LEDControl::LedColors::startupAnimation();
+    }
+    machineState = HOMING;  // Set initial state to HOMING
+    
+    // Now begin machine communication
     fnc_wait_ready();
-    
-    // Configure faster status reporting
     fnc_send_line("$Report/Interval=50", 100);
-    delay(100);  // Wait for setting to take effect
+    delay(100);
     
-    // Send initial homing command
+    // Send homing command
     fnc_send_line("$H", 100);
-
-    // Wait for homing to complete
-    delay(1000);  // Give time for homing to start
+    delay(1000);
+    
+    // Initialize state
+    machineState = HOMING;
+    isHoming = true;
+    alarm14Active = false;  // Start with alarm check disabled
 }
 
 // Add this function after setup()
@@ -304,20 +301,30 @@ void handleButtons() {
 
 
 void updateLEDs() {
+    // If in startup mode, only show startup animation
+    if (LEDControl::LedColors::inStartupMode) {
+        LEDControl::LedColors::startupAnimation();
+        return;
+    }
+
     static MachineState prevState = machineState;
     static bool transitionActive = false;
     static unsigned long transitionStart = 0;
 
-    // Skip transition between IDLE and JOGGING in either direction
+    // Skip transitions for: IDLE<->JOGGING and RUNNING<->PAUSED
     bool skipTransition = (machineState == IDLE && prevState == JOGGING) || 
-                         (machineState == JOGGING && prevState == IDLE);
+                         (machineState == JOGGING && prevState == IDLE) ||
+                         ((machineState == RUNNING && prevState == PAUSED) || 
+                          (machineState == PAUSED && prevState == RUNNING));
 
-    // Start transition when state changes (skip for ALARM and IDLE<->JOGGING)
+    // Start transition when state changes (skip for ALARM and specified state pairs)
     if ((machineState != prevState) && (machineState != ALARM) && !skipTransition) {
         transitionActive = true;
         transitionStart = millis();
+        prevState = machineState;  // Move this here to ensure state is updated
+    } else if (skipTransition) {
+        prevState = machineState;  // Update state without transition
     }
-    prevState = machineState;
 
     auto interp = [&](uint32_t from, uint32_t to, uint8_t progress) -> uint32_t {
         auto getR = [](uint32_t col) -> uint8_t { return (col >> 16) & 0xFF; };
@@ -335,8 +342,15 @@ void updateLEDs() {
             case IDLE:    targetColor = LEDControl::LedColors::COLOR_GREEN; break;
             case RUNNING: targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
             case PAUSED:  targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
-            case JOGGING: targetColor = LEDControl::LedColors::COLOR_GREEN; break; // Add this case explicitly
-            case HOMING:  targetColor = pixels.Color(0, 255, 255); break; // Cyan
+            case JOGGING: targetColor = LEDControl::LedColors::COLOR_GREEN; break;
+            case HOMING:
+                // During startup phase use orange and then switch to cyan after
+                if (LEDControl::LedColors::inStartupMode) {
+                    targetColor = LEDControl::LedColors::COLOR_ORANGE;
+                } else {
+                    targetColor = pixels.Color(0, 255, 255); // Cyan for homing
+                }
+                break;
             default:      targetColor = LEDControl::LedColors::COLOR_OFF; break;
         }
         uint32_t fromColor = pixels.getPixelColor(0);
@@ -357,30 +371,49 @@ void updateLEDs() {
     }
 
     // State-specific animations when not transitioning:
-    if (machineState == IDLE) {
+    if (machineState == HOMING) {
+        if (LEDControl::LedColors::inStartupMode) {
+            LEDControl::LedColors::startupAnimation();
+        } else {
+            LEDControl::LedColors::homingAnimation();
+        }
+    } else if (machineState == IDLE) {
         if (justFinishedHoming) {
-            // Special post-homing green blink
             LEDControl::LedColors::readyBlinkAnimation();
-            if (LEDControl::LedColors::blinkCount >= 3) {  // After 3 blinks
-                justFinishedHoming = false;  // Reset flag
+            if (LEDControl::LedColors::blinkCount >= 3) {
+                justFinishedHoming = false;
                 LEDControl::LedColors::blinkCount = 0;
             }
         } else {
-            // Normal IDLE state display
-            // Update array to use class constants
-            int arrowLEDs[4] = {
-                LEDControl::LedColors::LED_UP,
-                LEDControl::LedColors::LED_RIGHT,
-                LEDControl::LedColors::LED_DOWN,
-                LEDControl::LedColors::LED_LEFT
-            };
-            for (int i = 0; i < 4; i++) {
-                pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_GREEN);
-            }
+            // Fix: Use explicit LED positions instead of array indexing
+            pixels.setPixelColor(LEDControl::LedColors::LED_UP, LEDControl::LedColors::COLOR_GREEN);
+            pixels.setPixelColor(LEDControl::LedColors::LED_RIGHT, LEDControl::LedColors::COLOR_GREEN);
+            pixels.setPixelColor(LEDControl::LedColors::LED_DOWN, LEDControl::LedColors::COLOR_GREEN);
+            pixels.setPixelColor(LEDControl::LedColors::LED_LEFT, LEDControl::LedColors::COLOR_GREEN);
             pixels.setPixelColor(LEDControl::LedColors::LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
         }
-    } else if (machineState == RUNNING || machineState == JOGGING) {
-        // Modified: Only light up arrow LEDs for jogging, no color change on button press
+    } 
+    else if (machineState == RUNNING) {
+        // Explicitly turn off all arrow LEDs first
+        pixels.setPixelColor(LEDControl::LedColors::LED_UP, LEDControl::LedColors::COLOR_OFF);
+        pixels.setPixelColor(LEDControl::LedColors::LED_RIGHT, LEDControl::LedColors::COLOR_OFF);
+        pixels.setPixelColor(LEDControl::LedColors::LED_DOWN, LEDControl::LedColors::COLOR_OFF);
+        pixels.setPixelColor(LEDControl::LedColors::LED_LEFT, LEDControl::LedColors::COLOR_OFF);
+        
+        // Handle play/pause LED animation
+        LEDControl::LedColors::runningAnimation(true);
+    } 
+    else if (machineState == PAUSED) {
+        // Explicitly turn off all arrow LEDs first
+        pixels.setPixelColor(LEDControl::LedColors::LED_UP, LEDControl::LedColors::COLOR_OFF);
+        pixels.setPixelColor(LEDControl::LedColors::LED_RIGHT, LEDControl::LedColors::COLOR_OFF);
+        pixels.setPixelColor(LEDControl::LedColors::LED_DOWN, LEDControl::LedColors::COLOR_OFF);
+        pixels.setPixelColor(LEDControl::LedColors::LED_LEFT, LEDControl::LedColors::COLOR_OFF);
+        
+        // Handle play/pause LED animation
+        LEDControl::LedColors::pausedAnimation();
+    } else if (machineState == RUNNING ) {
+        // Arrow LEDs OFF; PLAY/PAUSE LED flickers orange
         int arrowLEDs[4] = {
             LEDControl::LedColors::LED_UP,
             LEDControl::LedColors::LED_RIGHT,
@@ -388,9 +421,12 @@ void updateLEDs() {
             LEDControl::LedColors::LED_LEFT
         };
         for (int i = 0; i < 4; i++) {
-            pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_GREEN);
+            pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_OFF);
         }
-        // Don't modify play/pause LED here
+        // Add running animation for play/pause LED when in RUNNING state
+        if (machineState == RUNNING) {
+            LEDControl::LedColors::runningAnimation(true); // true enables the flicker effect
+        }
     } else if (machineState == PAUSED) {
         // PAUSED: arrow LEDs off; PLAY/PAUSE breathes (handled by pausedAnimation)
         for (int i = 0; i < 4; i++) {
@@ -408,34 +444,53 @@ void updateLEDs() {
 
 // Callback function for machine state changes
 void show_state(const char* state) {
+    // Initialize startup timer on first state message
+    if (startupTime == 0) {
+        startupTime = millis();
+        LEDControl::LedColors::inStartupMode = true;  // Ensure startup mode is active
+    }
+    
+    // Ignore state changes during initial startup period
+    if (millis() - startupTime < 3000) {
+        return;  // Skip state processing during startup animation
+    }
+
     strncpy(current_machine_state, state, sizeof(current_machine_state));
     
-    // Parse incoming state and update machine state with proper transition handling
     if (strstr(state, "Run") == state) {
+        LEDControl::LedColors::inStartupMode = false;
         machineState = RUNNING;
-        alarm14Active = false;
         isHoming = false;
     } else if (strstr(state, "Hold") == state) {
+        LEDControl::LedColors::inStartupMode = false;
         machineState = PAUSED;
         isHoming = false;
     } else if (strstr(state, "Idle") == state) {
-        machineState = IDLE;
-        if (isHoming) {
-            justFinishedHoming = true;  // Trigger post-homing LED sequence
+        // Only process Idle state if we're not in startup mode
+        if (!LEDControl::LedColors::inStartupMode) {
+            if (isHoming) {
+                justFinishedHoming = true;
+                isHoming = false;
+                machineState = IDLE;
+            } else if (machineState == HOMING) {
+                machineState = IDLE;
+            } else {
+                machineState = IDLE;
+            }
         }
-        alarm14Active = false;
-        isHoming = false;
-    } else if (strstr(state, "Alarm") == state) {
+    } else if (strstr(state, "Alarm") == state && enableAlarmCheck) {
         machineState = ALARM;
-        alarm14Active = false; // or define and use a proper _alarm14 flag
+        alarm14Active = _alarm14;
         isHoming = false;
     } else if (strstr(state, "Jog") == state) {
         machineState = JOGGING;
         isHoming = false;
+        LEDControl::LedColors::inStartupMode = false;
     } else if (strstr(state, "Home") == state) {
         machineState = HOMING;
         isHoming = true;
+        justFinishedHoming = false;
     }
-    // Force immediate LED update to reflect new state
+
     updateLEDs();
 }

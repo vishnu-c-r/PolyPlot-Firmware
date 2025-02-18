@@ -1,6 +1,7 @@
 #include "GrblParserC.h"
 #include <string.h>
 #include <stdlib.h>  // Add this for atoi()
+#include <Arduino.h>
 
 static size_t _report_len = 0;
 static char _report[REPORT_BUFFER_LEN];
@@ -11,9 +12,9 @@ bool _alarm14 = false;  // Change from static bool _alarm14 to just bool _alarm1
 // Core communication functions
 void fnc_send_line(const char* line, int timeout_ms) {
     // Wait for previous command acknowledgment
-    unsigned long start = milliseconds();
+    unsigned long start = millis();
     while (_ackwait) {
-        if ((milliseconds() - start) >= timeout_ms) {
+        if ((millis() - start) >= timeout_ms) {
             _ackwait = false;  // Force clear if timeout
             break;
         }
@@ -29,12 +30,8 @@ void fnc_send_line(const char* line, int timeout_ms) {
     fnc_putchar('\n');
 
     // Set acknowledgment timeout
-    _ack_time_limit = milliseconds() + timeout_ms;
+    _ack_time_limit = millis() + timeout_ms;
     _ackwait = true;
-}
-
-void fnc_realtime(realtime_cmd_t c) {
-    fnc_putchar((uint8_t)c);
 }
 
 // Message parsing
@@ -104,11 +101,11 @@ void collect(uint8_t data) {
 
 void fnc_poll() {
     static unsigned long last_status_request = 0;
-    unsigned long now = milliseconds();
+    unsigned long now = millis();
     
     // Request status every 50ms if not waiting for ack
     if (!_ackwait && (now - last_status_request >= 50)) {
-        fnc_realtime(StatusReport);
+        fnc_putchar((uint8_t)StatusReport);
         last_status_request = now;
     }
     
@@ -122,10 +119,10 @@ void fnc_poll() {
 
 void fnc_wait_ready() {
     bool machine_ready = false;
-    unsigned long start_time = milliseconds();
+    unsigned long start_time = millis();
     
-    while (!machine_ready && (milliseconds() - start_time) < 5000) {
-        fnc_realtime(StatusReport);
+    while (!machine_ready && (millis() - start_time) < 5000) {
+        fnc_putchar((uint8_t)StatusReport);
         
         for (int i = 0; i < 100; i++) {  // Poll for 100ms
             int c = fnc_getchar();

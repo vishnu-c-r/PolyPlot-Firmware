@@ -2,296 +2,331 @@
 #include "GrblParserC.h"
 #include <Adafruit_NeoPixel.h>
 #include "LedConfig.hpp"
-#include "main.h" // Include main.h
+#include "main.h"
 
-// Forward declare the ButtonState struct
+// Forward declaration for the ButtonState structure.
 struct ButtonState;
 
-// Function prototypes
-void updateButtonState(ButtonState& btn, bool currentRead);
+// ======================= Function Prototypes =======================
+void updateButtonState(ButtonState &btn, bool currentRead);
 void handleButtons();
 void updateLEDs();
+void handleSerialData();
+void sendJogCommand(const char *axesCmd); // Helper to send jog command lines
 
-//controller used: Attiny1614
-//pinout: https://www.microchip.com/wwwproducts/en/ATtiny1614
+// ======================= Configurable Settings =======================
+#define JOG_FEEDRATE 10000 // Jog feedrate in mm/min
+#define NUM_PIXELS 5       // Number of NeoPixels used in the setup
 
-// Configurable settings
-#define JOG_FEEDRATE 10000      // Feedrate for jogging in mm/min
+// ======================= Global Objects and Variables =======================
+// Create a NeoPixel object using pin defined in main.h (NEOPIXEL_PIN)
+Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+uint8_t currentBrightness = DEFAULT_BRIGHTNESS; // Set brightness to default
 
-// Use class constants instead of #defines
-Adafruit_NeoPixel pixels(LEDControl::LedColors::NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-
-// Machine state enumeration
-enum MachineState { RUNNING, PAUSED, IDLE, JOGGING, HOMING, ALARM, COMPLETE };  // Added HOMING
-MachineState machineState = IDLE;  // Changed from RUNNING to IDLE
-
-// UART functions required by GrblParserC
-int fnc_getchar() {
-    if (Serial.available()) {
-        return Serial.read();
-    }
-    return -1;
+// UART functions to read and write characters for Grbl communication
+int fnc_getchar()
+{
+    return Serial.available() ? Serial.read() : -1;
 }
-
-void fnc_putchar(uint8_t ch) {
+void fnc_putchar(uint8_t ch)
+{
     Serial.write(ch);
-    delay(1);  // Add small delay to ensure reliable transmission
+    delay(1);
 }
 
-int milliseconds() {
-    return millis();
-}
-
-// Helper macro for converting numbers to strings
-#define STR_HELPER(x) #x
-#define STR(x) STR_HELPER(x)
-
-// Add these global variables near the top
+// Global buffers for incoming serial data and current machine state string.
 String inputBuffer = "";
 bool messageComplete = false;
+char current_machine_state[20] = "Unknown";
 
-// Add these declarations near the top of the file after the #include statements
-void fnc_send_play_command();
-void fnc_send_pause_command();
-void fnc_send_cancel_command();
-void fnc_send_home_command();
-char current_machine_state[20] = "Unknown";  // Define the variable here
+// ======================= Timing and Jog Definitions =======================
+#define BUTTON_HOLD_DELAY 500  // Delay before a button is considered 'held'
+#define HOME_HOLD_DELAY 1000   // Longer delay for the play/pause button (for homing)
+#define SHORT_JOG_DISTANCE 1   // Short jog command distance (mm)
+#define LONG_JOG_DISTANCE 1000 // Continuous jog command distance (mm)
 
-// Define the ButtonState struct
-struct ButtonState {
+// ======================= Button State Structure =======================
+// This structure holds the debounced button state and timing information.
+struct ButtonState
+{
     bool currentState = false;
     bool lastState = false;
-    bool isPressed = false;
-    bool isHeld = false;
-    uint32_t pressTime = 0;
-    uint32_t lastDebounceTime = 0;
-    bool longPressCommandSent = false; // Add this
+    bool isPressed = false;            // Indicates a new press
+    bool isHeld = false;               // True if press duration exceeds defined delay
+    uint32_t pressTime = 0;            // Time when the button was pressed
+    uint32_t lastDebounceTime = 0;     // Last time the button input was changed
+    bool longPressCommandSent = false; // To prevent repeated command sending during long presses
 };
 
-// Declare button states as global variables
-ButtonState upButton;
-ButtonState rightButton;
-ButtonState downButton;
-ButtonState leftButton;
-ButtonState playPauseButton;
+// Button instances corresponding to different control buttons.
+ButtonState upButton, rightButton, downButton, leftButton, playPauseButton;
 
-// Add this global variable near the top
+// Global flags and the machine state.
+// These variables are declared extern in main.h.
 bool alarm14Active = false;
-
-// OPTIMIZATION: Add a dedicated flag for homing (instead of checking current_machine_state text)
+bool inStartupPhase = true;
+bool homingComplete = false;
 bool isHoming = false;
+MachineState machineState = IDLE;
 
-// Add near other state variables
-bool justFinishedHoming = false;  // Add this flag
+// ======================= State Parsing Function =======================
+// Parse a state string from the controller and return a corresponding enumerated state.
+ParsedState parseStateString(const char *s)
+{
+    if (strstr(s, "Run") == s)
+        return STATE_RUN;
+    if (strstr(s, "Hold") == s)
+        return STATE_HOLD;
+    if (strstr(s, "Idle") == s)
+        return STATE_IDLE;
+    if (strstr(s, "Alarm") == s)
+        return STATE_ALARM;
+    if (strstr(s, "Jog") == s)
+        return STATE_JOG;
+    if (strstr(s, "Home") == s)
+        return STATE_HOME;
+    return STATE_UNKNOWN;
+}
 
-// Add a new variable at the top with other globals
-bool enableAlarmCheck = false;
-unsigned long startupTime = 0;
-
-void setup() {
-    // Initialize hardware
+// ======================= Setup Function =======================
+// Initialize serial communication, buttons, NeoPixels, and request initial machine status.
+void setup()
+{
     Serial.begin(115200);
     delay(1000);
 
-    // Initialize buttons
+    // Configure button pins as inputs with internal pull-ups.
     pinMode(BUTTON_UP, INPUT_PULLUP);
     pinMode(BUTTON_RIGHT, INPUT_PULLUP);
     pinMode(BUTTON_DOWN, INPUT_PULLUP);
     pinMode(BUTTON_LEFT, INPUT_PULLUP);
     pinMode(BUTTON_PLAYPAUSE, INPUT_PULLUP);
 
-    // Initialize LEDs and start animation
+    // Initialize and test the NeoPixel array.
     pixels.begin();
     pixels.clear();
-    pixels.setBrightness(LEDControl::LedColors::DEFAULT_BRIGHTNESS);
-    LEDControl::LedColors::init(pixels);
-    
-    // Run startup animation for 3 seconds before checking machine state
-    unsigned long startTime = millis();
-    while (millis() - startTime < 3000) {
-        LEDControl::LedColors::startupAnimation();
+    pixels.setBrightness(DEFAULT_BRIGHTNESS);
+    for (int i = 0; i < NUM_PIXELS; i++)
+    {
+        pixels.setPixelColor(i, pixels.Color(255, 255, 255));
     }
-    machineState = HOMING;  // Set initial state to HOMING
-    
-    // Now begin machine communication
+    pixels.show();
+    delay(500);
+    pixels.clear();
+    pixels.show();
+
+    // Initialize LED control module.
+    LEDControl::LedColors::init(pixels);
+    machineState = IDLE;
+    // Set initial LED state (e.g., arrow LEDs green).
+    for (int i = 0; i < NUM_PIXELS; i++)
+    {
+        pixels.setPixelColor(i, LEDControl::LedColors::COLOR_GREEN);
+    }
+    pixels.show();
+
+    // Wait for the controller to signal ready status.
     fnc_wait_ready();
     fnc_send_line("$Report/Interval=50", 100);
     delay(100);
-    
-    // Send homing command
     fnc_send_line("$H", 100);
     delay(1000);
-    
-    // Initialize state
-    machineState = HOMING;
-    isHoming = true;
-    alarm14Active = false;  // Start with alarm check disabled
 }
 
-// Add this function after setup()
-void handleSerialData() {
-    while (Serial.available()) {
+// ======================= Serial Data Handler =======================
+// Collect incoming serial data and set a flag when a full message is received.
+void handleSerialData()
+{
+    while (Serial.available())
+    {
         char inChar = (char)Serial.read();
-        if (inChar == '\n' || inputBuffer.length() >= REPORT_BUFFER_LEN - 1) {
-            messageComplete = true;
-        } else {
+        if (inChar != '\n')
             inputBuffer += inChar;
-        }
+        else
+            messageComplete = true;
     }
-    if (messageComplete) {
-        // Process the message here
-        // Serial.print(F("Received: "));
-        // Serial.println(inputBuffer);
+    if (messageComplete)
+    {
+        // Message processing could occur here.
         inputBuffer = "";
         messageComplete = false;
     }
 }
 
-// Update loop() to ensure LED state is always updated
-void loop() {
-    // Poll more frequently for state changes
-    fnc_poll();  // Process any available serial data
+// ======================= Main Loop =======================
+// The loop polls for serial data, processes button actions and updates LED animations.
+void loop()
+{
+    fnc_poll();
     handleButtons();
     updateLEDs();
-    fnc_poll();  // Check again after processing
+    fnc_poll();
 }
 
-// Move these function implementations to after loop() but before the other functions
-void fnc_send_play_command() {
-    fnc_realtime(CycleStart);
-}
-void fnc_send_pause_command() {
-    fnc_realtime(FeedHold);
-}
-
-// Add this with the other command functions
-void fnc_send_home_command() {
-    fnc_send_line("$H", 100);  // Send the homing command
-}
-
-// Add this helper function before handleButtons()
-void updateButtonState(ButtonState& btn, bool currentRead) {
-    if (currentRead != btn.lastState) {
+// ======================= Button State Update Function =======================
+// Debounces the button and updates its current and hold states.
+void updateButtonState(ButtonState &btn, bool currentRead)
+{
+    if (currentRead != btn.lastState)
         btn.lastDebounceTime = millis();
-    }
-    
-    if ((millis() - btn.lastDebounceTime) > 50) {
-        if (currentRead != btn.currentState) {
+    if ((millis() - btn.lastDebounceTime) > 50)
+    {
+        if (currentRead != btn.currentState)
+        {
             btn.currentState = currentRead;
-            
-            if (btn.currentState == true) {
+            if (btn.currentState)
+            {
                 btn.isPressed = true;
                 btn.pressTime = millis();
-            } else {
+            }
+            else
+            {
                 btn.isHeld = false;
                 btn.isPressed = false;
                 btn.longPressCommandSent = false;
-                // Only send JogCancel for direction buttons
-                if (&btn != &playPauseButton) {
-                    fnc_realtime(JogCancel);
-                }
+                // When a directional button is released, send a jog cancel command.
+                if (&btn != &playPauseButton)
+                    fnc_putchar((uint8_t)JogCancel);
             }
         }
-        
-        // Check for hold condition with different delays
-        if (btn.currentState == true && !btn.isHeld) {
+        // Once the button is held longer than the defined delay, mark it as held.
+        if (btn.currentState && !btn.isHeld)
+        {
             uint32_t holdDelay = (&btn == &playPauseButton) ? HOME_HOLD_DELAY : BUTTON_HOLD_DELAY;
-            if ((millis() - btn.pressTime) > holdDelay) {
+            if ((millis() - btn.pressTime) > holdDelay)
                 btn.isHeld = true;
-            }
         }
     }
-    
     btn.lastState = currentRead;
 }
 
-// Replace the existing handleButtons() function with this version
-void handleButtons() {
-    // Update all button states
+// ======================= Pixel Update Helper =======================
+// Sets all NeoPixels to a given color for consistent LED updates.
+static void setAllPixels(uint32_t color)
+{
+    for (uint8_t i = 0; i < NUM_PIXELS; i++)
+    {
+        pixels.setPixelColor(i, color);
+    }
+}
+
+// ======================= Button Handling Function =======================
+// Processes each button's state to send appropriate commands.
+// Uses a switch-case for the play/pause (homing) functionality and processes jog commands.
+void handleButtons()
+{
     updateButtonState(upButton, !digitalRead(BUTTON_UP));
     updateButtonState(rightButton, !digitalRead(BUTTON_RIGHT));
     updateButtonState(downButton, !digitalRead(BUTTON_DOWN));
     updateButtonState(leftButton, !digitalRead(BUTTON_LEFT));
     updateButtonState(playPauseButton, !digitalRead(BUTTON_PLAYPAUSE));
 
-    // If Alarm 14 is active, only allow Home button to initiate homing
-    if (alarm14Active) {
-        if (playPauseButton.isPressed) {
+    // If an alarm is active, send homing command when play/pause is pressed.
+    if (alarm14Active)
+    {
+        if (playPauseButton.isPressed)
+        {
             playPauseButton.isPressed = false;
-            fnc_send_home_command();
+            fnc_send_line("$H", 100);
         }
         return;
     }
 
-    // Handle Play/Pause button first
-    if (playPauseButton.isPressed) {
-        if (playPauseButton.isHeld && !playPauseButton.longPressCommandSent) {
-            // Handle long press for home - Fixed homing command
-            fnc_send_line("$H", 100);  // Send homing command directly
+    // If play/pause button is pressed:
+    // - on a long press or if in ALARM state, send a homing command.
+    // - on short press, decide between pausing or starting based on machine state.
+    if (playPauseButton.isPressed)
+    {
+        if ((playPauseButton.isHeld && !playPauseButton.longPressCommandSent) || (machineState == ALARM))
+        {
+            fnc_send_line("$H", 100);
             playPauseButton.longPressCommandSent = true;
-        } else if (!playPauseButton.isHeld) {
-            // Handle short press for play/pause
-            if (machineState == RUNNING || machineState == JOGGING) {
-                fnc_putchar((uint8_t)FeedHold);
-            } else if (machineState == PAUSED || machineState == IDLE) {
-                fnc_putchar((uint8_t)CycleStart);
+            return;
+        }
+        if (!playPauseButton.isHeld)
+        {
+            switch (machineState)
+            {
+            case RUNNING:
+            case JOGGING:
+                fnc_putchar((uint8_t)FeedHold); // Pause command.
+                break;
+            case PAUSED:
+            case IDLE:
+                fnc_putchar((uint8_t)CycleStart); // Start command.
+                break;
+            default:
+                break;
             }
             playPauseButton.isPressed = false;
+            return;
         }
-        return;
     }
 
-    // Process jog commands when not paused
-    if (machineState != PAUSED) {
+    // If machine is not paused, process directional jog commands.
+    if (machineState != PAUSED)
+    {
         static uint32_t lastJogTime = 0;
         char jogCommand[32];
-        
-        // Add a small delay between jogs to prevent overwhelming the machine
-        if ((millis() - lastJogTime) > 50) {  // 50ms minimum between jogs
-            if (upButton.isPressed && !upButton.isHeld && !upButton.longPressCommandSent) {
+        if ((millis() - lastJogTime) > 50)
+        { // Enforce minimum delay between jog commands.
+            // Up button jog handling.
+            if (upButton.isPressed && !upButton.isHeld && !upButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 Y%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 upButton.isPressed = false;
                 lastJogTime = millis();
-            } else if (upButton.isHeld && !upButton.longPressCommandSent) {
+            }
+            else if (upButton.isHeld && !upButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 Y%d F%d", LONG_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 upButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            
-            if (rightButton.isPressed && !rightButton.isHeld && !rightButton.longPressCommandSent) {
+            // Right button jog handling.
+            if (rightButton.isPressed && !rightButton.isHeld && !rightButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 X%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 rightButton.isPressed = false;
                 lastJogTime = millis();
-            } else if (rightButton.isHeld && !rightButton.longPressCommandSent) {
+            }
+            else if (rightButton.isHeld && !rightButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 X%d F%d", LONG_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 rightButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            
-            if (downButton.isPressed && !downButton.isHeld && !downButton.longPressCommandSent) {
+            // Down button jog handling.
+            if (downButton.isPressed && !downButton.isHeld && !downButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 Y-%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 downButton.isPressed = false;
                 lastJogTime = millis();
-            } else if (downButton.isHeld && !downButton.longPressCommandSent) {
+            }
+            else if (downButton.isHeld && !downButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 Y-%d F%d", LONG_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 downButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
-            
-            if (leftButton.isPressed && !leftButton.isHeld && !leftButton.longPressCommandSent) {
+            // Left button jog handling.
+            if (leftButton.isPressed && !leftButton.isHeld && !leftButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 X-%d F%d", SHORT_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 leftButton.isPressed = false;
                 lastJogTime = millis();
-            } else if (leftButton.isHeld && !leftButton.longPressCommandSent) {
+            }
+            else if (leftButton.isHeld && !leftButton.longPressCommandSent)
+            {
                 snprintf(jogCommand, sizeof(jogCommand), "$J=G91 G21 X-%d F%d", LONG_JOG_DISTANCE, JOG_FEEDRATE);
-                fnc_send_line(jogCommand, 100);
+                sendJogCommand(jogCommand);
                 leftButton.longPressCommandSent = true;
                 lastJogTime = millis();
             }
@@ -299,198 +334,86 @@ void handleButtons() {
     }
 }
 
-
-void updateLEDs() {
-    // If in startup mode, only show startup animation
-    if (LEDControl::LedColors::inStartupMode) {
-        LEDControl::LedColors::startupAnimation();
+// ======================= LED Update Function =======================
+// Update LED colors and animations based on the current machine state.
+void updateLEDs()
+{
+    if (inStartupPhase && !isHoming)
+    {
+        LEDControl::LedColors::machineInitAnimation();
         return;
     }
 
-    static MachineState prevState = machineState;
-    static bool transitionActive = false;
-    static unsigned long transitionStart = 0;
-
-    // Skip transitions for: IDLE<->JOGGING and RUNNING<->PAUSED
-    bool skipTransition = (machineState == IDLE && prevState == JOGGING) || 
-                         (machineState == JOGGING && prevState == IDLE) ||
-                         ((machineState == RUNNING && prevState == PAUSED) || 
-                          (machineState == PAUSED && prevState == RUNNING));
-
-    // Start transition when state changes (skip for ALARM and specified state pairs)
-    if ((machineState != prevState) && (machineState != ALARM) && !skipTransition) {
-        transitionActive = true;
-        transitionStart = millis();
-        prevState = machineState;  // Move this here to ensure state is updated
-    } else if (skipTransition) {
-        prevState = machineState;  // Update state without transition
-    }
-
-    auto interp = [&](uint32_t from, uint32_t to, uint8_t progress) -> uint32_t {
-        auto getR = [](uint32_t col) -> uint8_t { return (col >> 16) & 0xFF; };
-        auto getG = [](uint32_t col) -> uint8_t { return (col >> 8) & 0xFF; };
-        auto getB = [](uint32_t col) -> uint8_t { return col & 0xFF; };
-        uint8_t r = getR(from) + ((getR(to) - getR(from)) * progress) / 255;
-        uint8_t g = getG(from) + ((getG(to) - getG(from)) * progress) / 255;
-        uint8_t b = getB(from) + ((getB(to) - getB(from)) * progress) / 255;
-        return pixels.Color(r, g, b);
-    };
-
-    if (transitionActive) {
-        uint32_t targetColor;
-        switch (machineState) {
-            case IDLE:    targetColor = LEDControl::LedColors::COLOR_GREEN; break;
-            case RUNNING: targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
-            case PAUSED:  targetColor = LEDControl::LedColors::COLOR_ORANGE; break;
-            case JOGGING: targetColor = LEDControl::LedColors::COLOR_GREEN; break;
-            case HOMING:
-                // During startup phase use orange and then switch to cyan after
-                if (LEDControl::LedColors::inStartupMode) {
-                    targetColor = LEDControl::LedColors::COLOR_ORANGE;
-                } else {
-                    targetColor = pixels.Color(0, 255, 255); // Cyan for homing
-                }
-                break;
-            default:      targetColor = LEDControl::LedColors::COLOR_OFF; break;
-        }
-        uint32_t fromColor = pixels.getPixelColor(0);
-        uint32_t newColor;
-        uint32_t elapsed = millis() - transitionStart;
-        if (elapsed >= LEDControl::LedColors::TRANSITION_DURATION) {
-            transitionActive = false;
-            newColor = targetColor;
-        } else {
-            uint8_t progress = (elapsed * 255UL) / LEDControl::LedColors::TRANSITION_DURATION;
-            newColor = interp(fromColor, targetColor, progress);
-        }
-        for (int i = 0; i < LEDControl::LedColors::NUM_PIXELS; i++) {
-            pixels.setPixelColor(i, newColor);
-        }
+    switch (machineState)
+    {
+    case IDLE:
+        setAllPixels(LEDControl::LedColors::COLOR_GREEN);
+        pixels.setPixelColor(LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
         pixels.show();
-        return;  // Skip state animations until transition finishes
-    }
-
-    // State-specific animations when not transitioning:
-    if (machineState == HOMING) {
-        if (LEDControl::LedColors::inStartupMode) {
-            LEDControl::LedColors::startupAnimation();
-        } else {
-            LEDControl::LedColors::homingAnimation();
-        }
-    } else if (machineState == IDLE) {
-        if (justFinishedHoming) {
-            LEDControl::LedColors::readyBlinkAnimation();
-            if (LEDControl::LedColors::blinkCount >= 3) {
-                justFinishedHoming = false;
-                LEDControl::LedColors::blinkCount = 0;
-            }
-        } else {
-            // Fix: Use explicit LED positions instead of array indexing
-            pixels.setPixelColor(LEDControl::LedColors::LED_UP, LEDControl::LedColors::COLOR_GREEN);
-            pixels.setPixelColor(LEDControl::LedColors::LED_RIGHT, LEDControl::LedColors::COLOR_GREEN);
-            pixels.setPixelColor(LEDControl::LedColors::LED_DOWN, LEDControl::LedColors::COLOR_GREEN);
-            pixels.setPixelColor(LEDControl::LedColors::LED_LEFT, LEDControl::LedColors::COLOR_GREEN);
-            pixels.setPixelColor(LEDControl::LedColors::LED_PLAYPAUSE, LEDControl::LedColors::COLOR_OFF);
-        }
-    } 
-    else if (machineState == RUNNING) {
-        // Explicitly turn off all arrow LEDs first
-        pixels.setPixelColor(LEDControl::LedColors::LED_UP, LEDControl::LedColors::COLOR_OFF);
-        pixels.setPixelColor(LEDControl::LedColors::LED_RIGHT, LEDControl::LedColors::COLOR_OFF);
-        pixels.setPixelColor(LEDControl::LedColors::LED_DOWN, LEDControl::LedColors::COLOR_OFF);
-        pixels.setPixelColor(LEDControl::LedColors::LED_LEFT, LEDControl::LedColors::COLOR_OFF);
-        
-        // Handle play/pause LED animation
+        break;
+    case RUNNING:
+        setAllPixels(LEDControl::LedColors::COLOR_OFF);
         LEDControl::LedColors::runningAnimation(true);
-    } 
-    else if (machineState == PAUSED) {
-        // Explicitly turn off all arrow LEDs first
-        pixels.setPixelColor(LEDControl::LedColors::LED_UP, LEDControl::LedColors::COLOR_OFF);
-        pixels.setPixelColor(LEDControl::LedColors::LED_RIGHT, LEDControl::LedColors::COLOR_OFF);
-        pixels.setPixelColor(LEDControl::LedColors::LED_DOWN, LEDControl::LedColors::COLOR_OFF);
-        pixels.setPixelColor(LEDControl::LedColors::LED_LEFT, LEDControl::LedColors::COLOR_OFF);
-        
-        // Handle play/pause LED animation
+        pixels.show();
+        break;
+    case PAUSED:
+        setAllPixels(LEDControl::LedColors::COLOR_OFF);
         LEDControl::LedColors::pausedAnimation();
-    } else if (machineState == RUNNING ) {
-        // Arrow LEDs OFF; PLAY/PAUSE LED flickers orange
-        int arrowLEDs[4] = {
-            LEDControl::LedColors::LED_UP,
-            LEDControl::LedColors::LED_RIGHT,
-            LEDControl::LedColors::LED_DOWN,
-            LEDControl::LedColors::LED_LEFT
-        };
-        for (int i = 0; i < 4; i++) {
-            pixels.setPixelColor(arrowLEDs[i], LEDControl::LedColors::COLOR_OFF);
-        }
-        // Add running animation for play/pause LED when in RUNNING state
-        if (machineState == RUNNING) {
-            LEDControl::LedColors::runningAnimation(true); // true enables the flicker effect
-        }
-    } else if (machineState == PAUSED) {
-        // PAUSED: arrow LEDs off; PLAY/PAUSE breathes (handled by pausedAnimation)
-        for (int i = 0; i < 4; i++) {
-            pixels.setPixelColor(i, LEDControl::LedColors::COLOR_OFF);
-        }
-        LEDControl::LedColors::pausedAnimation();
-    } else if (machineState == HOMING) {
-        LEDControl::LedColors::homingAnimation();
-    } else if (machineState == ALARM) {
+        pixels.show();
+        break;
+    case ALARM:
         LEDControl::LedColors::alarmAnimation();
+        pixels.show();
+        break;
+    default:
+        pixels.show();
+        break;
     }
-
-    pixels.show();
 }
 
-// Callback function for machine state changes
-void show_state(const char* state) {
-    // Initialize startup timer on first state message
-    if (startupTime == 0) {
-        startupTime = millis();
-        LEDControl::LedColors::inStartupMode = true;  // Ensure startup mode is active
-    }
-    
-    // Ignore state changes during initial startup period
-    if (millis() - startupTime < 3000) {
-        return;  // Skip state processing during startup animation
-    }
-
+// ======================= State Change Handler =======================
+// Parse a new state string, update machine state and related flags, then refresh LED display.
+void show_state(const char *state)
+{
     strncpy(current_machine_state, state, sizeof(current_machine_state));
-    
-    if (strstr(state, "Run") == state) {
-        LEDControl::LedColors::inStartupMode = false;
+    ParsedState ps = parseStateString(state);
+    switch (ps)
+    {
+    case STATE_RUN:
         machineState = RUNNING;
+        alarm14Active = false;
         isHoming = false;
-    } else if (strstr(state, "Hold") == state) {
-        LEDControl::LedColors::inStartupMode = false;
+        break;
+    case STATE_HOLD:
         machineState = PAUSED;
         isHoming = false;
-    } else if (strstr(state, "Idle") == state) {
-        // Only process Idle state if we're not in startup mode
-        if (!LEDControl::LedColors::inStartupMode) {
-            if (isHoming) {
-                justFinishedHoming = true;
-                isHoming = false;
-                machineState = IDLE;
-            } else if (machineState == HOMING) {
-                machineState = IDLE;
-            } else {
-                machineState = IDLE;
-            }
-        }
-    } else if (strstr(state, "Alarm") == state && enableAlarmCheck) {
-        machineState = ALARM;
-        alarm14Active = _alarm14;
+        break;
+    case STATE_IDLE:
+        machineState = IDLE;
+        alarm14Active = false;
         isHoming = false;
-    } else if (strstr(state, "Jog") == state) {
+        break;
+    case STATE_ALARM:
+        machineState = ALARM;
+        alarm14Active = false;
+        isHoming = false;
+        break;
+    case STATE_JOG:
         machineState = JOGGING;
         isHoming = false;
-        LEDControl::LedColors::inStartupMode = false;
-    } else if (strstr(state, "Home") == state) {
-        machineState = HOMING;
+        break;
+    case STATE_HOME:
         isHoming = true;
-        justFinishedHoming = false;
+        break;
+    default:
+        break;
     }
-
     updateLEDs();
+}
+
+// ======================= Jog Command Sender =======================
+// Sends out a jog command string using the Grbl communication functions.
+void sendJogCommand(const char *axesCmd)
+{
+    fnc_send_line(axesCmd, 100);
 }

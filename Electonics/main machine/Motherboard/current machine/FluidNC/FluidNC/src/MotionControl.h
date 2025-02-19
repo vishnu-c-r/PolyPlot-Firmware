@@ -64,5 +64,5 @@ void mc_init();
 
 // Pen change functions
 bool mc_pen_change(plan_line_data_t* pl_data);  // Change return type to bool
-void mc_pick_pen(int penNumber);
-void mc_drop_pen(int penNumber);
+bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_AXIS]);
+bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_AXIS]);

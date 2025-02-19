@@ -17,6 +17,7 @@
 #include "Platform.h"             // WEAK_LINK
 #include "Job.h"                  // Job::active() and Job::channel()
 #include "Pen.h"
+#include "WebUI/ToolConfig.h"
 
 #include "Machine/MachineConfig.h"
 #include "Parameters.h"
@@ -307,53 +308,53 @@ Error gc_execute_line(char* line) {
                     case 6:
                         switch (mantissa) {
                             case 0:
-                                axis_command=AxisCommand::Module;
-                                mg_word_bit=ModalGroup::MG9;
-                                gc_block.modal.module=Module::steps;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
+                                gc_block.modal.module = Module::steps;
                                 break;
                             case 10:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen1;
                                 break;
                             case 20:
-                                mg_word_bit  = ModalGroup::MG9;
-                                axis_command = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
                                 gc_block.modal.module = Module::pen2;
                                 break;
                             case 30:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen3;
                                 break;
                             case 40:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen4;
                                 break;
                             case 50:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen5;
                                 break;
                             case 60:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen6;
                                 break;
                             case 70:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen7;
                                 break;
                             case 80:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::pen8;
                                 break;
                             case 90:
-                                axis_command = AxisCommand::Module;
-                                mg_word_bit  = ModalGroup::MG9;
+                                axis_command          = AxisCommand::Module;
+                                mg_word_bit           = ModalGroup::MG9;
                                 gc_block.modal.module = Module::home;
                                 break;
                             default:
@@ -602,11 +603,12 @@ Error gc_execute_line(char* line) {
                         }
                         mg_word_bit = ModalGroup::MM7;
                         break;
-                    case 6: 
+                    case 6:
                         // Tool change
                         gc_block.modal.tool_change = ToolChange::Enable;
-                        mg_word_bit = ModalGroup::MM6;
-                        log_info("M6 command received with T=" << gc_state.tool); // Add logging
+                        mg_word_bit                = ModalGroup::MM6;
+                        log_info("M6 command received with T=" << gc_state.tool);
+                        gc_block.modal.motion = Motion::Seek;
                         break;
                     case 7:
                     case 8:
@@ -975,33 +977,33 @@ Error gc_execute_line(char* line) {
         }
     }
 
-switch (gc_block.modal.module) {
-    case Module::pen1:
-    case Module::pen2:
-    case Module::pen3:
-    case Module::pen4:
-    case Module::pen5:
-    case Module::pen6:
-    case Module::pen7:
-    case Module::pen8:
-        break;
-    case Module::home:
-        break;
-    case Module::steps:
-        break;
-    default:
-        FAIL(Error::GcodeUnsupportedCommand);  // Undefined command or parameter
-}
+    switch (gc_block.modal.module) {
+        case Module::pen1:
+        case Module::pen2:
+        case Module::pen3:
+        case Module::pen4:
+        case Module::pen5:
+        case Module::pen6:
+        case Module::pen7:
+        case Module::pen8:
+            break;
+        case Module::home:
+            break;
+        case Module::steps:
+            break;
+        default:
+            FAIL(Error::GcodeUnsupportedCommand);  // Undefined command or parameter
+    }
 
-if (gc_block.non_modal_command == NonModal::AbsoluteOverride) 
-if (gc_block.modal.tool_change == ToolChange::Enable) {
-    if (bitnum_is_false(value_words, GCodeWord::T)) {
-        FAIL(Error::GcodeToolChangeRequiresToolNumber);
-    }
-    if (gc_state.tool < 0 || gc_state.tool >= MAX_PENS) {
-        FAIL(Error::GcodeUnsupportedToolNumber);
-    }
-}
+    if (gc_block.non_modal_command == NonModal::AbsoluteOverride)
+        if (gc_block.modal.tool_change == ToolChange::Enable) {
+            if (bitnum_is_false(value_words, GCodeWord::T)) {
+                FAIL(Error::GcodeToolChangeRequiresToolNumber);
+            }
+            if (gc_state.tool < 0 || gc_state.tool >= MAX_PENS) {
+                FAIL(Error::GcodeUnsupportedToolNumber);
+            }
+        }
 
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED. Error, if enabled while G53 is active.
     // [G40 Errors]: G2/3 arc is programmed after a G40. The linear move after disabling is less than tool diameter.
@@ -1411,12 +1413,12 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
         clear_bits(value_words, (bitnum_to_mask(GCodeWord::N) | bitnum_to_mask(GCodeWord::F)));
     } else {
         clear_bits(value_words,
-                    (bitnum_to_mask(GCodeWord::N) | bitnum_to_mask(GCodeWord::F) | bitnum_to_mask(GCodeWord::S) |
+                   (bitnum_to_mask(GCodeWord::N) | bitnum_to_mask(GCodeWord::F) | bitnum_to_mask(GCodeWord::S) |
                     bitnum_to_mask(GCodeWord::T)));  // Remove single-meaning value words.
     }
     if (axis_command != AxisCommand::None) {
         clear_bits(value_words,
-                    (bitnum_to_mask(GCodeWord::X) | bitnum_to_mask(GCodeWord::Y) | bitnum_to_mask(GCodeWord::Z) |
+                   (bitnum_to_mask(GCodeWord::X) | bitnum_to_mask(GCodeWord::Y) | bitnum_to_mask(GCodeWord::Z) |
                     bitnum_to_mask(GCodeWord::A) | bitnum_to_mask(GCodeWord::B) | bitnum_to_mask(GCodeWord::C)));  // Remove axis words.
     }
     clear_bits(value_words, bitnum_to_mask(GCodeWord::U));
@@ -1434,46 +1436,51 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
     plan_line_data_t* pl_data = &plan_data;
     memset(pl_data, 0, sizeof(plan_line_data_t));  // Zero pl_data struct
 
-// // Check if we have a valid module (pen selection) command
-// if (axis_command == AxisCommand::Module) {
-//     // Populate plan_data for the pen command
-//     pl_data->pen = static_cast<gcodenum_t>(gc_block.modal.module);
-//     pl_data->motion.rapidMotion = 1;
-//     pl_data->line_number = gc_block.values.n; // Set the line number for reporting
-//     pl_data->Axis_step = gc_block.values.u; // Set the number of steps for the module command
-//     // Queue the command in the planner if necessary
-//     plan_buffer_line(last_position, pl_data);
-//     protocol_buffer_synchronize();
-//     // Optionally send the command immediately if required
-//     mc_pen_module_controll(pl_data);
-//     gc_ovr_changed();
-// }
+    // // Check if we have a valid module (pen selection) command
+    // if (axis_command == AxisCommand::Module) {
+    //     // Populate plan_data for the pen command
+    //     pl_data->pen = static_cast<gcodenum_t>(gc_block.modal.module);
+    //     pl_data->motion.rapidMotion = 1;
+    //     pl_data->line_number = gc_block.values.n; // Set the line number for reporting
+    //     pl_data->Axis_step = gc_block.values.u; // Set the number of steps for the module command
+    //     // Queue the command in the planner if necessary
+    //     plan_buffer_line(last_position, pl_data);
+    //     protocol_buffer_synchronize();
+    //     // Optionally send the command immediately if required
+    //     mc_pen_module_controll(pl_data);
+    //     gc_ovr_changed();
+    // }
 
-// function for automatic tool change
-if (gc_block.modal.tool_change == ToolChange::Enable) {
-    log_info("Executing tool change from T" << gc_state.prev_tool << " to T" << gc_state.tool);
-    
-    // Initialize plan_data properly
-    memset(pl_data, 0, sizeof(plan_line_data_t));
-    pl_data->prevPenNumber = gc_state.prev_tool;
-    pl_data->penNumber = gc_state.tool;
-    pl_data->motion.rapidMotion = 1;
-    pl_data->feed_rate = 3000;
-    pl_data->line_number = gc_block.values.n;
+    // function for automatic tool change
+    if (gc_block.modal.tool_change == ToolChange::Enable) {
+        log_info("Executing tool change from T" << gc_state.prev_tool << " to T" << gc_state.tool);
 
-    // Make sure we're synchronized before tool change
-    protocol_buffer_synchronize();
-    
-    // Execute pen change with error checking
-    if (!mc_pen_change(pl_data)) {
-        log_error("Tool change failed");
-        gc_state.tool = gc_state.prev_tool;  // Restore previous tool on failure
-        return Error::GcodeToolChangeFailed;
+        // Ensure tool config is loaded
+        auto& toolConfig = WebUI::ToolConfig::getInstance();
+        if (!toolConfig.ensureLoaded()) {
+            log_error("Failed to load tool config before tool change");
+            return Error::GcodeToolChangeFailed;
+        }
+
+        // Initialize plan_data properly
+        memset(pl_data, 0, sizeof(plan_line_data_t));
+        pl_data->prevPenNumber      = gc_state.prev_tool;
+        pl_data->penNumber          = gc_state.tool;
+        pl_data->motion.rapidMotion = 0;  // Changed from 1 to 0 for linear motion
+        pl_data->line_number        = gc_block.values.n;
+
+        // Make sure we're synchronized before tool change
+        protocol_buffer_synchronize();
+
+        // Execute pen change with error checking
+        if (!mc_pen_change(pl_data)) {
+            log_error("Tool change failed");
+            gc_state.tool = gc_state.prev_tool;  // Restore previous tool on failure
+            return Error::GcodeToolChangeFailed;
+        }
+
+        gc_state.prev_tool = gc_state.tool;
     }
-    
-    gc_state.prev_tool = gc_state.tool;
-}
-
 
     // Intercept jog commands and complete error checking for valid jog commands and execute.
     // NOTE: G-code parser state is not updated, except the position to ensure sequential jog
@@ -1673,15 +1680,15 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if ((gc_state.modal.motion == Motion::CwArc) || (gc_state.modal.motion == Motion::CcwArc)) {
                 mc_arc(gc_block.values.xyz,
-                        pl_data,
-                        gc_state.position,
-                        gc_block.values.ijk,
-                        gc_block.values.r,
-                        axis_0,
-                        axis_1,
-                        axis_linear,
-                        clockwiseArc,
-                        int(gc_block.values.p));
+                       pl_data,
+                       gc_state.position,
+                       gc_block.values.ijk,
+                       gc_block.values.r,
+                       axis_0,
+                       axis_1,
+                       axis_linear,
+                       clockwiseArc,
+                       int(gc_block.values.p));
             } else {
                 // NOTE: gc_block.values.xyz is returned from mc_probe_cycle with the updated position value. So
                 // upon a successful probing cycle, the machine position and the returned value should be the same.
@@ -1723,14 +1730,14 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
                 // Move Z-axis to the top position
                 float target_position[MAX_N_AXIS];
                 copyAxes(target_position, gc_state.position);
-                
+
                 // Get the Z axis limits and use max travel as safe height
-                auto zAxis = config->_axes->_axis[Z_AXIS];
+                auto zAxis              = config->_axes->_axis[Z_AXIS];
                 target_position[Z_AXIS] = zAxis->_maxTravel;
 
                 plan_line_data_t pl_data;
                 memset(&pl_data, 0, sizeof(plan_line_data_t));
-                pl_data.feed_rate = zAxis->_maxRate;  // Use the Z axis max rate
+                pl_data.feed_rate          = zAxis->_maxRate;  // Use the Z axis max rate
                 pl_data.motion.rapidMotion = 1;
 
                 mc_linear(target_position, &pl_data, gc_state.position);
@@ -1766,8 +1773,8 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
 
             // gc_state.modal.override = OVERRIDE_DISABLE; // Not supported.
             if (RESTORE_OVERRIDES_AFTER_PROGRAM_END) {
-                sys.f_override        = FeedOverride::Default;
-                sys.r_override        = RapidOverride::Default;
+                sys.f_override = FeedOverride::Default;
+                sys.r_override = RapidOverride::Default;
             }
 
             // Execute coordinate change coolant stop.
@@ -1815,5 +1822,3 @@ if (gc_block.modal.tool_change == ToolChange::Enable) {
 */
 
 void WEAK_LINK user_m30() {}
-
-

@@ -9,8 +9,8 @@ axes:
     steps_per_mm: 160
     max_rate_mm_per_min: 20000
     acceleration_mm_per_sec2: 1000
-    max_travel_mm: 440           # Normal motion limit
-    pen_change_travel_mm: 500    # Extended limit for pen changes
+    max_travel_mm: 440           
+    pen_change_travel_mm: 500    
     soft_limits: true
     homing:
       cycle: 2
@@ -40,8 +40,8 @@ axes:
     steps_per_mm: 160
     max_rate_mm_per_min: 20000
     acceleration_mm_per_sec2: 1000
-    max_travel_mm: 302           # Normal motion limit
-    pen_change_travel_mm: 302    # Same as normal for Y
+    max_travel_mm: 302           
+    pen_change_travel_mm: 302    
     soft_limits: true
     homing:
       cycle: 3
@@ -69,8 +69,8 @@ axes:
     steps_per_mm: 160
     max_rate_mm_per_min: 2200
     acceleration_mm_per_sec2: 8000
-    max_travel_mm: 25            # Normal motion limit
-    pen_change_travel_mm: 25     # Same as normal for Z
+    max_travel_mm: 25            
+    pen_change_travel_mm: 25     
     soft_limits: true
     homing:
       cycle: 1
@@ -84,10 +84,6 @@ axes:
         output_pin: gpio.13
         min_pulse_us: 2500
         max_pulse_us: 500
-laser_pointer:
-  laserPointer_pin: gpio.35:high
-  x_offset: 10
-  y_offset: 20
 start:
   check_limits: false
 stepping:

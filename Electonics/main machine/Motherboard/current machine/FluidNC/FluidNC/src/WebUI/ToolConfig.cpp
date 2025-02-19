@@ -7,51 +7,25 @@ namespace WebUI {
 
     bool ToolConfig::loadConfig() {
         try {
-            std::error_code ec;
+            FileStream file(configPath, "r");
+            if (!file) {
+                log_error("Failed to open tool config file");
+                return false;
+            }
+
+            std::string jsonStr;
+            char buf[256];
+            size_t len;
+            while ((len = file.read(buf, sizeof(buf))) > 0) {
+                jsonStr.append(buf, len);
+            }
             
-            // Create config directory if it doesn't exist
-            if (!std::filesystem::exists("/sd/config", ec)) {
-                std::filesystem::create_directory("/sd/config", ec);
+            if (jsonStr.empty()) {
+                log_error("Empty tool config file");
+                return false;
             }
 
-            // If file doesn't exist, create default tool configuration
-            if (!std::filesystem::exists(configPath, ec)) {
-                // Create default tool configuration with 6 tools
-                tools.clear();
-                for(int i = 1; i <= 6; i++) {
-                    Tool tool;
-                    tool.number = i;
-                    tool.x = TOOL_X_POSITION;  // Use constant from header
-                    tool.y = -33.5f + ((i-1) * TOOL_Y_SPACING);  // Calculate Y position
-                    tool.z = TOOL_Z_LEVEL;     // Use constant from header
-                    tool.occupied = false;      // Initially empty
-                    tools.push_back(tool);
-                }
-                // Save the default configuration
-                return saveConfig();
-            }
-
-            {  // Scope for automatic file closure
-                FileStream file(configPath, "r");
-                if (!file) {
-                    log_error("Failed to open tool config file");
-                    return false;
-                }
-
-                std::string jsonStr;
-                char buf[256];
-                size_t len;
-                while ((len = file.read(buf, sizeof(buf))) > 0) {
-                    jsonStr.append(buf, len);
-                }
-                // File closed automatically here
-                
-                if (jsonStr.empty()) {
-                    return true;  // Empty file is valid
-                }
-
-                return fromJSON(jsonStr);
-            }
+            return fromJSON(jsonStr);
 
         } catch (const Error& err) {
             log_error("Error loading tool config: " << (int)err);
@@ -448,5 +422,12 @@ namespace WebUI {
         if (tools.empty()) {
             log_warn("No tool positions configured");
         }
+    }
+
+    bool ToolConfig::ensureLoaded() {
+        if (tools.empty()) {  // Changed from _tools to tools
+            return loadConfig();
+        }
+        return true;
     }
 }

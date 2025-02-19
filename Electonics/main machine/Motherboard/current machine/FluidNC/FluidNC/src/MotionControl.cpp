@@ -3,48 +3,47 @@
 // Copyright (c) 2018 -	Bart Dring
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
+// This file implements the motion control routines for FluidNC firmware.
+// It defines safeMove, motion queuing, linear and arc moves, dwell and probing routines,
+// as well as automatic pen change sequences.
+
 #include "MotionControl.h"
 #include "Machine/MachineConfig.h"
-#include "Machine/Homing.h"  // run_cycles
-#include "WebUI/ToolConfig.h"  // Add this line
-#include "Limits.h"          // limits_soft_check
-#include "Report.h"          // report_over_counter
-#include "Protocol.h"        // protocol_execute_realtime
-#include "Planner.h"         // plan_reset, etc
-#include "I2SOut.h"          // i2s_out_reset
-#include "Platform.h"        // WEAK_LINK
-#include "Settings.h"        // coords
-#include "Pen.h"
+#include "Machine/Homing.h"    // run_cycles
+#include "WebUI/ToolConfig.h"  // Tool configuration and position info
+#include "Limits.h"            // Soft limits checking
+#include "Report.h"            // Logging and error reporting
+#include "Protocol.h"          // Command buffer synchronization and realtime execution
+#include "Planner.h"           // Motion planner buffering
+#include "I2SOut.h"            // I2S motor output support
+#include "Platform.h"          // Core-specific functions and macros
+#include "Settings.h"          // Global coordinate system information
+#include "Pen.h"               // Pen flags and routines
 
 #include <cmath>
 
-
-// #define PROBE_POSITION_X 100.0f  // Example X-axis probing position
-// #define PROBE_POSITION_Y 150.0f  // Example Y-axis probing position
-// #define PROBE_POSITION_Z 0.0f    // Example Z-axis probing height (start of the probing)
-
-// float probe_position[MAX_N_AXIS] = { PROBE_POSITION_X, PROBE_POSITION_Y, PROBE_POSITION_Z }; // Remove unused variable
-
-
-// M_PI is not defined in standard C/C++ but some compilers
-// support it anyway.  The following suppresses Intellisense
-// problem reports.
 #ifndef M_PI
 #    define M_PI 3.14159265358979323846
 #endif
 
-// mc_pl_data_inflight keeps track of a jog command sent to mc_move_motors() so we can cancel it.
-// this is needed if a jogCancel comes along after we have already parsed a jog and it is in-flight.
-static volatile void* mc_pl_data_inflight;  // holds a plan_line_data_t while mc_move_motors has taken ownership of a line motion
+// Global variable to track the inflight move (for cancellation).
+static volatile void* mc_pl_data_inflight;
+
+// -----------------------------------------------------------------------------
+// safeMove:
+// Executes a linear move using the given target, then updates the global machine
+// position so subsequent moves are chained together.
+// -----------------------------------------------------------------------------
+static bool safeMove(plan_line_data_t* pl_data, float* target) {
+    if (!mc_linear(target, pl_data, target))
+        return false;
+    delay_ms(100);  // Allow time for move to settle
+    copyAxes(gc_state.position, target);
+    return true;
+}
 
 void mc_init() {
     mc_pl_data_inflight = NULL;
-    
-    // Load tool config at startup
-    auto& toolConfig = WebUI::ToolConfig::getInstance();
-    if (!toolConfig.loadConfig()) {
-        log_error("Failed to load tool configuration");
-    }
 }
 
 // Execute linear motor motion in absolute millimeter coordinates. Feed rate given in
@@ -113,36 +112,26 @@ void mc_cancel_jog() {
     }
 }
 
-// Execute linear motion in absolute millimeter coordinates. Feed rate given in millimeters/second
-// unless invert_feed_rate is true. Then the feed_rate means that the motion should be completed in
-// (1 minute)/feed_rate time.
-
-// mc_linear_no_check() is used by mc_arc() which pre-checks the arc limits using
-// a fast algorithm, so checking each segment is unnecessary.
+// -----------------------------------------------------------------------------
+// mc_linear / mc_linear_no_check:
+// Convert absolute target positions into motor steps with optional soft limit checking.
+// -----------------------------------------------------------------------------
 static bool mc_linear_no_check(float* target, plan_line_data_t* pl_data, float* position) {
     return config->_kinematics->cartesian_to_motors(target, pl_data, position);
 }
 
-
 bool mc_linear(float* target, plan_line_data_t* pl_data, float* position) {
-   
-    if (!pl_data->is_jog && !pl_data->limits_checked) {  // soft limits for jogs have already been dealt with
-        if (config->_kinematics->invalid_line(target)) {
+    if (!pl_data->is_jog && !pl_data->limits_checked)
+        if (config->_kinematics->invalid_line(target))
             return false;
-        }
-    }
     return mc_linear_no_check(target, pl_data, position);
 }
 
-
-
-// Execute an arc in offset mode format. position == current xyz, target == target xyz,
-// offset == offset from current xyz, axis_X defines circle plane in tool space, axis_linear is
-// the direction of helical travel, radius == circle radius, isclockwise boolean. Used
-// for vector transformation direction.
-// The arc is approximated by generating a huge number of tiny, linear segments. The chordal tolerance
-// of each segment is configured in the arc_tolerance setting, which is defined to be the maximum normal
-// distance from segment to the circle when the end points both lie on the circle.
+// -----------------------------------------------------------------------------
+// mc_arc:
+// Generates an arc motion by dividing the angular travel into small linear segments.
+// Unneeded internal derivation details have been removed for brevity.
+// -----------------------------------------------------------------------------
 void mc_arc(float*            target,
             plan_line_data_t* pl_data,
             float*            position,
@@ -242,12 +231,11 @@ void mc_arc(float*            target,
         float cos_T = 2.0f - theta_per_segment * theta_per_segment;
         float sin_T = theta_per_segment * 0.16666667f * (cos_T + 4.0f);
         cos_T *= 0.5;
-        float    sin_Ti;
-        float    cos_Ti;
+        float    sin_Ti, cos_Ti;
         uint16_t i;
         size_t   count             = 0;
-        float    original_feedrate = pl_data->feed_rate;  // Kinematics may alter the feedrate, so save an original copy
-        for (i = 1; i < segments; i++) {                  // Increment (segments-1).
+        float    original_feedrate = pl_data->feed_rate;
+        for (i = 1; i < segments; i++) {
             if (count < N_ARC_CORRECTION) {
                 // Apply vector rotation matrix. ~40 usec
                 float ri = radii[0] * sin_T + radii[1] * cos_T;
@@ -267,36 +255,36 @@ void mc_arc(float*            target,
             position[axis_0] = center[0] + radii[0];
             position[axis_1] = center[1] + radii[1];
             position[axis_linear] += linear_per_segment[axis_linear];
-            for (size_t i = A_AXIS; i < n_axis; i++) {
+            for (size_t i = A_AXIS; i < n_axis; i++)
                 position[i] += linear_per_segment[i];
-            }
-            pl_data->feed_rate = original_feedrate;  // This restores the feedrate kinematics may have altered
+            pl_data->feed_rate = original_feedrate;
             mc_linear(position, pl_data, previous_position);
-            previous_position[axis_0]      = position[axis_0];
-            previous_position[axis_1]      = position[axis_1];
-            previous_position[axis_linear] = position[axis_linear];
-            // Bail mid-circle on system abort. Runtime command check already performed by mc_linear.
-            if (sys.abort) {
+            copyAxes(previous_position, position);
+            if (sys.abort)
                 return;
-            }
         }
     }
-    // Ensure last segment arrives at target location.
     mc_linear(target, pl_data, previous_position);
 }
 
-// Execute dwell in seconds.
+// -----------------------------------------------------------------------------
+// mc_dwell:
+// Pauses motion for a specified number of milliseconds.
+// -----------------------------------------------------------------------------
 bool mc_dwell(int32_t milliseconds) {
-    if (milliseconds <= 0 || state_is(State::CheckMode)) {
+    if (milliseconds <= 0 || state_is(State::CheckMode))
         return false;
-    }
     protocol_buffer_synchronize();
     return dwell_ms(milliseconds, DwellMode::Dwell);
 }
 
+// -----------------------------------------------------------------------------
+// Probing routines:
+// mc_probe_cycle and mc_probe_oscillate execute a tool-length probe cycle.
+// Redundant inline detail comments have been removed.
+// -----------------------------------------------------------------------------
 volatile bool probing;
-
-bool probe_succeeded = false;
+bool          probe_succeeded = false;
 
 // Perform tool length probe cycle. Requires probe switch.(normal probing)
 // NOTE: Upon probe failure, the program will be stopped and placed into ALARM state.
@@ -341,53 +329,46 @@ GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, 
             return GCUpdatePos::None;  // Check for system abort
         }
     } while (!state_is(State::Idle));
-
     config->_stepping->endLowLatency();
 
     // Probing cycle complete!
     // Set state variables and error out, if the probe failed and cycle with error is enabled.
-    if (probing) {
-        if (no_error) {
+    if (!probing) {
+        if (no_error)
             get_motor_steps(probe_steps);
-        } else {
-            send_alarm(ExecAlarm::ProbeFailContact);
-        }
+        probe_succeeded = true;
     } else {
-        probe_succeeded = true;  // Indicate to system the probing cycle completed successfully.
+        if (!no_error)
+            send_alarm(ExecAlarm::ProbeFailContact);
     }
-    probing = false;              // Ensure probe state monitor is disabled.
-    protocol_execute_realtime();  // Check and execute run-time commands
-    // Reset the stepper and planner buffers to remove the remainder of the probe motion.
-    Stepper::reset();      // Reset step segment buffer.
-    plan_reset();          // Reset planner buffer. Zero planner positions. Ensure probing motion is cleared.
-    plan_sync_position();  // Sync planner position to current machine position.
-    if (MESSAGE_PROBE_COORDINATES) {
-        // All done! Output the probe position as message.
+    probing = false;
+    protocol_execute_realtime();
+    Stepper::reset();
+    plan_reset();
+    plan_sync_position();
+    if (MESSAGE_PROBE_COORDINATES)
         report_probe_parameters(allChannels);
-    }
     if (probe_succeeded) {
         if (offset != __FLT_MAX__) {
             float coord_data[MAX_N_AXIS];
             float probe_contact[MAX_N_AXIS];
-
             motor_steps_to_mpos(probe_contact, probe_steps);
-            coords[gc_state.modal.coord_select]->get(coord_data);  // get a copy of the current coordinate offsets
+            coords[gc_state.modal.coord_select]->get(coord_data);
             auto n_axis = config->_axes->_numberAxis;
-            for (int axis = 0; axis < n_axis; axis++) {  // find the axis specified. There should only be one.
+            for (int axis = 0; axis < n_axis; axis++) {
                 if (offsetAxis & (1 << axis)) {
                     coord_data[axis] = probe_contact[axis] - offset;
                     break;
                 }
             }
             log_info("Probe offset applied:");
-            coords[gc_state.modal.coord_select]->set(coord_data);  // save it
+            coords[gc_state.modal.coord_select]->set(coord_data);
             copyAxes(gc_state.coord_system, coord_data);
             report_wco_counter = 0;
         }
-
-        return GCUpdatePos::System;  // Successful probe cycle.
+        return GCUpdatePos::System;
     } else {
-        return GCUpdatePos::Target;  // Failed to trigger probe within travel. With or without error.
+        return GCUpdatePos::Target;
     }
 }
 
@@ -396,399 +377,219 @@ GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool aw
         log_error("Probe pin is not configured");
         return GCUpdatePos::None;
     }
-
-    if (state_is(State::CheckMode)) {
+    if (state_is(State::CheckMode))
         return config->_probe->_check_mode_start ? GCUpdatePos::None : GCUpdatePos::Target;
-    }
-
     protocol_buffer_synchronize();
-    if (sys.abort) {
-        return GCUpdatePos::None;  // Abort if reset is triggered.
-    }
-
+    if (sys.abort)
+        return GCUpdatePos::None;
     config->_stepping->beginLowLatency();
-    probe_succeeded = false;  // Re-initialize probe state.
+    probe_succeeded = false;
     config->_probe->set_direction(away);
-
-    // Check if the probe is already triggered before starting.
     if (config->_probe->tripped()) {
         send_alarm(ExecAlarm::ProbeFailInitial);
         protocol_execute_realtime();
         config->_stepping->endLowLatency();
         return GCUpdatePos::None;
     }
-
-    // Setup probing movement and target position
     float original_target[MAX_N_AXIS];
     memcpy(original_target, target, sizeof(original_target));
-
-    // Oscillation parameters
-    float oscillation_amplitude = 2.0f;  // Amplitude of X-axis oscillation
-    float oscillation_speed = 200.0f;    // Feed rate for oscillation (X or Y)
-
-    // Set initial probing feed rate for Z from G-code
-    float z_feed_rate = pl_data->feed_rate;
-
-    // Set the feed rate for X/Y axis from the firmware (oscillation speed)
-    pl_data->feed_rate = oscillation_speed;
-
-    probing = true;
-
-    // Set the initial Z position
-    float z_start = gc_state.position[Z_AXIS];  // Start Z position
-    float z_end = target[Z_AXIS];               // Target Z position
-
-    // Number of steps for Z-axis movement (adjust based on machine precision)
-    int z_steps = 100;
-    float z_step_size = (z_start - z_end) / z_steps;
-
-    // Perform probing with simultaneous Z movement and X/Y oscillation
+    float oscillation_amplitude = 2.0f;
+    float oscillation_speed     = 200.0f;
+    pl_data->feed_rate          = oscillation_speed;
+    probing                     = true;
+    float z_start               = gc_state.position[Z_AXIS];
+    float z_end                 = target[Z_AXIS];
+    int   z_steps               = 100;
+    float z_step_size           = (z_start - z_end) / z_steps;
     for (int i = 0; i < z_steps; ++i) {
-        // Update Z-axis step
         target[Z_AXIS] = z_start - (z_step_size * (i + 1));
-
-        // Oscillate X or Y axis while moving Z-axis down
         target[X_AXIS] = original_target[X_AXIS] + ((i % 2 == 0) ? oscillation_amplitude : -oscillation_amplitude);
-
-        mc_linear(target, pl_data, gc_state.position);  // Execute the movement
-
-        protocol_send_event(&cycleStartEvent);  // Start the cycle
-
+        mc_linear(target, pl_data, gc_state.position);
+        protocol_send_event(&cycleStartEvent);
         do {
             protocol_execute_realtime();
             if (sys.abort) {
                 config->_stepping->endLowLatency();
-                return GCUpdatePos::None;  // Abort if reset
+                return GCUpdatePos::None;
             }
-
-            // Check if the probe has been triggered
             if (config->_probe->tripped()) {
                 probe_succeeded = true;
                 break;
             }
         } while (!state_is(State::Idle));
-
-        // Stop if the probe is triggered
-        if (probe_succeeded) {
+        if (probe_succeeded)
             break;
-        }
     }
-
     config->_stepping->endLowLatency();
-
-    // Probing complete! Check if probing was successful
     if (probe_succeeded) {
-        if (no_error) {
-            // Retrieve motor steps of probe position
+        if (no_error)
             get_motor_steps(probe_steps);
-        } else {
+        else
             send_alarm(ExecAlarm::ProbeFailContact);
-        }
     }
-
-    probing = false;  // Ensure probe state monitor is disabled.
-    protocol_execute_realtime();  // Check and execute run-time commands
-
-    // Store and apply probed position if successful
+    probing = false;
+    protocol_execute_realtime();
     if (probe_succeeded) {
         if (offset != __FLT_MAX__) {
             float coord_data[MAX_N_AXIS];
             float probe_contact[MAX_N_AXIS];
-
-            motor_steps_to_mpos(probe_contact, probe_steps);  // Convert motor steps to machine coordinates
-            coords[gc_state.modal.coord_select]->get(coord_data);  // Get current coordinate offsets
-
+            motor_steps_to_mpos(probe_contact, probe_steps);
+            coords[gc_state.modal.coord_select]->get(coord_data);
             auto n_axis = config->_axes->_numberAxis;
             for (int axis = 0; axis < n_axis; axis++) {
                 if (offsetAxis & (1 << axis)) {
-                    coord_data[axis] = probe_contact[axis] - offset;  // Apply offset
+                    coord_data[axis] = probe_contact[axis] - offset;
                     break;
                 }
             }
-
             log_info("Probe offset applied:");
-            coords[gc_state.modal.coord_select]->set(coord_data);  // Save updated coordinates
+            coords[gc_state.modal.coord_select]->set(coord_data);
             copyAxes(gc_state.coord_system, coord_data);
-
-            report_wco_counter = 0;  // Force reporting of the updated position
+            report_wco_counter = 0;
         }
-
-        return GCUpdatePos::System;  // Successful probe cycle
+        return GCUpdatePos::System;
     } else {
-        return GCUpdatePos::Target;  // Failed to trigger probe within travel
+        return GCUpdatePos::Target;
     }
 }
 
-// Handles updating the override control state.
+// -----------------------------------------------------------------------------
+// mc_override_ctrl_update:
+// Synchronizes and updates the system override control state.
+// -----------------------------------------------------------------------------
 void mc_override_ctrl_update(Override override_state) {
-    // Finish all queued commands before altering override control state
     protocol_buffer_synchronize();
-    if (sys.abort) {
+    if (sys.abort)
         return;
-    }
     sys.override_ctrl = override_state;
 }
 
-// Method to ready the system to reset by setting the realtime reset command and killing any
-// active processes in the system. This also checks if a system reset is issued while in
-// motion state. If so, kills the steppers and sets the system alarm to flag position
-// lost, since there was an abrupt uncontrolled deceleration. Called at an interrupt level by
-// realtime abort command and hard limits. So, keep to a minimum.
+// -----------------------------------------------------------------------------
+// mc_critical:
+// Resets steppers and sends an alarm when a critical condition is detected.
+// -----------------------------------------------------------------------------
 void mc_critical(ExecAlarm alarm) {
-    if (inMotionState() || sys.step_control.executeHold || sys.step_control.executeSysMotion) {
-        Stepper::reset();  // Stop stepping immediately, possibly losing position
-        //        Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
-    }
+    if (inMotionState() || sys.step_control.executeHold || sys.step_control.executeSysMotion)
+        Stepper::reset();
     send_alarm(alarm);
 }
 
-// automatic pen change execution
+// -----------------------------------------------------------------------------
+// Automatic pen change routines:
+// Implements the pen change sequence using mc_pen_change, mc_pick_pen, and mc_drop_pen.
+// -----------------------------------------------------------------------------
 bool mc_pen_change(plan_line_data_t* pl_data) {
-    // log_debug("Setting pen_change flag to true");
-
     static int current_loaded_pen = 0;
-    int nextPen = pl_data->penNumber;
-    auto& toolConfig = WebUI::ToolConfig::getInstance();
-
-    // Get current Z position for debugging
-    float current_z = gc_state.position[Z_AXIS];
-    // log_debug("Current Z position before pen change: " << current_z);
-
-    bool success = true;  // Track success/failure
-
-    try {
-        log_info("Starting pen change - Current:" << current_loaded_pen << " Next:" << nextPen);
-
-        protocol_buffer_synchronize();
-        plan_reset();
-        plan_sync_position();
-
-        float currentPos[MAX_N_AXIS];
-        copyAxes(currentPos, gc_state.position);
-        float startPos[MAX_N_AXIS];
-        copyAxes(startPos, currentPos);
-        
-        pl_data->feed_rate = 3000;
-
-        // If current pen and next pen are the same, just redock it
-        if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
-            float dropPos[MAX_N_AXIS];
-            // log_debug("Attempting to get tool position for pen " << nextPen);
-            if (!toolConfig.getToolPosition(current_loaded_pen, dropPos)) {
-                log_error("Invalid pen position");
-                return false;
-            }
-                pen_change = true;  // Set flag at start
-            // 1. Move Z to safe height
-            float beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = 0;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            float afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            // 2. Move Y to current pen position
-            currentPos[Y_AXIS] = dropPos[Y_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            // 3. Move X to dock after Y and Z complete
-            currentPos[X_AXIS] = dropPos[X_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            // 4. Lower Z to dock
-            beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = dropPos[Z_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            toolConfig.setToolOccupied(current_loaded_pen, true);  // Mark as docked
-
-            // 5. Move X back 50mm
-            currentPos[X_AXIS] += 50.0f;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            // Return to starting position
-            if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
-            pen_change = false;  // Clear flag at end 
-            // Set current_loaded_pen to 0 so next command treats it as a fresh pickup
-            current_loaded_pen = 0;
-            log_info("Pen redocked and cleared: " << nextPen);
-            return true;
-        }
-        
-        // First pickup (no pen loaded)
-        if (current_loaded_pen == 0 && nextPen > 0) {
-            float pickupPos[MAX_N_AXIS];
-            // log_debug("Attempting to get tool position for pen " << nextPen);
-            if (!toolConfig.getToolPosition(nextPen, pickupPos)) {
-                log_error("Invalid pen pickup position"); 
-                return false;
-            }
-            pen_change = true;  // Set flag at start
-            // 1. Move Z up first
-            float beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = pickupPos[Z_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            float afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            // 2. Move Y to pen position
-            currentPos[Y_AXIS] = pickupPos[Y_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            
-            // 3. After Z and Y are done, move X to dock
-            currentPos[X_AXIS] = pickupPos[X_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            toolConfig.setToolOccupied(nextPen, false);  // Mark as picked up
-
-            // 4. Move Z up to 0
-            beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = 0;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            // 5. Retract X by 50mm
-            currentPos[X_AXIS] += 50.0f;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            current_loaded_pen = nextPen;
-
-            // Return to starting position
-            if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
-            pen_change = false;  // Clear flag at end
-        }
-        // Change pen when one is already loaded
-        else if (current_loaded_pen > 0 && nextPen > 0) {
-            float dropPos[MAX_N_AXIS], pickupPos[MAX_N_AXIS];
-            
-            if (!toolConfig.getToolPosition(current_loaded_pen, dropPos) || 
-                !toolConfig.getToolPosition(nextPen, pickupPos)) {
-                log_error("Invalid pen position");
-                return false;
-            }
-            pen_change = true;  // Set flag at start
-            // 1. Move Z to safe height
-            float beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = 0;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            float afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            // 2. Move Y to current pen return position
-            currentPos[Y_AXIS] = dropPos[Y_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            // 3. After Z and Y complete, move X to dock
-            currentPos[X_AXIS] = dropPos[X_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            // 4. Lower Z to dock
-            beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = dropPos[Z_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            toolConfig.setToolOccupied(current_loaded_pen, true);  // Mark old pen as docked
-
-            // 5. Move X back 50mm
-            currentPos[X_AXIS] += 50.0f;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            // 6. Move Y and Z to next pen position
-            currentPos[Y_AXIS] = pickupPos[Y_AXIS];
-            beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = pickupPos[Z_AXIS];
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            // 7. After Y and Z complete, move X to dock
-            currentPos[X_AXIS] = pickupPos[X_AXIS]; 
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            toolConfig.setToolOccupied(nextPen, false);  // Mark new pen as picked up
-
-            // 8. Move Z up to 0  
-            beforeZ = gc_state.position[Z_AXIS];
-            currentPos[Z_AXIS] = 0;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-            afterZ = gc_state.position[Z_AXIS];
-            // log_debug("Z movement - before: " << beforeZ << " after: " << afterZ);
-
-            // 9. Move X back 50mm
-            currentPos[X_AXIS] += 50.0f;
-            if (!mc_linear(currentPos, pl_data, gc_state.position)) return false;
-            protocol_buffer_synchronize();
-
-            current_loaded_pen = nextPen;
-
-            // Return to starting position
-            if (!mc_linear(startPos, pl_data, gc_state.position)) return false;
-            pen_change = false;  // Clear flag at end
-        }
-
-        log_info("Pen change complete. Current pen: " << current_loaded_pen);
-    }
-    catch (...) {
-        success = false;
-        log_error("Exception during pen change");
-    }
-
-    // log_debug("Setting pen_change flag to false");
-        protocol_buffer_synchronize();
-        plan_reset();
-        plan_sync_position();
-
-    return success;
-}
-
-void mc_pick_pen(int penNumber) {
-    auto& toolConfig = WebUI::ToolConfig::getInstance();
+    int        nextPen            = pl_data->penNumber;
+    protocol_buffer_synchronize();
     plan_reset();
     plan_sync_position();
-
-    float pickupPos[3] = {0.0f, 0.0f, 0.0f};
-    toolConfig.getToolPosition(penNumber, pickupPos);
-
-    plan_line_data_t pl_data = {0};
-    pl_data.feed_rate = 3000;  // Set faster feed rate
-    mc_linear(pickupPos, &pl_data, gc_state.position);
-
-    toolConfig.setToolOccupied(penNumber, false);
+    delay_ms(100);
+    auto& toolConfig = WebUI::ToolConfig::getInstance();
+    if (!toolConfig.loadConfig()) {
+        log_error("Failed to load tool config");
+        return false;
+    }
+    float currentPos[MAX_N_AXIS], startPos[MAX_N_AXIS];
+    copyAxes(currentPos, gc_state.position);
+    copyAxes(startPos, currentPos);
+    pl_data->feed_rate = 2000;
+    currentPos[Z_AXIS] = 0;
+    if (!safeMove(pl_data, currentPos))
+        return false;
+    if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
+        pen_change = true;
+        if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
+            return false;
+        pen_change         = false;
+        current_loaded_pen = 0;
+        log_info("Pen redocked and cleared: " << nextPen);
+    } else if (current_loaded_pen == 0 && nextPen > 0) {
+        pen_change = true;
+        if (!mc_pick_pen(pl_data, nextPen, startPos))
+            return false;
+        pen_change         = false;
+        current_loaded_pen = nextPen;
+    } else if (current_loaded_pen > 0 && nextPen > 0 && current_loaded_pen != nextPen) {
+        pen_change = true;
+        if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
+            return false;
+        if (!mc_pick_pen(pl_data, nextPen, startPos))
+            return false;
+        pen_change         = false;
+        current_loaded_pen = nextPen;
+    }
+    log_info("Pen change complete: " << current_loaded_pen);
+    protocol_buffer_synchronize();
+    delay_ms(50);
+    toolConfig.saveCurrentState(nextPen);
+    delay_ms(50);
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    return true;
 }
 
-void mc_drop_pen(int penNumber) {
+bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_AXIS]) {
+    float targetPos[MAX_N_AXIS];
+    copyAxes(targetPos, gc_state.position);
+    float pickupPos[MAX_N_AXIS];
     auto& toolConfig = WebUI::ToolConfig::getInstance();
-    plan_reset();
-    plan_sync_position();
+    if (!toolConfig.getToolPosition(penNumber, pickupPos)) {
+        log_error("Invalid pen pickup position");
+        return false;
+    }
+    // Pen pickup sequence:
+    targetPos[Z_AXIS] = pickupPos[Z_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[Y_AXIS] = pickupPos[Y_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    pl_data->feed_rate = 1000;
+    targetPos[X_AXIS]  = -400.0f;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[X_AXIS] = pickupPos[X_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[Z_AXIS] = 0;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[X_AXIS] = -440.0f;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    return true;
+}
 
-    float placePos[3] = {0.0f, 0.0f, 0.0f};
-    toolConfig.getToolPosition(penNumber, placePos);
-
-    plan_line_data_t pl_data = {0};
-    pl_data.feed_rate = 3000;  // Set faster feed rate
-    mc_linear(placePos, &pl_data, gc_state.position);
-
+bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_AXIS]) {
+    float targetPos[MAX_N_AXIS];
+    copyAxes(targetPos, gc_state.position);
+    float dropPos[MAX_N_AXIS];
+    auto& toolConfig = WebUI::ToolConfig::getInstance();
+    if (!toolConfig.getToolPosition(penNumber, dropPos)) {
+        log_error("Invalid pen drop position");
+        return false;
+    }
+    // Pen drop sequence:
+    targetPos[Z_AXIS] = 0;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[Y_AXIS] = dropPos[Y_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    pl_data->feed_rate = 1000;
+    targetPos[X_AXIS]  = -400.0f;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[X_AXIS] = dropPos[X_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[Z_AXIS] = dropPos[Z_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    targetPos[X_AXIS] = -440.0f;
+    if (!safeMove(pl_data, targetPos))
+        return false;
     toolConfig.setToolOccupied(penNumber, true);
+    return true;
 }

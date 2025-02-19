@@ -280,6 +280,9 @@ void protocol_main_loop() {
             activeChannel = nullptr;
         }
 
+        // Added: Always enable motors on each iteration.
+        config->_axes->set_disable(false);
+
         // Auto-cycle start any queued moves.
         protocol_auto_cycle_start();
         protocol_execute_realtime();  // Runtime command check point.

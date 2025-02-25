@@ -1589,10 +1589,18 @@ namespace WebUI {
     }
 #    endif
 
+    // Enhanced CORS header support: use Origin header if provided
     void Web_Server::addCORSHeaders() {
-        _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+        const char* origin = _webserver->header("Origin").c_str();
+        if (origin && strlen(origin) > 0) {
+            _webserver->sendHeader("Access-Control-Allow-Origin", origin);
+        } else {
+            _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+        }
         _webserver->sendHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-        _webserver->sendHeader("Access-Control-Allow-Headers", "Content-Type");
+        _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+        _webserver->sendHeader("Access-Control-Allow-Credentials", "true");
+        _webserver->sendHeader("Access-Control-Max-Age", "3600");
     }
 
     void Web_Server::handleGetPenConfig() {

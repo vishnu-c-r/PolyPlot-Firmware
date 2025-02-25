@@ -564,6 +564,10 @@ namespace WebUI {
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
                 log_info("WiFi Disconnected");
+                if (wifi_mode->get() == WiFiFallback) {
+                    log_info("Falling back to AP mode...");
+                    StartAP();
+                }
                 break;
             default:
                 //log_info("WiFi event:" << event);

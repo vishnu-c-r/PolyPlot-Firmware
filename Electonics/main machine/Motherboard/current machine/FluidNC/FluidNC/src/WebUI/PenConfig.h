@@ -13,6 +13,7 @@ namespace WebUI {
         int zValue;
         std::vector<std::string> penPick;
         std::vector<std::string> penDrop;
+        int FeedRate;
         bool skipped;
     };
 
@@ -34,7 +35,7 @@ namespace WebUI {
 
     private:
         std::vector<Pen> pens;
-        const char* configPath = "/sd/config/penconfig.json";  // Updated path
+        const char* configPath = "/spiffs/penConfig.json";  // Updated path
 
         bool parseJsonString(const std::string& json, const char* key, std::string& value);
         bool parseJsonInt(const std::string& json, const char* key, int& value);

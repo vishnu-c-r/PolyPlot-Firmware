@@ -37,7 +37,6 @@ static volatile void* mc_pl_data_inflight;
 static bool safeMove(plan_line_data_t* pl_data, float* target) {
     if (!mc_linear(target, pl_data, target))
         return false;
-    delay_ms(100);  // Allow time for move to settle
     copyAxes(gc_state.position, target);
     return true;
 }
@@ -482,9 +481,8 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     static int current_loaded_pen = 0;
     int        nextPen            = pl_data->penNumber;
     protocol_buffer_synchronize();
-    plan_reset();
+    // plan_reset();
     plan_sync_position();
-    delay_ms(100);
     auto& toolConfig = WebUI::ToolConfig::getInstance();
     if (!toolConfig.loadConfig()) {
         log_error("Failed to load tool config");
@@ -520,10 +518,8 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         current_loaded_pen = nextPen;
     }
     log_info("Pen change complete: " << current_loaded_pen);
-    protocol_buffer_synchronize();
-    delay_ms(50);
+
     toolConfig.saveCurrentState(nextPen);
-    delay_ms(50);
     protocol_buffer_synchronize();
     plan_sync_position();
     return true;
@@ -546,7 +542,7 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
     pl_data->feed_rate = 1000;
-    targetPos[X_AXIS]  = -400.0f;
+    targetPos[X_AXIS]  = -440.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
     targetPos[X_AXIS] = pickupPos[X_AXIS];
@@ -578,7 +574,7 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
     pl_data->feed_rate = 1000;
-    targetPos[X_AXIS]  = -400.0f;
+    targetPos[X_AXIS]  = -440.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
     targetPos[X_AXIS] = dropPos[X_AXIS];

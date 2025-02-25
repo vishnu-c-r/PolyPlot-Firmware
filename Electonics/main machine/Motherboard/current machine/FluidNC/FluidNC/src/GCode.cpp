@@ -688,8 +688,8 @@ Error gc_execute_line(char* line) {
             // NOTE: All remaining letters assign values.
             default:
                 /* Non-Command Words: This initial parsing phase only checks for repeats of the remaining
-               legal g-code words and stores their value. Error-checking is performed later since some
-               words (I,J,K,L,P,R) have multiple connotations and/or depend on the issued commands. */
+                legal g-code words and stores their value. Error-checking is performed later since some
+                 words (I,J,K,L,P,R) have multiple connotations and/or depend on the issued commands. */
                 GCodeWord axis_word_bit;
                 switch (letter) {
                     case 'A':
@@ -1466,7 +1466,7 @@ Error gc_execute_line(char* line) {
         memset(pl_data, 0, sizeof(plan_line_data_t));
         pl_data->prevPenNumber      = gc_state.prev_tool;
         pl_data->penNumber          = gc_state.tool;
-        pl_data->motion.rapidMotion = 0;  // Changed from 1 to 0 for linear motion
+        pl_data->motion.rapidMotion = 1;
         pl_data->line_number        = gc_block.values.n;
 
         // Make sure we're synchronized before tool change

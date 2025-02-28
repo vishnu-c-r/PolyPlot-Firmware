@@ -57,7 +57,7 @@ namespace WebUI {
             j.member("name", pen.name.c_str());
             j.member("color", pen.color.c_str());
             j.member("zValue", std::to_string(pen.zValue).c_str());
-            j.member("FeedRate", std::to_string(pen.FeedRate).c_str());
+            j.member("feedRate", std::to_string(pen.feedRate).c_str());
             j.begin_array("penPick");
             for (const auto& pick : pen.penPick)
                 j.string(pick.c_str());
@@ -96,7 +96,7 @@ namespace WebUI {
                 validPen = false;
             if (!parseJsonInt(obj, "zValue", pen.zValue))
                 validPen = false;
-            if (!parseJsonInt(obj, "FeedRate", pen.FeedRate))
+            if (!parseJsonInt(obj, "feedRate", pen.feedRate))
                 validPen = false;
             if (!parseJsonStringArray(obj, "penPick", pen.penPick))
                 validPen = false;

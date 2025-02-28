@@ -13,7 +13,7 @@ namespace WebUI {
         int zValue;
         std::vector<std::string> penPick;
         std::vector<std::string> penDrop;
-        int FeedRate;
+        int feedRate;
         bool skipped;
     };
 

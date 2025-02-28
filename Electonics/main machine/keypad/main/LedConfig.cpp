@@ -1,263 +1,409 @@
+/**
+ * LED Controller Implementation
+ *
+ * Handles LED animations and transitions for the CNC controller
+ * Provides visual feedback for different machine states
+ */
 #include "LedConfig.hpp"
-#include <math.h> // For sin(), PI
+#include "main.h"
 
 namespace LEDControl
 {
-
-    // ------------------------------------------------------------------------
-    // Static Members Definitions
-    // Colors for different machine states and animation types.
+    //---------------------------------------------------------------
+    //              Static Member Initialization
+    //---------------------------------------------------------------
+    // Color definitions - initialized in init()
     uint32_t LedColors::COLOR_RED;
     uint32_t LedColors::COLOR_GREEN;
     uint32_t LedColors::COLOR_ORANGE;
     uint32_t LedColors::COLOR_OFF;
+    uint32_t LedColors::Color1;
+    uint32_t LedColors::Color2;
+    uint32_t LedColors::Color3;
+    uint32_t LedColors::lastColor;
 
-    // Flags and counters tracking animation states.
-    bool LedColors::inStartupMode = true;
-    bool LedColors::inHomingMode = false;
+    // Animation state variables
+    bool LedColors::inHomingMode = false; // UNUSED - only initialized but never read
     uint8_t LedColors::blinkCount = 0;
     uint8_t LedColors::fadeValue = 0;
     int8_t LedColors::fadeStep = 5;
     unsigned long LedColors::lastAnimationUpdate = 0;
     unsigned long LedColors::flickerTimer = 0;
+    unsigned long LedColors::previousMillis = 0;
+    bool LedColors::isHomed = false;
+    uint16_t LedColors::step = 0;
 
-    // Pointer to the NeoPixel object; used to update LED colors.
+    // State tracking
+    LedColors::State LedColors::currentState = IDLE;
+    bool LedColors::initAnimationComplete = false;
+
+    // NeoPixel reference
     Adafruit_NeoPixel *LedColors::pixelsPtr = nullptr;
 
-    // ------------------------------------------------------------------------
-    // Initialization:
-    // Sets up the NeoPixel array and assigns our color scheme.
+    /**
+     * Interpolate between two colors by given step value
+     * Used for smooth transitions between colors
+     */
+    uint32_t LedColors::interpolateColor(uint32_t color1, uint32_t color2, uint16_t step)
+    {
+        // This function duplicates functionality with interp(),
+        // but is used throughout the code so keep it
+        // Extract color components
+        uint8_t r1 = (color1 >> 16) & 0xFF;
+        uint8_t g1 = (color1 >> 8) & 0xFF;
+        uint8_t b1 = color1 & 0xFF;
+
+        uint8_t r2 = (color2 >> 16) & 0xFF;
+        uint8_t g2 = (color2 >> 8) & 0xFF;
+        uint8_t b2 = color2 & 0xFF;
+
+        // Linear interpolation of each component
+        uint8_t r = r1 + ((r2 - r1) * step) / 255;
+        uint8_t g = g1 + ((g2 - g1) * step) / 255;
+        uint8_t b = b1 + ((b2 - b1) * step) / 255;
+
+        return pixelsPtr->Color(r, g, b);
+    }
+
+    /**
+     * Initialize LED system and play startup animation
+     */
     void LedColors::init(Adafruit_NeoPixel &pixels)
     {
+        // Store reference to NeoPixel object
         pixelsPtr = &pixels;
-        COLOR_RED = pixels.Color(255, 0, 0);      // Used for startup/error animations.
-        COLOR_GREEN = pixels.Color(0, 255, 0);    // Used for "ready" state.
-        COLOR_ORANGE = pixels.Color(255, 100, 0); // Used for paused state.
-        COLOR_OFF = pixels.Color(0, 0, 0);        // Off (black).
+
+        // Initialize NeoPixel library
+        pixels.begin();
+        pixels.setBrightness(DEFAULT_BRIGHTNESS);
         pixels.clear();
         pixels.show();
-    }
 
-    // ------------------------------------------------------------------------
-    // Helper function:
-    // setAllPixels() applies the same color to every LED on the strip.
-    static void setAllPixels(uint32_t color)
-    {
-        for (int i = 0; i < NUM_PIXELS; i++)
+        // Define standard colors
+        COLOR_RED = pixels.Color(255, 0, 0);      // Full red
+        COLOR_GREEN = pixels.Color(0, 255, 0);    // Full green
+        COLOR_ORANGE = pixels.Color(255, 100, 0); // Bright orange
+        COLOR_OFF = pixels.Color(0, 0, 0);        // Off
+
+        // Define animation colors
+        Color1 = pixels.Color(255, 165, 0); // Orange
+        Color2 = pixels.Color(255, 0, 255); // Magenta
+        Color3 = pixels.Color(0, 255, 255); // Cyan
+
+        // Run startup animation only once
+        if (!initAnimationComplete)
         {
-            LedColors::getPixelsPtr()->setPixelColor(i, color);
+            // Phase 1: Fade from black to red
+            for (int j = 0; j <= 255; j += 3)
+            {
+                uint32_t interpolatedColor = interpolateColor(COLOR_OFF, COLOR_RED, j);
+                for (int i = 0; i < NUM_PIXELS; i++)
+                {
+                    pixelsPtr->setPixelColor(i, interpolatedColor);
+                }
+                pixelsPtr->show();
+                delay(TRANSITION_INTERVAL);
+            }
+            delay(HOLD_TIME); // Hold red briefly
+
+            // Phase 2: Transition from red to orange
+            for (int j = 0; j <= 255; j += 3)
+            {
+                uint32_t interpolatedColor = interpolateColor(COLOR_RED, Color1, j);
+                for (int i = 0; i < NUM_PIXELS; i++)
+                {
+                    pixelsPtr->setPixelColor(i, interpolatedColor);
+                }
+                pixelsPtr->show();
+                delay(TRANSITION_INTERVAL);
+            }
+            delay(HOLD_TIME); // Hold orange briefly
+
+            // Set first homing color to ensure smooth transition to homing animation
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, Color1);
+            }
+            pixelsPtr->show();
+            lastColor = Color1;
+
+            initAnimationComplete = true; // Mark as complete
         }
+        // Don't clear LEDs - let homing animation take over seamlessly
     }
 
-    // ------------------------------------------------------------------------
-    // startupAnimation():
-    // Produces a "breathing" red effect by varying brightness via a sine function.
-    // It uses the current state as the starting point, so transition is smooth.
-    void LedColors::startupAnimation()
-    {
-        // Calculate a brightness value oscillating between 0 and 255.
-        uint8_t brightness = (uint8_t)(127 + 127 * sin(millis() / 500.0));
-        // Create a red color with the computed brightness.
-        uint32_t color = getPixelsPtr()->Color(brightness, 0, 0);
-        for (int i = 0; i < NUM_PIXELS; i++)
-        {
-            // Set each LED to the red color.
-            getPixelsPtr()->setPixelColor(i, color);
-        }
-        getPixelsPtr()->show();
-    }
-
-    // ------------------------------------------------------------------------
-    // homingAnimation():
-    // Transitions from the startup red color to a sequence of custom colors
-    // (Orange, Blue, Yellow, Purple) using a linear interpolation.
-    // The interpolation factor increases gradually over time based on
-    // homingInterpolationDuration.
+    /**
+     * Animation displayed during homing operations
+     * Cycles through colors in a smoothly transitioning pattern
+     */
     void LedColors::homingAnimation()
     {
-        // Define the palette of target colors for homing.
-        static const uint32_t homingPaletteColors[] = {
-            getPixelsPtr()->Color(255, 165, 0), // Orange
-            getPixelsPtr()->Color(0, 0, 255),   // Blue
-            getPixelsPtr()->Color(255, 255, 0), // Yellow
-            getPixelsPtr()->Color(128, 0, 128)  // Purple
-        };
-        static const uint8_t homingPaletteSize = sizeof(homingPaletteColors) / sizeof(homingPaletteColors[0]);
-        // currentHomingIndex selects which color in the palette is the target.
-        static uint8_t currentHomingIndex = 0;
-        // homingInterpFactor ranges from 0.0 to 1.0 during the transition.
-        static float homingInterpFactor = 0.0;
-        // homingLastUpdate tracks the last time (in ms) the animation updated.
-        static unsigned long homingLastUpdate = millis();
+        // Static variables maintain state between calls
+        static uint8_t currentColor = 1;     // Current color in the cycle (1-3)
+        static bool isTransitioning = false; // Whether we're between colors
+        static uint16_t transitionStep = 0;  // Current step in transition (0-255)
 
-        // Use the current state as the starting color.
-        // Here we assume COLOR_RED is the startup color.
-        uint32_t startColor = COLOR_RED;
-        uint32_t targetColor = homingPaletteColors[currentHomingIndex];
+        // Don't run if already homed
+        if (isHomed)
+            return;
 
-        // dt: Time elapsed since last update in seconds.
-        float dt = (millis() - homingLastUpdate) / 1000.0;
-        homingLastUpdate = millis();
-        // Increase the interpolation factor proportionally to dt.
-        homingInterpFactor += dt / homingInterpolationDuration;
-        if (homingInterpFactor > 1.0)
-            homingInterpFactor = 1.0;
-
-        // Decompose start and target colors into RGB components.
-        uint8_t sr = (startColor >> 16) & 0xFF;
-        uint8_t sg = (startColor >> 8) & 0xFF;
-        uint8_t sb = startColor & 0xFF;
-        uint8_t tr = (targetColor >> 16) & 0xFF;
-        uint8_t tg = (targetColor >> 8) & 0xFF;
-        uint8_t tb = targetColor & 0xFF;
-
-        // Compute the interpolated color using linear interpolation.
-        uint8_t r = sr * (1.0 - homingInterpFactor) + tr * homingInterpFactor;
-        uint8_t g = sg * (1.0 - homingInterpFactor) + tg * homingInterpFactor;
-        uint8_t b = sb * (1.0 - homingInterpFactor) + tb * homingInterpFactor;
-        uint32_t color = getPixelsPtr()->Color(r, g, b);
-        setAllPixels(color); // Update all LEDs.
-        getPixelsPtr()->show();
-
-        // When the interpolation is complete (factor = 1.0) and after a brief timing check,
-        // advance to the next target color in the palette.
-        if (homingInterpFactor >= 1.0 && (millis() % 2000) < 50 && currentHomingIndex < homingPaletteSize - 1)
+        // Time-based animation
+        unsigned long currentMillis = millis();
+        if (currentMillis - previousMillis >= TRANSITION_INTERVAL)
         {
-            currentHomingIndex++;
-            homingInterpFactor = 0.0; // Reset for next transition.
-        }
-    }
+            previousMillis = currentMillis;
 
-    // ------------------------------------------------------------------------
-    // pausedAnimation():
-    // Creates a fade in and fade out effect on the play/pause LED using a sine
-    // function. The rise and fall durations are adjustable via pausedRiseTime
-    // and pausedFallTime.
-    void LedColors::pausedAnimation()
-    {
-        // Calculate total period for one full cycle.
-        unsigned long period = pausedRiseTime + pausedFallTime;
-        // t: current time offset within the period.
-        unsigned long t = millis() % period;
-        float brightnessFactor;
-        if (t < pausedRiseTime)
-        {
-            // During the rise phase, brightness increases smoothly.
-            brightnessFactor = sin((t / (float)pausedRiseTime) * (PI / 2));
-        }
-        else
-        {
-            // During the fall phase, brightness decreases smoothly.
-            brightnessFactor = sin(((pausedFallTime - (t - pausedRiseTime)) / (float)pausedFallTime) * (PI / 2));
-        }
-        // Base orange color for play/pause.
-        uint8_t baseR = 255, baseG = 100, baseB = 0;
-        uint8_t r = (uint8_t)(baseR * brightnessFactor);
-        uint8_t g = (uint8_t)(baseG * brightnessFactor);
-        uint8_t b = (uint8_t)(baseB * brightnessFactor);
-        // Apply computed orange color to the play/pause LED.
-        getPixelsPtr()->setPixelColor(LED_PLAYPAUSE, getPixelsPtr()->Color(r, g, b));
-        // Note: The show() call is assumed to be invoked by the caller after animation update.
-    }
-
-    // ------------------------------------------------------------------------
-    // machineInitAnimation():
-    // Chooses either startupAnimation or homingAnimation depending on the
-    // state of inHomingMode.
-    void LedColors::machineInitAnimation()
-    {
-        if (!inHomingMode)
-        {
-            startupAnimation();
-        }
-        else
-        {
-            homingAnimation();
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // transitionToReadyAnimation():
-    // Smoothly fades the LEDs to green over one second.
-    void LedColors::transitionToReadyAnimation()
-    {
-        static unsigned long transStart = millis();
-        unsigned long t = millis() - transStart;
-        if (t < 1000)
-        {
-            // Linearly interpolate from current color towards green.
-            uint8_t r = 255 - (uint8_t)(255 * t / 1000.0);
-            uint8_t g = (uint8_t)(255 * t / 1000.0);
-            for (uint8_t i = 0; i < NUM_PIXELS; i++)
+            if (isTransitioning)
             {
-                getPixelsPtr()->setPixelColor(i, getPixelsPtr()->Color(r, g, 0));
-            }
-        }
-        else
-        {
-            setAllPixels(COLOR_GREEN);
-        }
-        getPixelsPtr()->show();
-    }
+                // Transitioning between colors
+                uint32_t fromColor, toColor;
 
-    // ------------------------------------------------------------------------
-    // readyBlinkAnimation():
-    // Toggles all LEDs between green and off at a fixed blink interval.
-    void LedColors::readyBlinkAnimation()
-    {
-        static unsigned long lastBlink = 0;
-        static bool blinkState = false;
-        if (millis() - lastBlink > BLINK_INTERVAL_MS)
-        {
-            lastBlink = millis();
-            blinkState = !blinkState;
-            if (blinkState)
-            {
-                setAllPixels(COLOR_GREEN);
+                // Select source and target colors based on current position
+                switch (currentColor)
+                {
+                case 1: // Orange to Magenta
+                    fromColor = Color1;
+                    toColor = Color2;
+                    break;
+                case 2: // Magenta to Cyan
+                    fromColor = Color2;
+                    toColor = Color3;
+                    break;
+                default: // Cyan back to Orange
+                    fromColor = Color3;
+                    toColor = Color1;
+                    break;
+                }
+
+                // Calculate intermediate color and update all LEDs
+                uint32_t interpolatedColor = interpolateColor(fromColor, toColor, transitionStep);
+                for (int i = 0; i < NUM_PIXELS; i++)
+                {
+                    pixelsPtr->setPixelColor(i, interpolatedColor);
+                }
+                pixelsPtr->show();
+
+                // Increment step and check for completion
+                transitionStep += 3;
+                if (transitionStep > 255)
+                {
+                    // Transition complete, move to next solid color
+                    transitionStep = 0;
+                    isTransitioning = false;
+                    currentColor = (currentColor >= 3) ? 1 : currentColor + 1;
+                    delay(HOLD_TIME); // Hold at target color
+                }
             }
             else
             {
-                setAllPixels(COLOR_OFF);
+                // Display solid color before starting next transition
+                uint32_t solidColor;
+                switch (currentColor)
+                {
+                case 1:
+                    solidColor = Color1;
+                    break; // Orange
+                case 2:
+                    solidColor = Color2;
+                    break; // Magenta
+                default:
+                    solidColor = Color3;
+                    break; // Cyan
+                }
+
+                // Set all LEDs to solid color
+                for (int i = 0; i < NUM_PIXELS; i++)
+                {
+                    pixelsPtr->setPixelColor(i, solidColor);
+                }
+                pixelsPtr->show();
+                isTransitioning = true; // Begin transition on next update
             }
-            if (!blinkState)
-                blinkCount++; // Increment blink counter when turning off.
-            getPixelsPtr()->show();
+
+            // Store current color for future transitions
+            lastColor = pixelsPtr->getPixelColor(0);
         }
     }
 
-    // ------------------------------------------------------------------------
-    // runningAnimation():
-    // In running mode, directional LEDs are turned off. If flicker is enabled,
-    // the play/pause LED is randomly updated for a flicker effect.
+    /**
+     * Animation for running state
+     * Blinks the center play/pause LED in orange
+     */
     void LedColors::runningAnimation(bool flicker)
     {
-        // Turn off directional (arrow) LEDs.
-        getPixelsPtr()->setPixelColor(LED_UP, COLOR_OFF);
-        getPixelsPtr()->setPixelColor(LED_RIGHT, COLOR_OFF);
-        getPixelsPtr()->setPixelColor(LED_DOWN, COLOR_OFF);
-        getPixelsPtr()->setPixelColor(LED_LEFT, COLOR_OFF);
-        // If flickering is required and enough time has passed:
-        if (flicker && (millis() - flickerTimer > FLICKER_INTERVAL_MS))
+        static unsigned long lastBlink = 0;
+        static bool ledState = false;
+
+        // Time-based blinking
+        if (millis() - lastBlink > FLICKER_INTERVAL_MS)
         {
-            flickerTimer = millis();
-            uint8_t brightness = random(180, 255);
-            getPixelsPtr()->setPixelColor(LED_PLAYPAUSE, getPixelsPtr()->Color(brightness, brightness / 2, 0));
+            lastBlink = millis();
+            ledState = !ledState; // Toggle state
+
+            // Ensure directional LEDs are off
+            pixelsPtr->setPixelColor(LED_UP, COLOR_OFF);
+            pixelsPtr->setPixelColor(LED_RIGHT, COLOR_OFF);
+            pixelsPtr->setPixelColor(LED_DOWN, COLOR_OFF);
+            pixelsPtr->setPixelColor(LED_LEFT, COLOR_OFF);
+
+            // Blink center LED
+            pixelsPtr->setPixelColor(LED_PLAYPAUSE, ledState ? COLOR_ORANGE : COLOR_OFF);
+            pixelsPtr->show();
         }
     }
 
-    // ------------------------------------------------------------------------
-    // alarmAnimation():
-    // Blinks all LEDs red at a fixed interval to indicate an alarm.
+    /**
+     * Animation for paused state
+     * Fades the center play/pause LED up and down
+     */
+    void LedColors::pausedAnimation()
+    {
+        static unsigned long lastUpdate = 0;
+        static uint8_t brightness = 0;
+        static int8_t step = 2; // Step size for fade
+
+        // Time-based fading
+        if (millis() - lastUpdate > FADE_INTERVAL_MS)
+        {
+            lastUpdate = millis();
+
+            // Update brightness with direction
+            brightness += step;
+
+            // Reverse direction at limits
+            if (brightness >= 255)
+            {
+                brightness = 255;
+                step = -step;
+            }
+            else if (brightness <= 0)
+            {
+                brightness = 0;
+                step = -step;
+            }
+
+            // Set center LED to orange with current brightness
+            pixelsPtr->setPixelColor(LED_PLAYPAUSE,
+                                    pixelsPtr->Color(brightness, brightness / 2, 0));
+            pixelsPtr->show();
+        }
+    }
+
+    /**
+     * Animation for alarm state
+     * Blinks all LEDs red
+     */
     void LedColors::alarmAnimation()
     {
         static unsigned long lastAlarm = 0;
         static bool alarmOn = false;
+
+        // Time-based blinking
         if (millis() - lastAlarm > BLINK_INTERVAL_MS)
         {
             lastAlarm = millis();
-            alarmOn = !alarmOn;
-            setAllPixels(alarmOn ? COLOR_RED : COLOR_OFF);
+            alarmOn = !alarmOn; // Toggle state
+
+            // Set all LEDs to either red or off
+            for (uint8_t i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, alarmOn ? COLOR_RED : COLOR_OFF);
+            }
+            pixelsPtr->show();
         }
-        // Caller is responsible for invoking show().
+    }
+
+    /**
+     * Transition from current color to green
+     * Used when machine returns to idle state
+     */
+    void LedColors::transitionToGreen()
+    {
+        // Set homed flag to prevent re-entry and stop homing animation
+        isHomed = true;
+
+        // Phase 1: Smooth transition to green
+        for (int j = 0; j <= 255; j++)
+        {
+            uint32_t interpolatedColor = interpolateColor(lastColor, COLOR_GREEN, j);
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, interpolatedColor);
+            }
+            pixelsPtr->show();
+            delay(2); // Fast but smooth transition
+        }
+
+        // Pause at green before blinking
+        delay(800);
+
+        // Phase 2: Blink green 3 times to confirm completion
+        for (int blinkCount = 0; blinkCount < 3; blinkCount++)
+        {
+            // Off phase
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, COLOR_OFF);
+            }
+            pixelsPtr->show();
+            delay(200);
+
+            // On phase
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, COLOR_GREEN);
+            }
+            pixelsPtr->show();
+            delay(200);
+        }
+    }
+
+    /**
+     * Transition from current color to orange
+     * Used when machine starts operations
+     */
+    void LedColors::transitionToOrange()
+    {
+        // Capture current LED colors for smooth transition
+        uint32_t currentColors[NUM_PIXELS];
+        for (int i = 0; i < NUM_PIXELS; i++)
+        {
+            currentColors[i] = pixelsPtr->getPixelColor(i);
+        }
+
+        // Phase 1: Smooth transition to orange
+        for (int j = 0; j <= 255; j += 3)
+        {
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                uint32_t interpolatedColor = interpolateColor(currentColors[i], COLOR_ORANGE, j);
+                pixelsPtr->setPixelColor(i, interpolatedColor);
+            }
+            pixelsPtr->show();
+            delay(2);
+        }
+
+        // Brief pause at orange
+        delay(200);
+
+        // Phase 2: Flash orange twice to indicate action
+        for (int flash = 0; flash < 2; flash++)
+        {
+            // Off phase
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, COLOR_OFF);
+            }
+            pixelsPtr->show();
+            delay(150);
+
+            // On phase
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, COLOR_ORANGE);
+            }
+            pixelsPtr->show();
+            delay(150);
+        }
     }
 }

@@ -34,6 +34,10 @@ void fnc_send_line(const char* line, int timeout_ms) {
     _ackwait = true;
 }
 
+void fnc_realtime(realtime_cmd_t c) {
+    fnc_putchar((uint8_t)c);
+}
+
 // Message parsing
 static void parse_state(const char* state) {
     show_state(state);
@@ -105,7 +109,7 @@ void fnc_poll() {
     
     // Request status every 50ms if not waiting for ack
     if (!_ackwait && (now - last_status_request >= 50)) {
-        fnc_putchar((uint8_t)StatusReport);
+        fnc_realtime(StatusReport);
         last_status_request = now;
     }
     
@@ -122,7 +126,7 @@ void fnc_wait_ready() {
     unsigned long start_time = millis();
     
     while (!machine_ready && (millis() - start_time) < 5000) {
-        fnc_putchar((uint8_t)StatusReport);
+        fnc_realtime(StatusReport);
         
         for (int i = 0; i < 100; i++) {  // Poll for 100ms
             int c = fnc_getchar();

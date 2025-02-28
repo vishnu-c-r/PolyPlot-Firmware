@@ -63,6 +63,7 @@ struct gcode_modes {
 void fnc_wait_ready();
 void fnc_poll();
 void fnc_send_line(const char* line, int timeout_ms);
+void fnc_realtime(realtime_cmd_t c);  // This now uses realtime_cmd_t from Realtime.h
 
 // Required implementations
 extern int fnc_getchar();

@@ -10,51 +10,41 @@ except:
     gitFail = True
 
 if gitFail:
-    tag = "v3.0.x"
-    rev = " (noGit)"
-    url = " (noGit)"
+    # Provide default version info if git is not available
+    tag = "v4.0.0"  # Using semantic version format
+    rev = " (local)" 
+    url = "https://git.fablabkerala.in/pub/fab-projects-pub/ssk-mtm-academic-internship"
 else:
     try:
-        tag = (
-            subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
-            .strip()
-            .decode("utf-8")
-        )
-    except:
-        tag = "v3.0.x"
-
-    # Check to see if the head commit exactly matches a tag.
-    # If so, the revision is "release", otherwise it is BRANCH-COMMIT
-    try:
-        subprocess.check_call(["git", "describe", "--tags", "--exact"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        rev = ''
-    except:
-        branchname = (
-            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-            .strip()
-            .decode("utf-8")
-        )
-        revision = (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-            .strip()
-            .decode("utf-8")
-        )
-        modified = (
-            subprocess.check_output(["git", "status", "-uno", "-s"])
-            .strip()
-            .decode("utf-8")
-        )
-        if modified:
-            dirty = "-dirty"
-        else:
-            dirty = ""
-        rev = " (%s-%s%s)" % (branchname, revision, dirty)
-
-    url = (
-        subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
-            .strip()
-            .decode("utf-8")
-        )
+        # Try to get tag, but provide default if none exists
+        try:
+            tag = subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], 
+                                        stderr=subprocess.DEVNULL).strip().decode("utf-8")
+        except:
+            tag = "v4.0.0"  # Default version if no tags exist
+            
+        # Get branch and commit info
+        branchname = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip().decode("utf-8")
+        revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).strip().decode("utf-8")
+        
+        # Check for local changes
+        modified = subprocess.check_output(["git", "status", "-uno", "-s"]).strip().decode("utf-8")
+        dirty = "-dirty" if modified else ""
+        
+        rev = f" ({branchname}-{revision}{dirty})"
+        
+        # Get remote URL or use default
+        try:
+            url = subprocess.check_output(["git", "config", "--get", "remote.origin.url"]).strip().decode("utf-8")
+        except:
+            url = "https://git.fablabkerala.in/pub/fab-projects-pub/ssk-mtm-academic-internship"
+            
+    except Exception as e:
+        print(f"Git command failed: {str(e)}")
+        # Fallback values
+        tag = "v4.0.0"
+        rev = " (error)"
+        url = "https://git.fablabkerala.in/pub/fab-projects-pub/ssk-mtm-academic-internship"
 
 grbl_version = tag.replace('v','').rpartition('.')[0]
 git_info = '%s%s' % (tag, rev)

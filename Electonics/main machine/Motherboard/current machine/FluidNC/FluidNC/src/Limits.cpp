@@ -64,8 +64,37 @@ bool ambiguousLimit() {
     return false;
 }
 
+// These functions control soft limits behavior and integrate pen_change flag
+
 bool soft_limit = false;
-bool pen_change = false;  // Track pen change state
+
+// Define pen_change as volatile since it's accessed from multiple tasks
+volatile bool pen_change = false;  // Globally controlled flag to restrict travel during pen/tool changes
+
+// Calculate maximum allowed position based on configured limits and current mode
+float limitsMaxPosition(size_t axis) {
+    auto axisConfig = config->_axes->_axis[axis];
+    auto homing     = axisConfig->_homing;
+    auto mpos       = homing ? homing->_mpos : 0;
+    
+    // When pen_change mode is active, use restricted travel limits for X and Y axes
+    // This prevents accidental collisions during tool changes
+    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
+
+    return (!homing || homing->_positiveDirection) ? mpos : mpos + maxtravel;
+}
+
+// Calculate minimum allowed position based on configured limits and current mode
+float limitsMinPosition(size_t axis) {
+    auto axisConfig = config->_axes->_axis[axis];
+    auto homing     = axisConfig->_homing;
+    auto mpos       = homing ? homing->_mpos : 0;
+    
+    // Apply same pen_change travel restriction to minimum positions
+    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
+
+    return (!homing || homing->_positiveDirection) ? mpos - maxtravel : mpos;
+}
 
 // Performs a soft limit check. Called from mcline() only. Assumes the machine has been homed,
 // the workspace volume is in all negative space, and the system is in normal operation.
@@ -93,26 +122,4 @@ void limit_error() {
     }
 
     mc_critical(ExecAlarm::SoftLimit);
-}
-
-float limitsMaxPosition(size_t axis) {
-    auto axisConfig = config->_axes->_axis[axis];
-    auto homing     = axisConfig->_homing;
-    auto mpos       = homing ? homing->_mpos : 0;
-    
-    // Only apply pen_change travel limits to X and Y axes, not Z
-    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
-
-    return (!homing || homing->_positiveDirection) ? mpos : mpos + maxtravel;
-}
-
-float limitsMinPosition(size_t axis) {
-    auto axisConfig = config->_axes->_axis[axis];
-    auto homing     = axisConfig->_homing;
-    auto mpos       = homing ? homing->_mpos : 0;
-    
-    // Only apply pen_change travel limits to X and Y axes, not Z
-    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
-
-    return (!homing || homing->_positiveDirection) ? mpos - maxtravel : mpos;
 }

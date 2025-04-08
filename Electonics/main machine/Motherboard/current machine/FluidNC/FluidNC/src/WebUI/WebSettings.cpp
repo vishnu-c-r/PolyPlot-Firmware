@@ -87,7 +87,7 @@ namespace WebUI {
             j.member("cmd", "800");
             j.member("status", "ok");
             j.begin_member_object("data");
-            j.member("FWVersion", git_info);
+            j.member("FWVersion", git_info);  // Version comes from git_info
             j.member("FWTarget", "FluidNC");
             j.member("FWTargetId", "60");
             j.member("WebUpdate", "Enabled");
@@ -124,7 +124,7 @@ namespace WebUI {
         }
 
         LogStream s(out, "FW version: FluidNC ");
-        s << git_info;
+        s << git_info;  // Version displayed in non-JSON format
         // TODO: change grbl-embedded to FluidNC after fixing WebUI
         s << " # FW target:grbl-embedded  # FW HW:";
 

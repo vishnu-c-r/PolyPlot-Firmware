@@ -56,6 +56,7 @@ namespace WebUI {
 
         ~Web_Server();
 
+        static void handlePenChangeMode();
     private:
         static bool              _setupdone;
         static WebServer*        _webserver;

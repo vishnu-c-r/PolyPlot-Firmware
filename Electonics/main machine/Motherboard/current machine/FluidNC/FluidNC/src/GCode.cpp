@@ -15,7 +15,7 @@
 #include "MotionControl.h"        // mc_override_ctrl_update
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
-#include "Job.h"                  // Job::active() and Job::channel()
+#include "Job.h"
 #include "Pen.h"
 #include "WebUI/ToolConfig.h"
 
@@ -607,8 +607,6 @@ Error gc_execute_line(char* line) {
                         // Tool change
                         gc_block.modal.tool_change = ToolChange::Enable;
                         mg_word_bit                = ModalGroup::MM6;
-                        log_info("M6 command received with T=" << gc_state.tool);
-                        gc_block.modal.motion = Motion::Seek;
                         break;
                     case 7:
                     case 8:
@@ -1455,30 +1453,33 @@ Error gc_execute_line(char* line) {
     if (gc_block.modal.tool_change == ToolChange::Enable) {
         log_info("Executing tool change from T" << gc_state.prev_tool << " to T" << gc_state.tool);
 
-        // Ensure tool config is loaded
+        // [1. Validate tool configuration]
         auto& toolConfig = WebUI::ToolConfig::getInstance();
         if (!toolConfig.ensureLoaded()) {
             log_error("Failed to load tool config before tool change");
             return Error::GcodeToolChangeFailed;
         }
 
-        // Initialize plan_data properly
+        // [2. Set up motion parameters]
         memset(pl_data, 0, sizeof(plan_line_data_t));
-        pl_data->prevPenNumber      = gc_state.prev_tool;
-        pl_data->penNumber          = gc_state.tool;
-        pl_data->motion.rapidMotion = 1;
-        pl_data->line_number        = gc_block.values.n;
+        pl_data->prevPenNumber = gc_state.prev_tool;
+        pl_data->penNumber = gc_state.tool;
+        pl_data->feed_rate = 2000.0f;  // Set controlled feed rate
+        pl_data->line_number = gc_block.values.n;
+        pl_data->motion.noFeedOverride = 1;  // Use noFeedOverride to ensure exact feed rate
+        pl_data->motion.rapidMotion = 0;     // Disable rapid motion
 
-        // Make sure we're synchronized before tool change
+        // [3. Synchronize and execute]
         protocol_buffer_synchronize();
-
-        // Execute pen change with error checking
         if (!mc_pen_change(pl_data)) {
             log_error("Tool change failed");
             gc_state.tool = gc_state.prev_tool;  // Restore previous tool on failure
             return Error::GcodeToolChangeFailed;
         }
 
+        // [4. Reset state]
+        pen_change = false;
+        gc_block.modal.tool_change = ToolChange::Disable;
         gc_state.prev_tool = gc_state.tool;
     }
 
@@ -1675,7 +1676,8 @@ Error gc_execute_line(char* line) {
             GCUpdatePos gc_update_pos = GCUpdatePos::Target;
             if (gc_state.modal.motion == Motion::Linear) {
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
-            } else if (gc_state.modal.motion == Motion::Seek) {
+            }
+            else if (gc_state.modal.motion == Motion::Seek) {
                 pl_data->motion.rapidMotion = 1;  // Set rapid motion flag.
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if ((gc_state.modal.motion == Motion::CwArc) || (gc_state.modal.motion == Motion::CcwArc)) {

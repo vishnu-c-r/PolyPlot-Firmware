@@ -5,23 +5,62 @@
 #pragma once
 
 #include "System.h"
+#include "Config.h"  // MAX_N_AXIS
+#include "Error.h"   // Error type
+#include "Types.h"   // MotorMask
 
 #include <cstdint>
 
-extern bool soft_limit;
-extern bool pen_change;  // Add this line to expose the pen_change variable
+// Global state variables
+extern bool soft_limit;    // Indicates if a soft limit violation has occurred
+extern volatile bool pen_change;  
 
-// Initialize the limits module
+/**
+ * @brief Initialize the limits subsystem
+ * Sets up limit switch interrupts and debouncing if configured
+ */
 void limits_init();
 
-// Returns limit state
+/**
+ * @brief Get the current state of all limit switches
+ * @return MotorMask where each bit represents a limit switch state
+ *         (1=triggered, 0=not triggered)
+ */
 MotorMask limits_get_state();
-bool      limits_startup_check();
 
+/**
+ * @brief Check limit switches during system startup
+ * @return true if a hard limit is triggered and limit checking is enabled
+ */
+bool limits_startup_check();
+
+/**
+ * @brief Handle a limit error condition
+ * Called when a soft limit is violated or limit switch is hit
+ */
 void limit_error();
-void limit_error(size_t axis, float cordinate);
 
+/**
+ * @brief Handle axis-specific limit error
+ * @param axis The axis number where the limit was exceeded
+ * @param position The position that triggered the limit
+ */
+void limit_error(size_t axis, float position);
+
+/**
+ * @brief Get maximum allowed position for an axis
+ * Takes into account homing status and pen_change restrictions
+ * @param axis The axis number to check
+ * @return The maximum allowed position in mm
+ */
 float limitsMaxPosition(size_t axis);
+
+/**
+ * @brief Get minimum allowed position for an axis
+ * Takes into account homing status and pen_change restrictions
+ * @param axis The axis number to check
+ * @return The minimum allowed position in mm
+ */
 float limitsMinPosition(size_t axis);
 
 // Private

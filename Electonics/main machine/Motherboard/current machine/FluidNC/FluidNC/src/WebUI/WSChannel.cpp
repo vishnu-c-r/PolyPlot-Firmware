@@ -9,6 +9,7 @@
 #    include <WiFi.h>
 
 #    include "../Serial.h"  // is_realtime_command
+#    include "../Limits.h"  // pen_change variable
 
 namespace WebUI {
     class WSChannels;
@@ -183,13 +184,17 @@ namespace WebUI {
         }
         return true;
     }
+
     void WSChannels::sendPing() {
-        for (WSChannel* wsChannel : _webWsChannels) {
+        for (auto it = _wsChannels.begin(); it != _wsChannels.end();) {
+            WSChannel* wsChannel = it->second;
+            
+            // Original simple ping code
             std::string s("PING:");
             s += std::to_string(wsChannel->id());
-            // sendBIN would be okay too because the string contains only
-            // ASCII characters, no UTF-8 extended characters.
             wsChannel->sendTXT(s);
+            
+            ++it;
         }
     }
 
@@ -222,13 +227,35 @@ namespace WebUI {
                         s = "ACTIVE_ID:";
                         s += std::to_string(wsChannel->id());
                         wsChannel->sendTXT(s);
+                        
+                        // Fix ambiguous push() call by using std::string
+                        std::string report_cmd = "$Report/Interval=50\n";
+                        wsChannel->push(report_cmd);
                     }
                 }
             } break;
-            case WStype_TEXT:
-            case WStype_BIN:
+            case WStype_TEXT: {
                 try {
-                    _wsChannels.at(num)->push(payload, length);
+                    std::string msg = (const char*)payload;
+                    if (msg.rfind("PONG:", 0) == 0) {
+                        // Handle PONG response
+                        if (auto* channel = _wsChannels.at(num)) {
+                            // Commented out due to function being disabled
+                            // channel->updateLastPong();
+                        }
+                    } else {
+                        _wsChannels.at(num)->push(payload, length);
+                    }
+                } catch (std::out_of_range& oor) {}
+                break;
+            }
+            case WStype_PONG:
+                // Handle WebSocket protocol level pong
+                try {
+                    if (auto* channel = _wsChannels.at(num)) {
+                        // Commented out due to function being disabled
+                        // channel->updateLastPong();
+                    }
                 } catch (std::out_of_range& oor) {}
                 break;
             default:
@@ -256,7 +283,7 @@ namespace WebUI {
                     _lastWSChannel = wsChannel;
                     allChannels.registration(wsChannel);
                     _wsChannels[num] = wsChannel;
-
+                    
                     if (uri == "/") {
                         std::string s("currentID:");
                         s += std::to_string(num);
@@ -266,6 +293,17 @@ namespace WebUI {
                         s = "activeID:";
                         s += std::to_string(wsChannel->id());
                         server->broadcastTXT(s.c_str());
+
+                        // Send initial connection success message
+                        std::string connected = "{\"status\":\"connected\"}";
+                        wsChannel->sendTXT(connected);
+                        
+                        // Fix ambiguous push() call by using std::string
+                        std::string report_cmd = "$Report/Interval=50\n";
+                        wsChannel->push(report_cmd);
+                        
+                        // Log that we've set the report interval
+                        log_debug("Set report interval to 50ms for WebSocket " << num);
                     }
 
                     for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++)
@@ -274,15 +312,30 @@ namespace WebUI {
                         }
                 }
             } break;
-            case WStype_TEXT:
+            case WStype_TEXT: {
                 try {
                     std::string msg = (const char*)payload;
-                    //log_debug("WSv3Channels::handleEvent WStype_TEXT:" << msg)
-                    if (msg.rfind("PING:", 0) == 0) {
+                    if (msg.rfind("PONG:", 0) == 0) {
+                        // Handle PONG response
+                        if (auto* channel = _wsChannels.at(num)) {
+                            // Commented out due to function being disabled
+                            // channel->updateLastPong();
+                        }
+                    } else if (msg.rfind("PING:", 0) == 0) {
                         std::string response("PING:60000:60000");
                         _wsChannels.at(num)->sendTXT(response);
-                    } else
+                    } else {
                         _wsChannels.at(num)->push(payload, length);
+                    }
+                } catch (std::out_of_range& oor) {}
+                break;
+            }
+            case WStype_PONG:
+                try {
+                    if (auto* channel = _wsChannels.at(num)) {
+                        // Commented out due to function being disabled
+                        // channel->updateLastPong();
+                    }
                 } catch (std::out_of_range& oor) {}
                 break;
             case WStype_BIN:

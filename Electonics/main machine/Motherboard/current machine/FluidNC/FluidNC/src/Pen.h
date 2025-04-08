@@ -25,3 +25,11 @@ namespace Pen {
 
 // Current pen tracking
 extern int current_pen; // 0 means no pen, 1-MAX_PENS are valid pens
+
+// Include this file in any place where you need to access pen_change
+
+// Use the global declaration from GCode.h
+extern volatile bool pen_change;  // Flag to indicate active tool change
+extern volatile bool cycle_start_tool_change;  // Flag to force cycle start on tool change
+
+// Add any pen-specific functions or constants here

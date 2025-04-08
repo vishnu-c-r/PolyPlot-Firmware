@@ -479,22 +479,25 @@ void mc_critical(ExecAlarm alarm) {
 // -----------------------------------------------------------------------------
 bool mc_pen_change(plan_line_data_t* pl_data) {
     static int current_loaded_pen = 0;
-    int        nextPen            = pl_data->penNumber;
+    int nextPen = pl_data->penNumber;
     protocol_buffer_synchronize();
-    // plan_reset();
     plan_sync_position();
+    
     auto& toolConfig = WebUI::ToolConfig::getInstance();
     if (!toolConfig.loadConfig()) {
         log_error("Failed to load tool config");
         return false;
     }
+
     float currentPos[MAX_N_AXIS], startPos[MAX_N_AXIS];
     copyAxes(currentPos, gc_state.position);
     copyAxes(startPos, currentPos);
-    pl_data->feed_rate = 2000;
+
+    // Move to safe Z height first
     currentPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, currentPos))
         return false;
+
     if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
         pen_change = true;
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))

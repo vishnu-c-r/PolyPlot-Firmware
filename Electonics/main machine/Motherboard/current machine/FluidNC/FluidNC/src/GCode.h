@@ -190,9 +190,10 @@ static const uint32_t MAX_PENS = 10;  // Add this line
 
 #define MAX_PENS 6  // Update maximum number of pens to 6
 
-enum class ToolChange : bool {
+enum class ToolChange : uint8_t {
     Disable = 0,
     Enable  = 1,
+    InProgress = 2,
 };
 
 // Add this enum class definition before it's used:
@@ -344,3 +345,4 @@ void gc_wco_changed();
 void gc_ovr_changed();
 
 extern gc_modal_t modal_defaults;
+extern volatile bool pen_change;

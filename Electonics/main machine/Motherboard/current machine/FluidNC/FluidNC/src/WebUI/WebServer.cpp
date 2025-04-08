@@ -28,7 +28,7 @@
 
 #    include "WebClient.h"
 
-#    include "src/Protocol.h"  // protocol_send_event
+#    include "src/Protocol.h"  
 #    include "src/FluidPath.h"
 #    include "src/WebUI/JSONEncoder.h"
 
@@ -36,7 +36,9 @@
 #    include <list>
 
 #    include "PenConfig.h"
-#    include "ToolConfig.h"  // Update include path
+#    include "ToolConfig.h"
+
+extern volatile bool pen_change; 
 
 namespace WebUI {
     const byte DNS_PORT = 53;
@@ -82,12 +84,12 @@ namespace WebUI {
         http_port   = new IntSetting("HTTP Port", WEBSET, WA, "ESP121", "HTTP/Port", DEFAULT_HTTP_PORT, MIN_HTTP_PORT, MAX_HTTP_PORT);
         http_enable = new EnumSetting("HTTP Enable", WEBSET, WA, "ESP120", "HTTP/Enable", DEFAULT_HTTP_STATE, &onoffOptions);
         http_block_during_motion = new EnumSetting("Block serving HTTP content during motion",
-                                                   WEBSET,
-                                                   WA,
-                                                   "",
-                                                   "HTTP/BlockDuringMotion",
-                                                   DEFAULT_HTTP_BLOCKED_DURING_MOTION,
-                                                   &onoffOptions);
+                                                    WEBSET,
+                                                    WA,
+                                                    "",
+                                                    "HTTP/BlockDuringMotion",
+                                                    DEFAULT_HTTP_BLOCKED_DURING_MOTION,
+                                                    &onoffOptions);
     }
     Web_Server::~Web_Server() {
         end();
@@ -136,11 +138,9 @@ namespace WebUI {
         //trick to catch command line on "/" before file being processed
         _webserver->on("/", [this]() { handle_root("/"); });
         _webserver->on("/admin", [this]() { handle_root("/admin"); });
-        _webserver->on("/tab", [this]() { handle_root("/tab"); });
+        _webserver->on("/wifi", [this]() { handle_root("/wifi"); });
+        _webserver->on("/atc",[this]() { handle_root("/atc"); });
 
-        // _webserver->on("/", HTTP_GET, handle_root);
-        // _webserver->on("/", HTTP_OPTIONS, handle_options);
-        // //Page not found handler
         _webserver->onNotFound(handle_not_found);
 
         //need to be there even no authentication to say to UI no authentication
@@ -166,9 +166,22 @@ namespace WebUI {
             // provided IP to all DNS request
             dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
             log_info("Captive Portal Started");
-            _webserver->on("/generate_204", HTTP_ANY, [this]() { handle_root("/generate_204"); });
-            _webserver->on("/gconnectivitycheck.gstatic.com", HTTP_ANY, [this]() { handle_root("/gconnectivitycheck.gstatic.com"); });
-            _webserver->on("/fwlink/", HTTP_ANY, [this]() { handle_root("/fwlink/"); });
+            
+            // Redirect captive portal detection URLs directly to WiFi configuration page
+            _webserver->on("/generate_204", HTTP_ANY, [this]() {
+                _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
+                _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
+            });
+            
+            _webserver->on("/gconnectivitycheck.gstatic.com", HTTP_ANY, [this]() {
+                _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
+                _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
+            });
+            
+            _webserver->on("/fwlink/", HTTP_ANY, [this]() {
+                _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
+                _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
+            });
         }
 
         //SSDP service presentation
@@ -317,6 +330,36 @@ namespace WebUI {
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
             _webserver->sendHeader("Content-Encoding", "gzip");
             myStreamFile("/index.html.gz");
+        });
+
+        // Add toggle endpoint for pen change mode
+        _webserver->on("/penchangemode", HTTP_GET, [this]() {
+            addCORSHeaders();
+            handlePenChangeMode();
+        });
+        
+        _webserver->on("/penchangemode", HTTP_POST, [this]() {
+            addCORSHeaders();
+            handlePenChangeMode();
+        });
+        
+        _webserver->on("/penchangemode", HTTP_OPTIONS, [this]() {
+            addCORSHeaders();
+            _webserver->send(204);
+        });
+
+        // Add restart endpoint
+        _webserver->on("/restart", HTTP_ANY, [this]() {
+            addCORSHeaders();
+            AuthenticationLevel auth_level = is_authenticated();
+            if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+                _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
+                return;
+            }
+            
+            _webserver->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Restarting system\"}");
+            delay_ms(500);  // Give time for response to be sent
+            COMMANDS::restart_MCU();
         });
 
         log_info("HTTP started on port " << WebUI::http_port->get());
@@ -555,11 +598,22 @@ namespace WebUI {
 
     void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
+        
+        // If in AP mode and requesting root page, redirect to WiFi config page
+        if (path == "/" && WiFi.getMode() == WIFI_AP) {
+            _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
+            _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
+            return;
+        }
+        
         if (path == "/admin") {
             if (myStreamFile("/ui/admin.html"))
                 return;
-        } else if (path == "/tab") {
-            if (myStreamFile("/tab.html"))
+        } else if (path == "/wifi") {
+            if (myStreamFile("/ui/wifi.html"))
+                return;
+        } else if (path == "/atc") {
+            if (myStreamFile("/ui/atc.html"))
                 return;
         } else if (path == "/") {
             // Explicitly set content type for index.html
@@ -581,31 +635,41 @@ namespace WebUI {
         _webserver->send(204);  // No Content response for OPTIONS request
     }
 
-    //     void Web_Server::setup() {
-    //     // Set up routes
-    //     _webserver->on("/", HTTP_GET, std::bind(&Web_Server::handle_root, this));
-    //     _webserver->on("/", HTTP_OPTIONS, std::bind(&Web_Server::handle_options, this));
-    //     // ... other routes and setup code ...
-    // }
 
     // Handle filenames and other things that are not explicitly registered
     void Web_Server::handle_not_found() {
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->sendHeader(LOCATION_HEADER, "/");
             _webserver->send(302);
-
-            //_webserver->client().stop();
             return;
         }
 
         std::string path(_webserver->urlDecode(_webserver->uri()).c_str());
+        
+        // If pen change mode is active, restrict access to non-ATC pages
+        // This ensures safety by keeping the user in the ATC interface until the flag is unset
+        if (pen_change && 
+            path.find("/atc") == std::string::npos && 
+            path.find("/penchangemode") == std::string::npos &&
+            path != "/command" && // Allow commands to be sent
+            path != "/command_silent") { // Allow silent commands
+            
+            // Redirect to ATC page with a clear message about the restriction
+            _webserver->send(403, "text/html", 
+                "<html><body><h2>Pen Change Mode Active</h2>"
+                "<p>The machine is in pen change mode. Other UI functions are temporarily restricted.</p>"
+                "<p><a href='/atc'>Go to ATC interface</a></p>"
+                "</body></html>");
+            return;
+        }
 
+        // Continue with normal request processing
         if (path.rfind("/api/", 0) == 0) {
             _webserver->send(404);
             return;
         }
 
-        // Download a file.  The true forces a download instead of displaying the file
+        // Download a file. The true forces a download instead of displaying the file
         if (myStreamFile(path.c_str(), true)) {
             return;
         }
@@ -1034,7 +1098,7 @@ namespace WebUI {
 
         sendStatus(200, std::to_string(int(_upload_status)).c_str());
 
-        //if success restart
+        // Automatic restart on successful update
         if (_upload_status == UploadStatus::SUCCESSFUL) {
             delay_ms(1000);
             COMMANDS::restart_MCU();
@@ -1407,7 +1471,7 @@ namespace WebUI {
         if (_socket_serverv3 && _setupdone) {
             _socket_serverv3->loop();
         }
-        if ((millis() - start_time) > 10000 && _socket_server) {
+        if ((millis() - start_time) > 3000 && _socket_server) {
             WSChannels::sendPing();
             start_time = millis();
         }
@@ -1579,7 +1643,7 @@ namespace WebUI {
                 if (ip == current->ip && strcmp(sessionID, current->sessionID) == 0) {
                     //reset time
                     current->last_time = millis();
-                    Fhan return (AuthenticationLevel)current->level;
+                    return (AuthenticationLevel)current->level;
                 }
                 previous = current;
                 current  = current->_next;
@@ -1821,6 +1885,73 @@ namespace WebUI {
         
         j.end();
         _webserver->send(200, "application/json", output.c_str());
+    }
+
+    void Web_Server::handlePenChangeMode() {
+        log_info("PenChangeMode endpoint called with method: " << _webserver->method());
+        
+        addCORSHeaders();
+        AuthenticationLevel auth_level = is_authenticated();
+        if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+            _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
+            return;
+        }
+
+        // GET request - return current pen_change flag state
+        if (_webserver->method() == HTTP_GET) {
+            std::string output;
+            JSONencoder j(&output);
+            j.begin();
+            j.member("pen_change_mode", pen_change ? "true" : "false");
+            j.end();
+            _webserver->send(200, "application/json", output.c_str());
+            return;
+        }
+        
+        // POST request - set pen_change flag state
+        if (_webserver->method() == HTTP_POST) {
+            bool enable_mode = false;
+            
+            if (_webserver->hasArg("plain")) {
+                std::string jsonData = _webserver->arg("plain").c_str();
+                log_info("Received JSON data: " << jsonData.c_str());
+                // Parse enable flag from JSON
+                if (jsonData.find("\"enable\":true") != std::string::npos) {
+                    enable_mode = true;
+                } else if (jsonData.find("\"enable\":false") != std::string::npos) {
+                    enable_mode = false;
+                } else {
+                    _webserver->send(400, "application/json", "{\"error\":\"Invalid data format\"}");
+                    return;
+                }
+            } else {
+                _webserver->send(400, "application/json", "{\"error\":\"Missing data\"}");
+                return;
+            }
+            
+            // Update the pen_change flag state
+            pen_change = enable_mode;
+            
+            // Log the state change
+            if (enable_mode) {
+                log_info("Pen change mode enabled via API");
+            } else {
+                log_info("Pen change mode disabled via API");
+            }
+            
+            // Send JSON response with updated state
+            std::string output;
+            JSONencoder j(&output);
+            j.begin();
+            j.member("status", "ok");
+            j.member("pen_change_mode", pen_change ? "true" : "false");
+            j.end();
+            _webserver->send(200, "application/json", output.c_str());
+            return;
+        }
+        
+        // Reject other HTTP methods
+        _webserver->send(405, "text/plain", "Method Not Allowed");
     }
 #endif
 }  // namespace web_server

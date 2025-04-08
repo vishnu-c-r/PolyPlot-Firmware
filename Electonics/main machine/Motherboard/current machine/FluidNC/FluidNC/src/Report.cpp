@@ -45,7 +45,8 @@
 EspClass esp;
 #endif
 
-volatile bool protocol_pin_changed = false;
+volatile bool        protocol_pin_changed = false;
+extern volatile bool pen_change;  
 
 std::string report_pin_string;
 
@@ -445,6 +446,12 @@ void mpos_to_wpos(float* position) {
 }
 
 const char* state_name() {
+    // For pen_change operations, we're already in the Cycle state,
+    // but we can provide a more specific indication in the status
+    if (pen_change) {
+        return "Run";  // Still show a special status for tool changes
+    }
+    
     switch (sys.state) {
         case State::Idle:
             return "Idle";

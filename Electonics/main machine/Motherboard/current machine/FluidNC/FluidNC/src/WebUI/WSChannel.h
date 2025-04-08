@@ -9,6 +9,7 @@
 #include <cstring>
 #include <list>
 #include <map>
+#include <Arduino.h>
 
 class WebSocketsServer;
 
@@ -58,6 +59,17 @@ namespace WebUI {
 
         void autoReport() override;
 
+        // Add new methods for ping/pong tracking
+        /*
+        void updateLastPong() { _lastPongTime = millis(); }
+        bool isConnectionTimedOut() const { 
+            return (millis() - _lastPongTime) > WEBSOCKET_TIMEOUT; 
+        }
+        void incrementPingFailures() { _pingFailCount++; }
+        static const uint32_t WEBSOCKET_TIMEOUT = 10000; // 10 second timeout
+        static const uint8_t MAX_PING_FAILURES = 3;  // Number of ping failures before disconnect
+        */
+
     private:
         WebSocketsServer* _server;
         uint8_t           _clientNum;
@@ -68,6 +80,14 @@ namespace WebUI {
         // so they can be processed immediately during operations like
         // homing where GCode handling is blocked.
         int _rtchar = -1;
+
+        /*
+        uint32_t _lastPongTime = 0;
+        uint8_t _pingFailCount = 0;  // Track consecutive ping failures
+        */
+        
+        // Make these classes friends so they can access _server
+        friend class WSChannels;
     };
 
     class WSChannels {

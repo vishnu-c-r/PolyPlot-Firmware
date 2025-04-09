@@ -315,6 +315,9 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->previousPenNumber    = pl_data->prevPenNumber;
     block->currentPenNumber     = pl_data->penNumber;
 
+    // Special case for pen change operations - ensure feed rate is set correctly
+    bool isPenChange = (pl_data->prevPenNumber >= 0 && pl_data->penNumber >= 0);
+    
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
     float   unit_vec[MAX_N_AXIS], delta_mm;
@@ -366,15 +369,18 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->millimeters  = convert_delta_vector_to_unit_vector(unit_vec);
     block->acceleration = limit_acceleration_by_axis_maximum(unit_vec);
     block->rapid_rate   = limit_rate_by_axis_maximum(unit_vec);
+    
     // Store programmed rate.
-    if (block->motion.rapidMotion) {
+    if (block->motion.rapidMotion && !isPenChange) {
         block->programmed_rate = block->rapid_rate;
     } else {
+        // For pen changes or normal feeds, use the specified feed rate
         block->programmed_rate = pl_data->feed_rate;
         if (block->motion.inverseTime) {
             block->programmed_rate *= block->millimeters;
         }
     }
+    
     // TODO: Need to check this method handling zero junction speeds when starting from rest.
     if ((block_buffer_head == block_buffer_tail) || (block->motion.systemMotion)) {
         // Initialize block entry speed as zero. Assume it will be starting from rest. Planner will correct this later.

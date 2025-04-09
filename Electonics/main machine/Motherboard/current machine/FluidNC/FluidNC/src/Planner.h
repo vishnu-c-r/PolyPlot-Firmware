@@ -33,6 +33,10 @@ struct plan_line_data_t {
     // Add pen tracking variables
     int              prevPenNumber;  // Previous pen number before change
     int              penNumber;      // Current/target pen number
+    
+    // Pen change motion control feedrates
+    float        approach_feedrate;  // Fast approach feed rate for tool change
+    float        precise_feedrate;   // Slower precise movement feed rate for actual pen change
 };
 
 // Now safe to include pen.h

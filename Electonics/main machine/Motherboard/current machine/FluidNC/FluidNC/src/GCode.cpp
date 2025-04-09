@@ -1464,11 +1464,13 @@ Error gc_execute_line(char* line) {
         memset(pl_data, 0, sizeof(plan_line_data_t));
         pl_data->prevPenNumber = gc_state.prev_tool;
         pl_data->penNumber = gc_state.tool;
-        pl_data->feed_rate = 2000.0f;  // Set controlled feed rate
+        pl_data->feed_rate = 15000.0f;  // Default feed rate
+        pl_data->approach_feedrate = 15000.0f; // Fast approach feed rate
+        pl_data->precise_feedrate = 5000.0f;   // Slower precise movement feed rate for actual pen change
         pl_data->line_number = gc_block.values.n;
         pl_data->motion.noFeedOverride = 1;  // Use noFeedOverride to ensure exact feed rate
-        pl_data->motion.rapidMotion = 0;     // Disable rapid motion
-
+        pl_data->motion.rapidMotion = 1;     // Enable rapid motion with feed rate control
+        
         // [3. Synchronize and execute]
         protocol_buffer_synchronize();
         if (!mc_pen_change(pl_data)) {

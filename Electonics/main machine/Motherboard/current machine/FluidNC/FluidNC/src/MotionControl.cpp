@@ -479,9 +479,13 @@ void mc_critical(ExecAlarm alarm) {
 // -----------------------------------------------------------------------------
 bool mc_pen_change(plan_line_data_t* pl_data) {
     static int current_loaded_pen = 0;
-    int nextPen = pl_data->penNumber;
+    int        nextPen            = pl_data->penNumber;
     protocol_buffer_synchronize();
     plan_sync_position();
+    
+    float original_feed_rate = pl_data->feed_rate;
+    float approach_feedrate = pl_data->approach_feedrate;
+    float precise_feedrate = pl_data->precise_feedrate;
     
     auto& toolConfig = WebUI::ToolConfig::getInstance();
     if (!toolConfig.loadConfig()) {
@@ -493,6 +497,9 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     copyAxes(currentPos, gc_state.position);
     copyAxes(startPos, currentPos);
 
+    // Use fast approach feed rate for initial moves
+    pl_data->feed_rate = approach_feedrate;
+    
     // Move to safe Z height first
     currentPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, currentPos))
@@ -515,20 +522,28 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         pen_change = true;
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
             return false;
+        // Reset to approach feed rate after dropping pen
+        pl_data->feed_rate = approach_feedrate;
         if (!mc_pick_pen(pl_data, nextPen, startPos))
             return false;
         pen_change         = false;
         current_loaded_pen = nextPen;
     }
-    log_info("Pen change complete: " << current_loaded_pen);
 
+    // Restore original feed rate
+    pl_data->feed_rate = original_feed_rate;
     toolConfig.saveCurrentState(nextPen);
+    log_info("Pen change complete: " << current_loaded_pen);
     protocol_buffer_synchronize();
     plan_sync_position();
     return true;
 }
 
 bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_AXIS]) {
+    float original_feed_rate = pl_data->feed_rate;
+    float approach_feedrate = pl_data->approach_feedrate;
+    float precise_feedrate = pl_data->precise_feedrate;
+
     float targetPos[MAX_N_AXIS];
     copyAxes(targetPos, gc_state.position);
     float pickupPos[MAX_N_AXIS];
@@ -537,30 +552,56 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
         log_error("Invalid pen pickup position");
         return false;
     }
+
     // Pen pickup sequence:
+    // Use approach_feedrate for initial moves
+    pl_data->feed_rate = approach_feedrate;
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    
     targetPos[Z_AXIS] = pickupPos[Z_AXIS];
     if (!safeMove(pl_data, targetPos))
         return false;
+
     targetPos[Y_AXIS] = pickupPos[Y_AXIS];
     if (!safeMove(pl_data, targetPos))
         return false;
-    pl_data->feed_rate = 1000;
-    targetPos[X_AXIS]  = -440.0f;
-    if (!safeMove(pl_data, targetPos))
-        return false;
-    targetPos[X_AXIS] = pickupPos[X_AXIS];
-    if (!safeMove(pl_data, targetPos))
-        return false;
-    targetPos[Z_AXIS] = 0;
-    if (!safeMove(pl_data, targetPos))
-        return false;
+
     targetPos[X_AXIS] = -440.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
+
+    // Switch to precise_feedrate when moving past X=-440 boundary
+    pl_data->feed_rate = precise_feedrate;
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    
+    targetPos[X_AXIS] = pickupPos[X_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    targetPos[Z_AXIS] = 0;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    // Use approach_feedrate again for exit move
+    pl_data->feed_rate = approach_feedrate;
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    
+    targetPos[X_AXIS] = -440.0f;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    pl_data->feed_rate = original_feed_rate;
     return true;
 }
 
 bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_AXIS]) {
+    float original_feed_rate = pl_data->feed_rate;
+    float approach_feedrate = pl_data->approach_feedrate;
+    float precise_feedrate = pl_data->precise_feedrate;
+
     float targetPos[MAX_N_AXIS];
     copyAxes(targetPos, gc_state.position);
     float dropPos[MAX_N_AXIS];
@@ -569,26 +610,48 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
         log_error("Invalid pen drop position");
         return false;
     }
+
     // Pen drop sequence:
+    // Use approach_feedrate for initial moves
+    pl_data->feed_rate = approach_feedrate;
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    
     targetPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, targetPos))
         return false;
+
     targetPos[Y_AXIS] = dropPos[Y_AXIS];
     if (!safeMove(pl_data, targetPos))
         return false;
-    pl_data->feed_rate = 1000;
-    targetPos[X_AXIS]  = -440.0f;
-    if (!safeMove(pl_data, targetPos))
-        return false;
-    targetPos[X_AXIS] = dropPos[X_AXIS];
-    if (!safeMove(pl_data, targetPos))
-        return false;
-    targetPos[Z_AXIS] = dropPos[Z_AXIS];
-    if (!safeMove(pl_data, targetPos))
-        return false;
+
     targetPos[X_AXIS] = -440.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
+
+    // Switch to precise_feedrate when moving past X=-440 boundary
+    pl_data->feed_rate = precise_feedrate;
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    
+    targetPos[X_AXIS] = dropPos[X_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    targetPos[Z_AXIS] = dropPos[Z_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    // Use approach_feedrate again for exit move
+    pl_data->feed_rate = approach_feedrate;
+    protocol_buffer_synchronize();
+    plan_sync_position();
+    
+    targetPos[X_AXIS] = -440.0f;
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    pl_data->feed_rate = original_feed_rate;
     toolConfig.setToolOccupied(penNumber, true);
     return true;
 }

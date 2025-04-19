@@ -26,7 +26,6 @@ namespace Kinematics {
 
     bool Kinematics::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         Assert(_system != nullptr, "No kinematic system");
-        _system->apply_laser_offset(target);
         return _system->cartesian_to_motors(target, pl_data, position);
     }
 
@@ -60,7 +59,9 @@ namespace Kinematics {
         return _system->transform_cartesian_to_motors(motors, cartesian);
     }
 
-    void Kinematics::group(Configuration::HandlerBase& handler) { ::Kinematics::KinematicsFactory::factory(handler, _system); }
+    void Kinematics::group(Configuration::HandlerBase& handler) {
+        ::Kinematics::KinematicsFactory::factory(handler, _system);
+    }
 
     void Kinematics::afterParse() {
         if (_system == nullptr) {
@@ -78,19 +79,7 @@ namespace Kinematics {
         _system->init_position();
     }
 
-    Kinematics::~Kinematics() { delete _system; }
-
-    void KinematicSystem::apply_laser_offset(float* target) {
-        // Skip laser offset during homing operations
-        if (sys.state == State::Homing) {
-            return;
-        }
-
-        if (config && config->_laserPointer && 
-            config->_laserPointer->isAvailable() && 
-            config->_laserPointer->getState()) {
-            target[X_AXIS] += config->_laserPointer->getXOffset();
-            target[Y_AXIS] += config->_laserPointer->getYOffset();
-        }
+    Kinematics::~Kinematics() {
+        delete _system;
     }
-};
+}  // namespace Kinematics

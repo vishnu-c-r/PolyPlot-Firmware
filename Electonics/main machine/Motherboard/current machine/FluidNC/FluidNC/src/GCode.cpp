@@ -25,6 +25,9 @@
 #include <string.h>  // memset
 #include <math.h>    // sqrt etc.
 
+// Define the flag to track if laser offset has been explicitly disabled
+bool laser_offset_disabled = false;
+
 // Allow iteration over CoordIndex values
 CoordIndex& operator++(CoordIndex& i) {
     i = static_cast<CoordIndex>(static_cast<size_t>(i) + 1);
@@ -161,6 +164,49 @@ void gc_wco_changed() {
         protocol_buffer_synchronize();
     }
     allChannels.notifyWco();
+}
+
+// Helper function to apply laser pointer offset
+void apply_laser_pointer_offset() {
+    // Instead of manipulating G92 offset (which affects soft limits),
+    // we'll calculate a tool offset that works with soft limits
+
+    // First, save current position
+    float original_position[MAX_N_AXIS];
+    copyAxes(original_position, gc_state.position);
+
+    // Reset any existing G92 offset to ensure we're starting clean
+    clear_vector(gc_state.coord_offset);
+
+    // Apply the offset based on machine quadrant
+    // For a machine in the 3rd quadrant (negative X, negative Y)
+    // we need to adjust the approach
+    float x_offset = config->getLaserOffsetX();
+    float y_offset = config->getLaserOffsetY();
+
+    // Apply offsets in a way that works with soft limits
+    // This preserves the coordinate system while compensating for the pointer offset
+    gc_state.coord_offset[X_AXIS] = -x_offset;
+    gc_state.coord_offset[Y_AXIS] = -y_offset;
+
+    log_info("Applied laser offset compensation: X=" << -x_offset << " Y=" << -y_offset << " (adjusted for 3rd quadrant)");
+
+    gc_ngc_changed(CoordIndex::G92);
+    gc_wco_changed();
+}
+
+// Helper function to remove laser pointer offset
+void remove_laser_pointer_offset() {
+    // Reset any existing G92 offset
+    clear_vector(gc_state.coord_offset);
+
+    // Set the flag to indicate laser offset is explicitly disabled
+    laser_offset_disabled = true;
+
+    log_info("Removed laser pointer offset compensation and disabled auto-apply");
+
+    gc_ngc_changed(CoordIndex::G92);
+    gc_wco_changed();
 }
 
 // Executes one line of NUL-terminated G-Code.
@@ -672,6 +718,39 @@ Error gc_execute_line(char* line) {
                         gc_block.modal.io_control = IoControl::SetAnalogImmediate;
                         mg_word_bit               = ModalGroup::MM10;
                         break;
+                    case 150:  // M150 - Apply laser offset (with optional values)
+                        // Check if X and Y values were provided
+                        if (bitnum_is_true(value_words, GCodeWord::X) || bitnum_is_true(value_words, GCodeWord::Y)) {
+                            // If at least one value is provided, update the offset settings
+                            float x_offset = bitnum_is_true(value_words, GCodeWord::X) ? gc_block.values.xyz[X_AXIS] :
+                                                                                         config->getLaserOffsetX();
+                            float y_offset = bitnum_is_true(value_words, GCodeWord::Y) ? gc_block.values.xyz[Y_AXIS] :
+                                                                                         config->getLaserOffsetY();
+
+                            // Save the new laser offset values
+                            config->setLaserOffset(x_offset, y_offset);
+                            log_info("Laser offset set to X=" << x_offset << " Y=" << y_offset);
+
+                            // Remove the X and Y value words since they're used
+                            if (bitnum_is_true(value_words, GCodeWord::X)) {
+                                clear_bitnum(value_words, GCodeWord::X);
+                            }
+                            if (bitnum_is_true(value_words, GCodeWord::Y)) {
+                                clear_bitnum(value_words, GCodeWord::Y);
+                            }
+                        } else {
+                            log_info("Applying previously stored laser offset");
+                        }
+
+                        // Set the flag to indicate laser offset is enabled
+                        laser_offset_disabled = false;
+
+                        // Apply the offset immediately
+                        apply_laser_pointer_offset();
+                        break;
+                    case 151:
+                        remove_laser_pointer_offset();
+                        break;
                     default:
                         FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported M command]
                 }
@@ -973,24 +1052,6 @@ Error gc_execute_line(char* line) {
                 gc_block.values.xyz[idx] *= MM_PER_INCH;
             }
         }
-    }
-
-    switch (gc_block.modal.module) {
-        case Module::pen1:
-        case Module::pen2:
-        case Module::pen3:
-        case Module::pen4:
-        case Module::pen5:
-        case Module::pen6:
-        case Module::pen7:
-        case Module::pen8:
-            break;
-        case Module::home:
-            break;
-        case Module::steps:
-            break;
-        default:
-            FAIL(Error::GcodeUnsupportedCommand);  // Undefined command or parameter
     }
 
     if (gc_block.non_modal_command == NonModal::AbsoluteOverride)
@@ -1462,15 +1523,15 @@ Error gc_execute_line(char* line) {
 
         // [2. Set up motion parameters]
         memset(pl_data, 0, sizeof(plan_line_data_t));
-        pl_data->prevPenNumber = gc_state.prev_tool;
-        pl_data->penNumber = gc_state.tool;
-        pl_data->feed_rate = 15000.0f;  // Default feed rate
-        pl_data->approach_feedrate = 15000.0f; // Fast approach feed rate
-        pl_data->precise_feedrate = 5000.0f;   // Slower precise movement feed rate for actual pen change
-        pl_data->line_number = gc_block.values.n;
+        pl_data->prevPenNumber         = gc_state.prev_tool;
+        pl_data->penNumber             = gc_state.tool;
+        pl_data->feed_rate             = 15000.0f;  // Default feed rate
+        pl_data->approach_feedrate     = 15000.0f;  // Fast approach feed rate
+        pl_data->precise_feedrate      = 5000.0f;   // Slower precise movement feed rate for actual pen change
+        pl_data->line_number           = gc_block.values.n;
         pl_data->motion.noFeedOverride = 1;  // Use noFeedOverride to ensure exact feed rate
-        pl_data->motion.rapidMotion = 1;     // Enable rapid motion with feed rate control
-        
+        pl_data->motion.rapidMotion    = 1;  // Enable rapid motion with feed rate control
+
         // [3. Synchronize and execute]
         protocol_buffer_synchronize();
         if (!mc_pen_change(pl_data)) {
@@ -1480,9 +1541,9 @@ Error gc_execute_line(char* line) {
         }
 
         // [4. Reset state]
-        pen_change = false;
+        pen_change                 = false;
         gc_block.modal.tool_change = ToolChange::Disable;
-        gc_state.prev_tool = gc_state.tool;
+        gc_state.prev_tool         = gc_state.tool;
     }
 
     // Intercept jog commands and complete error checking for valid jog commands and execute.
@@ -1676,10 +1737,13 @@ Error gc_execute_line(char* line) {
     if (gc_state.modal.motion != Motion::None) {
         if (axis_command == AxisCommand::MotionMode) {
             GCUpdatePos gc_update_pos = GCUpdatePos::Target;
+
+            // REMOVED: No longer automatically applying offset at job start
+            // Instead, rely solely on explicit M150/M151 commands
+
             if (gc_state.modal.motion == Motion::Linear) {
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
-            }
-            else if (gc_state.modal.motion == Motion::Seek) {
+            } else if (gc_state.modal.motion == Motion::Seek) {
                 pl_data->motion.rapidMotion = 1;  // Set rapid motion flag.
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if ((gc_state.modal.motion == Motion::CwArc) || (gc_state.modal.motion == Motion::CcwArc)) {

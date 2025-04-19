@@ -15,7 +15,6 @@
 #include <cstdlib>  // PSoc Required for labs
 #include <cmath>
 
-
 static plan_block_t* block_buffer = nullptr;  // A ring buffer for motion instructions
 static uint8_t       block_buffer_tail;       // Index of the block to process now
 static uint8_t       block_buffer_head;       // Index of the next block to be pushed
@@ -49,8 +48,8 @@ static uint8_t plan_next_block_index(uint8_t block_index) {
     return block_index;
 }
 
-float last_position[MAX_N_AXIS] = {0};  // Initialize with 0 or any other default position
-  // Stores the last known positions of X, Y, Z, etc.
+float last_position[MAX_N_AXIS] = { 0 };  // Initialize with 0 or any other default position
+                                          // Stores the last known positions of X, Y, Z, etc.
 
 // Returns the index of the previous block in the ring buffer
 static uint8_t plan_prev_block_index(uint8_t block_index) {
@@ -308,16 +307,16 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     // Prepare and initialize new block. Copy relevant pl_data for block execution.
     plan_block_t* block = &block_buffer[block_buffer_head];
     memset(block, 0, sizeof(plan_block_t));  // Zero all block values.
-    block->motion               = pl_data->motion;
-    block->coolant              = pl_data->coolant;
-    block->line_number          = pl_data->line_number;
-    block->is_jog               = pl_data->is_jog;
-    block->previousPenNumber    = pl_data->prevPenNumber;
-    block->currentPenNumber     = pl_data->penNumber;
+    block->motion            = pl_data->motion;
+    block->coolant           = pl_data->coolant;
+    block->line_number       = pl_data->line_number;
+    block->is_jog            = pl_data->is_jog;
+    block->previousPenNumber = pl_data->prevPenNumber;
+    block->currentPenNumber  = pl_data->penNumber;
 
     // Special case for pen change operations - ensure feed rate is set correctly
     bool isPenChange = (pl_data->prevPenNumber >= 0 && pl_data->penNumber >= 0);
-    
+
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
     float   unit_vec[MAX_N_AXIS], delta_mm;
@@ -369,18 +368,20 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->millimeters  = convert_delta_vector_to_unit_vector(unit_vec);
     block->acceleration = limit_acceleration_by_axis_maximum(unit_vec);
     block->rapid_rate   = limit_rate_by_axis_maximum(unit_vec);
-    
+
     // Store programmed rate.
-    if (block->motion.rapidMotion && !isPenChange) {
+    if (block->motion.rapidMotion) {
         block->programmed_rate = block->rapid_rate;
+    } else if (isPenChange) {
+        block->programmed_rate = pl_data->feed_rate;
     } else {
-        // For pen changes or normal feeds, use the specified feed rate
+        // Normal feed behavior
         block->programmed_rate = pl_data->feed_rate;
         if (block->motion.inverseTime) {
             block->programmed_rate *= block->millimeters;
         }
     }
-    
+
     // TODO: Need to check this method handling zero junction speeds when starting from rest.
     if ((block_buffer_head == block_buffer_tail) || (block->motion.systemMotion)) {
         // Initialize block entry speed as zero. Assume it will be starting from rest. Planner will correct this later.

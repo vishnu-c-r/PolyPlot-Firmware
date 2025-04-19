@@ -99,9 +99,6 @@ namespace Kinematics {
         virtual bool limitReached(AxisMask& axisMask, MotorMask& motors, MotorMask limited) { return false; }
         virtual bool kinematics_homing(AxisMask& axisMask) { return false; }
 
-        // Move apply_laser_offset implementation to cpp file
-        virtual void apply_laser_offset(float* target);
-
         // Configuration interface.
         void afterParse() override {}
         void group(Configuration::HandlerBase& handler) override {}

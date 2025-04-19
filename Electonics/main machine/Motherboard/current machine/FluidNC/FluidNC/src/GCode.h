@@ -8,7 +8,6 @@
 #include "Config.h"
 #include "Error.h"
 
-
 #include <cstdint>
 
 typedef uint16_t gcodenum_t;
@@ -39,7 +38,7 @@ enum class ModalGroup : uint8_t {
     MG13 = 10,  // [G61] Control mode
     MM4  = 11,  // [M0,M1,M2,M30] Stopping
     MM6  = 14,  // [M6] Tool change
-    MM7  = 12,  
+    MM7  = 12,
     MM8  = 13,  // [M7,M8,M9] Coolant control
     MM9  = 14,  // [M56] Override control
     MM10 = 15,  // [M62, M63, M64, M65, M67, M68] User Defined http://linuxcnc.org/docs/html/gcode/overview.html#_modal_groups
@@ -82,15 +81,15 @@ enum class Motion : gcodenum_t {
 };
 
 enum class Module : gcodenum_t {
-    pen1 = 61,
-    pen2 = 62,
-    pen3 = 63,
-    pen4 = 64,
-    pen5 = 65,
-    pen6 = 66,
-    pen7 = 67,
-    pen8 = 68,
-    home = 69,
+    pen1  = 61,
+    pen2  = 62,
+    pen3  = 63,
+    pen4  = 64,
+    pen5  = 65,
+    pen6  = 66,
+    pen7  = 67,
+    pen8  = 68,
+    home  = 69,
     steps = 60,
 };
 
@@ -186,13 +185,13 @@ enum class ToolLengthOffset : gcodenum_t {
 };
 
 static const uint32_t MaxToolNumber = 99999999;
-static const uint32_t MAX_PENS = 10;  // Add this line
+static const uint32_t MAX_PENS      = 10;  // Add this line
 
 #define MAX_PENS 6  // Update maximum number of pens to 6
 
 enum class ToolChange : uint8_t {
-    Disable = 0,
-    Enable  = 1,
+    Disable    = 0,
+    Enable     = 1,
     InProgress = 2,
 };
 
@@ -264,20 +263,20 @@ CoordIndex& operator++(CoordIndex& i);
 
 // NOTE: When this struct is zeroed, the 0 values in the above types set the system defaults.
 struct gc_modal_t {
-    Motion          motion;          // {G0,G1,G2,G3,G38.2,G80}
-    FeedRate        feed_rate;       // {G93,G94}
-    Units           units;           // {G20,G21}
-    Distance        distance;        // {G90,G91}
-    Plane           plane_select;    // {G17,G18,G19}
-    Module          module;          // controls the current module being used
-    ToolLengthOffset tool_length;    // {G43.1,G49}
-    CoordIndex      coord_select;    // {G54,G55,G56,G57,G58,G59}
-    ProgramFlow     program_flow;    // {M0,M1,M2,M30}
-    CoolantState    coolant;         // {M7,M8,M9}
-    Override        override;        // {M56}
-    ToolChange      tool_change;     // {M6}
-    SetToolNumber   set_tool;        // For selecting which tool to use
-    IoControl       io_control;      // For digital/analog I/O control
+    Motion           motion;        // {G0,G1,G2,G3,G38.2,G80}
+    FeedRate         feed_rate;     // {G93,G94}
+    Units            units;         // {G20,G21}
+    Distance         distance;      // {G90,G91}
+    Plane            plane_select;  // {G17,G18,G19}
+    Module           module;        // controls the current module being used
+    ToolLengthOffset tool_length;   // {G43.1,G49}
+    CoordIndex       coord_select;  // {G54,G55,G56,G57,G58,G59}
+    ProgramFlow      program_flow;  // {M0,M1,M2,M30}
+    CoolantState     coolant;       // {M7,M8,M9}
+    Override         override;      // {M56}
+    ToolChange       tool_change;   // {M6}
+    SetToolNumber    set_tool;      // For selecting which tool to use
+    IoControl        io_control;    // For digital/analog I/O control
 };
 
 struct gc_values_t {
@@ -297,10 +296,10 @@ struct gc_values_t {
 struct parser_state_t {
     gc_modal_t modal;
 
-    float    feed_rate;      // Millimeters/min
-    int32_t  tool;           // Current pen number (0 = no pen)
-    int32_t  prev_tool;      // Previous pen number
-    int32_t  line_number;    // Last line number sent
+    float   feed_rate;    // Millimeters/min
+    int32_t tool;         // Current pen number (0 = no pen)
+    int32_t prev_tool;    // Previous pen number
+    int32_t line_number;  // Last line number sent
 
     float position[MAX_N_AXIS];  // Where the interpreter considers the tool to be at this point in the code
 
@@ -344,5 +343,13 @@ void gc_ngc_changed(CoordIndex coord);
 void gc_wco_changed();
 void gc_ovr_changed();
 
-extern gc_modal_t modal_defaults;
+extern gc_modal_t    modal_defaults;
 extern volatile bool pen_change;
+
+// Declare state system variables for laser offset tracking
+extern bool  laser_offset_applied;
+extern State last_machine_state;
+extern bool  laser_offset_disabled;
+
+void apply_laser_pointer_offset();
+void remove_laser_pointer_offset();

@@ -32,8 +32,6 @@ namespace Kinematics {
 #include "I2SOBus.h"
 #include "UserOutputs.h"
 #include "Macros.h"
-#include "Module4thAxis.h"
-#include "../LaserPointer.h"
 
 #include <string_view>
 
@@ -67,24 +65,22 @@ namespace Machine {
     public:
         MachineConfig() = default;
 
-        Axes*                 _axes           = nullptr;
+        Axes*                     _axes           = nullptr;
         ::Kinematics::Kinematics* _kinematics     = nullptr;
-        SPIBus*               _spi            = nullptr;
-        I2CBus*               _i2c[MAX_N_I2C] = { nullptr };
-        I2SOBus*              _i2so           = nullptr;
-        Stepping*             _stepping       = nullptr;
-        CoolantControl*       _coolant        = nullptr;
-        Probe*                _probe          = nullptr;
-        Control*              _control        = nullptr;
-        UserOutputs*          _userOutputs    = nullptr;
-        SDCard*               _sdCard         = nullptr;
-        Macros*               _macros         = nullptr;
-        Start*                _start          = nullptr;
-        Parking*              _parking        = nullptr;
-        Module4thAxis*        _module4thAxis  = nullptr;
-        OLED*                 _oled           = nullptr;
-        Status_Outputs*       _stat_out       = nullptr;
-        LaserPointer*         _laserPointer   = nullptr;
+        SPIBus*                   _spi            = nullptr;
+        I2CBus*                   _i2c[MAX_N_I2C] = { nullptr };
+        I2SOBus*                  _i2so           = nullptr;
+        Stepping*                 _stepping       = nullptr;
+        CoolantControl*           _coolant        = nullptr;
+        Probe*                    _probe          = nullptr;
+        Control*                  _control        = nullptr;
+        UserOutputs*              _userOutputs    = nullptr;
+        SDCard*                   _sdCard         = nullptr;
+        Macros*                   _macros         = nullptr;
+        Start*                    _start          = nullptr;
+        Parking*                  _parking        = nullptr;
+        OLED*                     _oled           = nullptr;
+        Status_Outputs*           _stat_out       = nullptr;
 
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };
         Uart*        _uarts[MAX_N_UARTS]         = { nullptr };
@@ -95,6 +91,9 @@ namespace Machine {
         bool  _reportInches      = false;
 
         size_t _planner_blocks = 16;
+
+        float _laserOffsetX = 0.0f;
+        float _laserOffsetY = 0.0f;
 
         // Add a getter method for the module type
         // String getModuleType() const { return _module_type; }
@@ -125,7 +124,13 @@ namespace Machine {
         static void load();
         static void load_file(std::string_view file);
         static void load_yaml(std::string_view yaml_string);
-        
+
+        float getLaserOffsetX() const { return _laserOffsetX; }
+        float getLaserOffsetY() const { return _laserOffsetY; }
+        void  setLaserOffset(float x, float y) {
+            _laserOffsetX = x;
+            _laserOffsetY = y;
+        }
 
         ~MachineConfig();
     };

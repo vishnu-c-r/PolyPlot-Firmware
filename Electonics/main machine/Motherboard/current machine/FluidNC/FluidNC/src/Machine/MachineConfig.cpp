@@ -21,7 +21,6 @@
 #include "../Configuration/ParseException.h"
 #include "../Config.h"  // ENABLE_*
 
-
 #include <cstdio>
 #include <cstring>
 #include <atomic>
@@ -45,7 +44,6 @@ namespace Machine {
         handler.section("uart_channel1", _uart_channels[1], 1);
         handler.section("uart_channel2", _uart_channels[2], 2);
 
-        handler.section("laser_pointer", _laserPointer);
         handler.section("status_outputs", _stat_out);
 
         handler.section("i2so", _i2so);
@@ -58,6 +56,10 @@ namespace Machine {
 
         handler.section("kinematics", _kinematics);
         handler.section("axes", _axes);
+
+        // Add laser offset configuration
+        handler.item("laser_offset_x", _laserOffsetX);
+        handler.item("laser_offset_y", _laserOffsetY);
 
         handler.section("control", _control);
         handler.section("coolant", _coolant);
@@ -102,11 +104,6 @@ namespace Machine {
         if (_userOutputs == nullptr) {
             _userOutputs = new UserOutputs();
         }
-
-        // Remove auto-creation of laser pointer - only create if configured in yaml
-        // if (_laserPointer == nullptr) {
-        //     _laserPointer = new LaserPointer();
-        // }
 
         if (_sdCard == nullptr) {
             _sdCard = new SDCard();
@@ -238,43 +235,6 @@ namespace Machine {
         std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
     }
 
-    // void MachineConfig::detectModuleType() {
-    //     // Use UART or I2C to communicate with the 4th axis module and determine its type
-    //     // For example, using UART:
-    //     Uart* uart = _uarts[2];  // Assuming UART2 is used for 4th axis communication
-    //     if (uart) {
-    //         uart->begin(9600);  // Set baud rate
-
-    //         // Send a request signal to the 4th axis module
-    //         uart->write("PING\n");
-
-    //         // Wait for the module to respond
-    //         String response = "";
-    //         long   timeout  = millis() + 2000;  // 2-second timeout
-    //         while (millis() < timeout) {
-    //             if (uart->available()) {
-    //                 response += (char)uart->read();
-    //             }
-    //             if (response.endsWith("\n")) {
-    //                 break;
-    //             }
-    //         }
-
-    //         // Process the response to determine the module type
-    //         if (response.startsWith("PEN_MODULE")) {
-    //             _module_type = "Pen Module";
-    //         } else if (response.startsWith("KNIFE_MODULE")) {
-    //             _module_type = "Tangential Knife Module";
-    //         } else if (response.startsWith("CREASE_MODULE")) {
-    //             _module_type = "Creasing Wheel Module";
-    //         } else {
-    //             _module_type = "Unknown Module";
-    //         }
-
-    //         log_info("Detected 4th axis module: " << _module_type);
-    //     }
-    // }
-
     MachineConfig::~MachineConfig() {
         delete _axes;
         delete _i2so;
@@ -284,6 +244,5 @@ namespace Machine {
         delete _spi;
         delete _control;
         delete _macros;
-        delete _laserPointer;
     }
 }

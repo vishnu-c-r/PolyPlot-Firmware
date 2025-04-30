@@ -29,6 +29,7 @@ struct plan_line_data_t {
     int32_t      line_number;     // Desired line number to report when executing.
     bool         is_jog;          // true if this was generated due to a jog command
     bool         limits_checked;  // true if soft limits already checked
+    bool         use_exact_feedrate; // If true, always use feed_rate for this move
     
     // Add pen tracking variables
     int              prevPenNumber;  // Previous pen number before change

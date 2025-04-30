@@ -11,6 +11,7 @@
 #include "Planner.h"
 #include "Machine/MachineConfig.h"
 #include "WebUI/ToolConfig.h"
+#include "Limits.h" // For pen_change flag
 
 #include <cstdlib>  // PSoc Required for labs
 #include <cmath>
@@ -314,9 +315,6 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->previousPenNumber = pl_data->prevPenNumber;
     block->currentPenNumber  = pl_data->penNumber;
 
-    // Special case for pen change operations - ensure feed rate is set correctly
-    bool isPenChange = (pl_data->prevPenNumber >= 0 && pl_data->penNumber >= 0);
-
     // Compute and store initial move distance data.
     int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
     float   unit_vec[MAX_N_AXIS], delta_mm;
@@ -370,12 +368,11 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->rapid_rate   = limit_rate_by_axis_maximum(unit_vec);
 
     // Store programmed rate.
-    if (block->motion.rapidMotion) {
-        block->programmed_rate = block->rapid_rate;
-    } else if (isPenChange) {
+    if (pl_data->use_exact_feedrate) {
         block->programmed_rate = pl_data->feed_rate;
+    } else if (block->motion.rapidMotion) {
+        block->programmed_rate = block->rapid_rate;
     } else {
-        // Normal feed behavior
         block->programmed_rate = pl_data->feed_rate;
         if (block->motion.inverseTime) {
             block->programmed_rate *= block->millimeters;

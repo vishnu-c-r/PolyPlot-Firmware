@@ -555,6 +555,7 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
 
     // Pen pickup sequence:
     // Use approach_feedrate for initial moves
+    pl_data->use_exact_feedrate = false;
     pl_data->feed_rate = approach_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
@@ -572,6 +573,7 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
         return false;
 
     // Switch to precise_feedrate when moving past X=-440 boundary
+    pl_data->use_exact_feedrate = true;
     pl_data->feed_rate = precise_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
@@ -585,6 +587,7 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
         return false;
 
     // Use approach_feedrate again for exit move
+    pl_data->use_exact_feedrate = false;
     pl_data->feed_rate = approach_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
@@ -613,6 +616,7 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
 
     // Pen drop sequence:
     // Use approach_feedrate for initial moves
+    
     pl_data->feed_rate = approach_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
@@ -642,8 +646,9 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    // Use approach_feedrate again for exit move
-    pl_data->feed_rate = approach_feedrate;
+    // After pen drop, use precise/slow feedrate for the next move
+    pl_data->use_exact_feedrate = true;
+    pl_data->feed_rate = precise_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
     

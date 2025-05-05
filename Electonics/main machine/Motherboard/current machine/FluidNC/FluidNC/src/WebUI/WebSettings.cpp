@@ -614,6 +614,37 @@ namespace WebUI {
         return runFile("sd", parameter, auth_level, out);
     }
 
+    // Performs a dry run check of an SD file without executing it
+    static Error checkSDFile(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+        if (!parameter) {
+            log_error_to(out, "No filename specified");
+            return Error::InvalidStatement;
+        }
+        
+        // Save the current state and turn on check mode
+        bool was_check_mode = state_is(State::CheckMode);
+        if (!was_check_mode) {
+            set_state(State::CheckMode);
+            log_info_to(out, "Starting G-code validation...");
+        }
+
+        Error err = runFile("sd", parameter, auth_level, out);
+        
+        if (err == Error::Ok) {
+            log_info_to(out, "G-code validation successful - no errors found");
+        } else {
+            log_error_to(out, "G-code validation failed: " << errorString(err));
+        }
+
+        // Restore the previous check mode state if we enabled it
+        if (!was_check_mode) {
+            report_feedback_message(Message::Disabled);
+            sys.abort = true;  // This will trigger a graceful exit of check mode
+        }
+
+        return err;
+    }
+
     // Used by js/controls.js
     static Error runLocalFile(const char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP700
         return runFile("", parameter, auth_level, out);
@@ -1044,5 +1075,9 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WU, "ESP400", "WebUI/List", listSettings, anyState);
         new WebCommand(NULL, WEBCMD, WG, "ESP0", "WebUI/Help", showWebHelp, anyState);
         new WebCommand(NULL, WEBCMD, WG, "ESP", "WebUI/Help", showWebHelp, anyState);
+
+        // Add the new check command
+        new WebCommand("path", WEBCMD, WU, "ESP219", "SD/Check", checkSDFile, nullptr);
+
     }
 }

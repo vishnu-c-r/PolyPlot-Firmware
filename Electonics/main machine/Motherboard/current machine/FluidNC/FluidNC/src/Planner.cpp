@@ -11,7 +11,7 @@
 #include "Planner.h"
 #include "Machine/MachineConfig.h"
 #include "WebUI/ToolConfig.h"
-#include "Limits.h" // For pen_change flag
+#include "Limits.h"  // For pen_change flag
 
 #include <cstdlib>  // PSoc Required for labs
 #include <cmath>

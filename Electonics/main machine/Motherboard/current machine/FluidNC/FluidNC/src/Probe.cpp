@@ -7,17 +7,16 @@
 #include "Machine/EventPin.h"
 #include "Machine/MachineConfig.h"
 
-extern void protocol_do_probe(void* arg);
+extern void    protocol_do_probe(void* arg);
 const ArgEvent probeEvent { protocol_do_probe };
 
 class ProbeEventPin : public EventPin {
 private:
     bool _value = false;
-    Pin* _pin = nullptr;
+    Pin* _pin   = nullptr;
 
 public:
-    ProbeEventPin(const char* legend, Pin& pin) :
-        EventPin(&probeEvent, legend), _pin(&pin) {}
+    ProbeEventPin(const char* legend, Pin& pin) : EventPin(&probeEvent, legend), _pin(&pin) {}
 
     void init() {
         if (_pin->undefined()) {
@@ -59,7 +58,7 @@ void Probe::set_direction(bool away) {
 }
 
 // Returns the probe pin state. Triggered = true. Called by gcode parser.
-bool Probe::get_state() { 
+bool Probe::get_state() {
     return ((_probeEventPin && _probeEventPin->get()) || (_toolsetterEventPin && _toolsetterEventPin->get()));
 }
 
@@ -77,7 +76,7 @@ void Probe::group(Configuration::HandlerBase& handler) {
     handler.item("hard_stop", _hard_stop);
 }
 void protocol_do_probe(void* arg) {
-    Probe* p =config->_probe;
+    Probe* p = config->_probe;
     if (p->tripped() && probing) {
         probing = false;
         get_motor_steps(probe_steps);

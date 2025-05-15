@@ -25,10 +25,10 @@ private:
 public:
     Status_Outputs() : Channel("status_outputs") {}
 
-    Status_Outputs(const Status_Outputs&) = delete;
-    Status_Outputs(Status_Outputs&&)      = delete;
+    Status_Outputs(const Status_Outputs&)            = delete;
+    Status_Outputs(Status_Outputs&&)                 = delete;
     Status_Outputs& operator=(const Status_Outputs&) = delete;
-    Status_Outputs& operator=(Status_Outputs&&) = delete;
+    Status_Outputs& operator=(Status_Outputs&&)      = delete;
 
     virtual ~Status_Outputs() = default;
 

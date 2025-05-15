@@ -81,10 +81,10 @@ private:
 public:
     OLED() : Channel("oled") {}
 
-    OLED(const OLED&) = delete;
-    OLED(OLED&&)      = delete;
+    OLED(const OLED&)            = delete;
+    OLED(OLED&&)                 = delete;
     OLED& operator=(const OLED&) = delete;
-    OLED& operator=(OLED&&) = delete;
+    OLED& operator=(OLED&&)      = delete;
 
     virtual ~OLED() = default;
 
@@ -97,8 +97,8 @@ public:
     uint8_t _address = 0x3c;
     int     _width   = 64;
     int     _height  = 48;
-    bool     _flip    = true;
-    bool     _mirror  = false;
+    bool    _flip    = true;
+    bool    _mirror  = false;
 
     // Channel method overrides
 

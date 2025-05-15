@@ -188,12 +188,12 @@ namespace WebUI {
     void WSChannels::sendPing() {
         for (auto it = _wsChannels.begin(); it != _wsChannels.end();) {
             WSChannel* wsChannel = it->second;
-            
+
             // Original simple ping code
             std::string s("PING:");
             s += std::to_string(wsChannel->id());
             wsChannel->sendTXT(s);
-            
+
             ++it;
         }
     }
@@ -227,7 +227,7 @@ namespace WebUI {
                         s = "ACTIVE_ID:";
                         s += std::to_string(wsChannel->id());
                         wsChannel->sendTXT(s);
-                        
+
                         // Fix ambiguous push() call by using std::string
                         std::string report_cmd = "$Report/Interval=50\n";
                         wsChannel->push(report_cmd);
@@ -283,7 +283,7 @@ namespace WebUI {
                     _lastWSChannel = wsChannel;
                     allChannels.registration(wsChannel);
                     _wsChannels[num] = wsChannel;
-                    
+
                     if (uri == "/") {
                         std::string s("currentID:");
                         s += std::to_string(num);
@@ -297,11 +297,11 @@ namespace WebUI {
                         // Send initial connection success message
                         std::string connected = "{\"status\":\"connected\"}";
                         wsChannel->sendTXT(connected);
-                        
+
                         // Fix ambiguous push() call by using std::string
                         std::string report_cmd = "$Report/Interval=50\n";
                         wsChannel->push(report_cmd);
-                        
+
                         // Log that we've set the report interval
                         log_debug("Set report interval to 50ms for WebSocket " << num);
                     }

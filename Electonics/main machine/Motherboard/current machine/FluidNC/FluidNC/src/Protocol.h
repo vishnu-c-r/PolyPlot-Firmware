@@ -102,7 +102,6 @@ extern const NoArgEvent debugEvent;
 extern const NoArgEvent unhomedEvent;
 extern const NoArgEvent startEvent;
 extern const NoArgEvent restartEvent;
-extern const NoArgEvent cancelJobEvent;
 
 extern const NoArgEvent runStartupLinesEvent;
 

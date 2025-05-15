@@ -24,7 +24,7 @@ const int PARKING_MOTION_LINE_NUMBER = 0;
 bool mc_linear(float* target, plan_line_data_t* pl_data, float* position);
 
 // Execute a linear motion in motor space.
-bool mc_move_motors(float* target, plan_line_data_t* pl_data);  // returns true if line was submitted to planner
+bool mc_move_motors(float* target, plan_line_data_t* pl_dta);  // returns true if line was submitted to planner
 
 // Execute an arc in offset mode format. position == current xyz, target == target xyz,
 // offset == offset from current xyz, axis_XXX defines circle plane in tool space, axis_linear is
@@ -48,7 +48,6 @@ bool mc_dwell(int32_t milliseconds);
 GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset);
 // New probe cycle that oscillates the probe to find the contact point. Requires probe switch.
 GCUpdatePos mc_probe_oscillate(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset);
-
 
 // Handles updating the override control state.
 void mc_override_ctrl_update(Override override_state);

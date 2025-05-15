@@ -620,7 +620,7 @@ namespace WebUI {
             log_error_to(out, "No filename specified");
             return Error::InvalidStatement;
         }
-        
+
         // Save the current state and turn on check mode
         bool was_check_mode = state_is(State::CheckMode);
         if (!was_check_mode) {
@@ -629,7 +629,7 @@ namespace WebUI {
         }
 
         Error err = runFile("sd", parameter, auth_level, out);
-        
+
         if (err == Error::Ok) {
             log_info_to(out, "G-code validation successful - no errors found");
         } else {
@@ -1078,6 +1078,5 @@ namespace WebUI {
 
         // Add the new check command
         new WebCommand("path", WEBCMD, WU, "ESP219", "SD/Check", checkSDFile, nullptr);
-
     }
 }

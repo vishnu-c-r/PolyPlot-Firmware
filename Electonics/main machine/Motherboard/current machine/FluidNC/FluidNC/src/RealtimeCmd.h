@@ -39,7 +39,6 @@ enum class Cmd : uint8_t {
     CoolantFloodOvrToggle = 0xA0,
     CoolantMistOvrToggle  = 0xA1,
     // Channel Extender uses the Bx range; see Channel.h
-    CancelJob             = '*',  // Add the new command
 };
 
 class Channel;

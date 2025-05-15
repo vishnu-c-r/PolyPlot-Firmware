@@ -176,7 +176,9 @@ namespace WebUI {
         return false;
     }
 
-    bool NotificationsService::started() { return _started; }
+    bool NotificationsService::started() {
+        return _started;
+    }
 
     const char* NotificationsService::getTypeString() {
         switch (_notificationType) {
@@ -445,6 +447,8 @@ namespace WebUI {
         if (_started) {}
     }
 
-    NotificationsService::~NotificationsService() { end(); }
+    NotificationsService::~NotificationsService() {
+        end();
+    }
 }
 #endif

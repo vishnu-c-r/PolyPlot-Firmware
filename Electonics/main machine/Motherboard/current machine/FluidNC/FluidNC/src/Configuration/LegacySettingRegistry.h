@@ -17,7 +17,7 @@ namespace Configuration {
 
         LegacySettingRegistry() = default;
 
-        LegacySettingRegistry(const LegacySettingRegistry&) = delete;
+        LegacySettingRegistry(const LegacySettingRegistry&)            = delete;
         LegacySettingRegistry& operator=(const LegacySettingRegistry&) = delete;
 
         std::vector<LegacySettingHandler*> handlers_;

@@ -145,7 +145,7 @@ bool get_numbered_param(ngc_param_id_t id, float& result) {
 
     // Current relative position in the active coordinate system including all offsets
     if (id >= 5420 && id < (5420 + MAX_N_AXIS)) {
-        float* my_position = get_mpos();        
+        float* my_position = get_mpos();
         mpos_to_wpos(my_position);
         result = my_position[id - 5420];
         return true;

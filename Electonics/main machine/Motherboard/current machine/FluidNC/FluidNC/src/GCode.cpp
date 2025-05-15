@@ -947,7 +947,7 @@ Error gc_execute_line(char* line) {
     // they are always used when present. This was done to save a few bytes of flash. For clarity, the
     // single-meaning value words may be removed as they are used. Also, axis words are treated in the
     // same way. If there is an explicit/implicit axis command, XYZ words are always used and are
-    // are removed at the end of error-checking.
+    // removed at the end of error-checking.
     // [1. Comments ]: MSG's NOT SUPPORTED. Comment handling performed by protocol.
     // [2. Set feed rate mode ]: G93 F word missing with G1,G2/3 active, implicitly or explicitly. Feed rate
     //   is not defined after switching to G94 from G93.
@@ -971,8 +971,7 @@ Error gc_execute_line(char* line) {
             }
             // NOTE: It seems redundant to check for an F word to be passed after switching from G94 to G93. We would
             // accomplish the exact same thing if the feed rate value is always reset to zero and undefined after each
-            // inverse time block, since the commands that use this value already perform undefined checks. This would
-            // also allow other commands, following this switch, to execute and not error out needlessly. This code is
+            // inverse time block, since the commands that use this value already perform undefined checks. This code is
             // combined with the above feed rate mode and the below set feed rate error-checking.
             // [3. Set feed rate ]: F is negative (done.)
             // - In inverse time mode: Always implicitly zero the feed rate value before and after block completion.

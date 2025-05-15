@@ -32,7 +32,9 @@ namespace MotorDrivers {
 
     void MotorDriver::debug_message() {}
 
-    bool MotorDriver::test() { return true; };  // true = OK
+    bool MotorDriver::test() {
+        return true;
+    };  // true = OK
 
     size_t MotorDriver::axis_index() const {
         Assert(config != nullptr && config->_axes != nullptr, "Expected machine to be configured before this is called.");

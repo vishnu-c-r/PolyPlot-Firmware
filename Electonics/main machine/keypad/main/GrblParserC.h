@@ -8,6 +8,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>  // Add this for size_t
+#include <Arduino.h>
 
 #define REPORT_BUFFER_LEN 128  // Reduced buffer size
 
@@ -79,6 +80,7 @@ extern void show_ok();
 extern bool _ackwait;
 extern int _ack_time_limit;
 extern bool _alarm14;
+extern bool _machine_ready; // New flag to detect READY message
 
 #ifdef __cplusplus
 }

@@ -76,10 +76,10 @@ float limitsMaxPosition(size_t axis) {
     auto axisConfig = config->_axes->_axis[axis];
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
-    
+
     // When pen_change mode is active, use restricted travel limits for X and Y axes
     // This prevents accidental collisions during tool changes
-    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
+    auto maxtravel = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
     return (!homing || homing->_positiveDirection) ? mpos : mpos + maxtravel;
 }
@@ -89,9 +89,9 @@ float limitsMinPosition(size_t axis) {
     auto axisConfig = config->_axes->_axis[axis];
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
-    
+
     // Apply same pen_change travel restriction to minimum positions
-    auto maxtravel  = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
+    auto maxtravel = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
     return (!homing || homing->_positiveDirection) ? mpos - maxtravel : mpos;
 }

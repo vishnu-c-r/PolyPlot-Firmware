@@ -23,7 +23,7 @@ namespace LEDControl
     uint32_t LedColors::lastColor;
 
     // Animation state variables
-    bool LedColors::inHomingMode = false; // UNUSED - only initialized but never read
+    // bool LedColors::inHomingMode = false; 
     uint8_t LedColors::blinkCount = 0;
     uint8_t LedColors::fadeValue = 0;
     int8_t LedColors::fadeStep = 5;
@@ -106,26 +106,26 @@ namespace LEDControl
             }
             delay(HOLD_TIME); // Hold red briefly
 
-            // Phase 2: Transition from red to orange
-            for (int j = 0; j <= 255; j += 3)
-            {
-                uint32_t interpolatedColor = interpolateColor(COLOR_RED, Color1, j);
-                for (int i = 0; i < NUM_PIXELS; i++)
-                {
-                    pixelsPtr->setPixelColor(i, interpolatedColor);
-                }
-                pixelsPtr->show();
-                delay(TRANSITION_INTERVAL);
-            }
-            delay(HOLD_TIME); // Hold orange briefly
+            // // Phase 2: Transition from red to orange
+            // for (int j = 0; j <= 255; j += 3)
+            // {
+            //     uint32_t interpolatedColor = interpolateColor(COLOR_RED, Color1, j);
+            //     for (int i = 0; i < NUM_PIXELS; i++)
+            //     {
+            //         pixelsPtr->setPixelColor(i, interpolatedColor);
+            //     }
+            //     pixelsPtr->show();
+            //     delay(TRANSITION_INTERVAL);
+            // }
+            // delay(HOLD_TIME); // Hold orange briefly
 
-            // Set first homing color to ensure smooth transition to homing animation
-            for (int i = 0; i < NUM_PIXELS; i++)
-            {
-                pixelsPtr->setPixelColor(i, Color1);
-            }
-            pixelsPtr->show();
-            lastColor = Color1;
+            // // Set first homing color to ensure smooth transition to homing animation
+            // for (int i = 0; i < NUM_PIXELS; i++)
+            // {
+            //     pixelsPtr->setPixelColor(i, Color1);
+            // }
+            // pixelsPtr->show();
+            // lastColor = Color1;
 
             initAnimationComplete = true; // Mark as complete
         }
@@ -406,4 +406,114 @@ namespace LEDControl
             delay(150);
         }
     }
-}
+
+    /**
+     * Breathing red animation for initial startup
+     * Creates a pulsing red effect while waiting for machine to be ready
+     */
+    void LedColors::breathingRedAnimation()
+    {
+        // Static variables for animation state
+        static unsigned long lastUpdate = 0;
+        static uint8_t brightness = 255; // Start from FULL brightness (255)
+        static int8_t step = -2; // Faster initial fade-down step
+        static bool initialized = false;
+        static bool initialFadeDone = false; // Tracks completion of initial fade to DEFAULT_BRIGHTNESS
+        
+        // Initialize on first call
+        if (!initialized) {
+            // Set all LEDs to red with FULL brightness
+            uint32_t startRed = pixelsPtr->Color(255, 0, 0);
+            for (int i = 0; i < NUM_PIXELS; i++) {
+                pixelsPtr->setPixelColor(i, startRed);
+            }
+            pixelsPtr->show();
+            lastColor = startRed;
+            initialized = true;
+        }
+        
+        // Time-based breathing effect
+        unsigned long currentMillis = millis();
+        if (currentMillis - lastUpdate >= 10) { // Update every 10ms for smooth breathing
+            lastUpdate = currentMillis;
+
+            // First phase: Initial fade from full brightness to DEFAULT_BRIGHTNESS
+            if (!initialFadeDone) {
+                // Update brightness with faster step for initial fade
+                brightness += step;
+                
+                // When we reach DEFAULT_BRIGHTNESS, switch to regular breathing
+                if (brightness <= DEFAULT_BRIGHTNESS) {
+                    brightness = DEFAULT_BRIGHTNESS;
+                    initialFadeDone = true;
+                    step = -1; // Switch to regular step size for breathing
+                }
+            }
+            // Second phase: Regular breathing animation between DEFAULT_BRIGHTNESS and minimum
+            else {
+                // Update brightness with direction
+                brightness += step;
+                
+                // Reverse direction at limits with some delay at max/min
+                if (brightness >= DEFAULT_BRIGHTNESS) { // Cap maximum brightness at DEFAULT_BRIGHTNESS
+                    brightness = DEFAULT_BRIGHTNESS;
+                    step = -step;
+                } else if (brightness <= 5) { // Keep a minimum glow
+                    brightness = 5;
+                    step = -step;
+                }
+            }
+
+            // Apply brightness to create the red glow
+            uint32_t dimRed = pixelsPtr->Color(brightness, 0, 0);
+            
+            // Apply to all LEDs
+            for (int i = 0; i < NUM_PIXELS; i++) {
+                pixelsPtr->setPixelColor(i, dimRed);
+            }
+            pixelsPtr->show();
+            
+            // Store last color for future transitions
+            lastColor = dimRed;
+        }
+    }
+
+    /**
+     * Transition from breathing red to homing animation start color
+     * Creates a smooth transition from current red to Color1 (orange)
+     */
+    void LedColors::transitionToHoming()
+    {
+        // Capture current red color (from breathing animation)
+        uint32_t startColor = lastColor;
+        
+        // Smoothly transition to Color1 (orange)
+        for (int j = 0; j <= 255; j += 3)
+        {
+            uint32_t interpolatedColor = interpolateColor(startColor, Color1, j);
+            for (int i = 0; i < NUM_PIXELS; i++)
+            {
+                pixelsPtr->setPixelColor(i, interpolatedColor);
+            }
+            pixelsPtr->show();
+            delay(2); // Fast but smooth transition
+        }
+        
+        // Brief flash to indicate homing is starting
+        for (int i = 0; i < NUM_PIXELS; i++)
+        {
+            pixelsPtr->setPixelColor(i, COLOR_OFF);
+        }
+        pixelsPtr->show();
+        delay(100);
+        
+        // Set all LEDs to Color1 (first color of homing sequence)
+        for (int i = 0; i < NUM_PIXELS; i++)
+        {
+            pixelsPtr->setPixelColor(i, Color1);
+        }
+        pixelsPtr->show();
+        
+        // Make sure lastColor is updated
+        lastColor = Color1;
+    }

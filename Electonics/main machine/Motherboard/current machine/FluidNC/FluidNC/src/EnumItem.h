@@ -8,7 +8,7 @@
 
 struct EnumItem {
     // Used for brace initialization
-    EnumItem() {} 
+    EnumItem() {}
 
     // Set enumItem with a default value as last item in the EnumItem array. This is the terminator.
     explicit EnumItem(int defaultValue) : value(defaultValue), name(nullptr) {}

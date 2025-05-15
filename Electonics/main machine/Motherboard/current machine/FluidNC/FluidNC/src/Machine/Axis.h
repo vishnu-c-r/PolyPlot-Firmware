@@ -30,12 +30,12 @@ namespace Machine {
         Motor*  _motors[MAX_MOTORS_PER_AXIS];
         Homing* _homing = nullptr;
 
-        float _stepsPerMm   = 80.0f;
-        float _maxRate      = 1000.0f;
-        float _acceleration = 25.0f;
-        float _maxTravel    = 1000.0f;
+        float _stepsPerMm      = 80.0f;
+        float _maxRate         = 1000.0f;
+        float _acceleration    = 25.0f;
+        float _maxTravel       = 1000.0f;
         float _penChangeTravel = 1000.0f;  // Added: Extended travel limit for pen changes
-        bool  _softLimits   = false;
+        bool  _softLimits      = false;
 
         // Configuration system helpers:
         void group(Configuration::HandlerBase& handler) override;

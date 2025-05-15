@@ -85,7 +85,7 @@ namespace WebUI {
         uint32_t _lastPongTime = 0;
         uint8_t _pingFailCount = 0;  // Track consecutive ping failures
         */
-        
+
         // Make these classes friends so they can access _server
         friend class WSChannels;
     };

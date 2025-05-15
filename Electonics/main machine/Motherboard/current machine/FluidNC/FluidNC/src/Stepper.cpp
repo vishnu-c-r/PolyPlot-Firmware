@@ -42,10 +42,10 @@ static volatile st_block_t* st_block_buffer = nullptr;
 // planner buffer. Once "checked-out", the steps in the segments buffer cannot be modified by
 // the planner, where the remaining planner block steps still can.
 struct segment_t {
-    uint16_t     n_step;             // Number of step events to be executed for this segment
-    uint16_t     isrPeriod;          // Time to next ISR tick, in units of timer ticks
-    uint8_t      st_block_index;     // Stepper block data index. Uses this information to execute this segment.
-    uint8_t      amass_level;        // AMASS level for the ISR to execute this segment
+    uint16_t n_step;          // Number of step events to be executed for this segment
+    uint16_t isrPeriod;       // Time to next ISR tick, in units of timer ticks
+    uint8_t  st_block_index;  // Stepper block data index. Uses this information to execute this segment.
+    uint8_t  amass_level;     // AMASS level for the ISR to execute this segment
 };
 static segment_t* segment_buffer = nullptr;
 
@@ -114,7 +114,7 @@ typedef struct {
     float accelerate_until;  // Acceleration ramp end measured from end of block (mm)
     float decelerate_after;  // Deceleration ramp start measured from end of block (mm)
 
-    float        inv_rate;  // Used by PWM laser mode to speed up segment calculations.
+    float inv_rate;  // Used by PWM laser mode to speed up segment calculations.
 
 } st_prep_t;
 static st_prep_t prep;
@@ -233,8 +233,7 @@ bool IRAM_ATTR Stepper::pulse_func() {
             stop_stepping();
             if (!state_is(State::Jog)) {  // added to prevent ... jog after probing crash
                 // Ensure pwm is set properly upon completion of rate-controlled motion.
-                if (st.exec_block != NULL && st.exec_block->is_pwm_rate_adjusted) {
-                }
+                if (st.exec_block != NULL && st.exec_block->is_pwm_rate_adjusted) {}
             }
 
             protocol_send_event_from_ISR(&cycleStopEvent);
@@ -444,7 +443,6 @@ void Stepper::prep_buffer() {
 
                 // prep.inv_rate is only used if is_pwm_rate_adjusted is true
                 st_prep_block->is_pwm_rate_adjusted = false;  // set default value
-
             }
             /* ---------------------------------------------------------------------------------
              Compute the velocity profile of a new planner block based on its entry and exit

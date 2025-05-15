@@ -37,7 +37,6 @@ size_t UartChannel::write(const char* text) {
     return _uart->write((const uint8_t*)text, strlen(text));
 }
 
-
 size_t UartChannel::write(const uint8_t* buffer, size_t length) {
     // Replace \n with \r\n
     if (_addCR) {
@@ -133,7 +132,7 @@ void UartChannel::out_acked(const std::string& s, const char* tag) {
     log_stream(*this, "[" << tag << s);
 }
 
-UartChannel Uart0(0, true); 
+UartChannel Uart0(0, true);
 // UartChannel Uart2(2, true);  // Primary serial channel with LF to CRLF conversion
 
 void uartInit() {

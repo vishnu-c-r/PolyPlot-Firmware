@@ -23,9 +23,13 @@ namespace WebUI {
         }
     }
 
-    void TelnetClient::flushRx() { Channel::flushRx(); }
+    void TelnetClient::flushRx() {
+        Channel::flushRx();
+    }
 
-    size_t TelnetClient::write(uint8_t data) { return write(&data, 1); }
+    size_t TelnetClient::write(uint8_t data) {
+        return write(&data, 1);
+    }
 
     size_t TelnetClient::write(const uint8_t* buffer, size_t length) {
         // Replace \n with \r\n
@@ -56,11 +60,17 @@ namespace WebUI {
         return length;
     }
 
-    int TelnetClient::peek(void) { return _wifiClient->peek(); }
+    int TelnetClient::peek(void) {
+        return _wifiClient->peek();
+    }
 
-    int TelnetClient::available() { return _wifiClient->available(); }
+    int TelnetClient::available() {
+        return _wifiClient->available();
+    }
 
-    int TelnetClient::rx_buffer_available() { return WIFI_CLIENT_READ_BUFFER_SIZE - available(); }
+    int TelnetClient::rx_buffer_available() {
+        return WIFI_CLIENT_READ_BUFFER_SIZE - available();
+    }
 
     int TelnetClient::read(void) {
         if (_state == -1) {
@@ -82,7 +92,9 @@ namespace WebUI {
         return ret;
     }
 
-    TelnetClient::~TelnetClient() { delete _wifiClient; }
+    TelnetClient::~TelnetClient() {
+        delete _wifiClient;
+    }
 }
 
 #endif

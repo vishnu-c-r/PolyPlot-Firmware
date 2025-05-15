@@ -18,16 +18,16 @@
 // Change from namespace to class to match Planner.h declaration
 class Stepper {
 public:
-    static void init();
-    static bool update_plan_block_parameters();  // Changed to return bool
-    static bool pulse_func();  // Changed to return bool
-    static void reset();
-    static void wake_up();
-    static void go_idle();
-    static void stop_stepping();
-    static void parking_setup_buffer();
-    static void parking_restore_buffer();
-    static void prep_buffer();
+    static void  init();
+    static bool  update_plan_block_parameters();  // Changed to return bool
+    static bool  pulse_func();                    // Changed to return bool
+    static void  reset();
+    static void  wake_up();
+    static void  go_idle();
+    static void  stop_stepping();
+    static void  parking_setup_buffer();
+    static void  parking_restore_buffer();
+    static void  prep_buffer();
     static float get_realtime_rate();
 
     static uint32_t isr_count;

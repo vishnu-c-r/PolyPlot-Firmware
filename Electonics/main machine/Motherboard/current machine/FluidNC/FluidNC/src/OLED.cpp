@@ -321,8 +321,8 @@ void OLED::parse_status_report() {
         }
         if (tag == "A") {
             // SCFM
-            bool flood   = false;
-            bool mist    = false;
+            bool flood = false;
+            bool mist  = false;
             for (char const& c : value) {
                 switch (c) {
                     case 'F':

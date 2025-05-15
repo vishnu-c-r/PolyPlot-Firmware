@@ -2,6 +2,7 @@
 
 #ifdef __cplusplus
 #include <Adafruit_NeoPixel.h>
+#include "main.h" // Include main.h to make WifiMode visible
 
 /**
  * LED Control namespace for CNC controller
@@ -92,7 +93,7 @@ namespace LEDControl
         static const uint8_t LED_LEFT = 1;            // Left arrow LED index
         static const uint8_t LED_PLAYPAUSE = 3;       // Play/pause LED index
         static const uint8_t NUM_PIXELS = 5;          // Total number of LEDs
-        static const uint8_t DEFAULT_BRIGHTNESS = 70; // Default LED brightness (0-255)
+        static const uint8_t DEFAULT_BRIGHTNESS = 100; // Default LED brightness (0-255)
 
         //---------------------------------------------------------------
         // Animation Timing Constants
@@ -173,6 +174,18 @@ namespace LEDControl
          * Used when starting operations
          */
         static void transitionToOrange();
+
+        /**
+         * Breathing red animation during startup
+         * Used while waiting for alarm detection
+         */
+        static void breathingRedAnimation();
+
+        /**
+         * Transition from breathing red animation to homing animation
+         * Creates a smooth transition from red to orange (Color1)
+         */
+        static void transitionToHoming();
     };
 }
 #endif

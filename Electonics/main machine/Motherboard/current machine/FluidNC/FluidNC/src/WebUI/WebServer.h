@@ -57,6 +57,7 @@ namespace WebUI {
         ~Web_Server();
 
         static void handlePenChangeMode();
+
     private:
         static bool              _setupdone;
         static WebServer*        _webserver;
@@ -96,7 +97,7 @@ namespace WebUI {
         static void WebUpdateUpload();
 
         static bool myStreamFile(const char* path, bool download = false);
-        
+
         static bool streamFileFromPath(const FluidPath& fpath, bool download);
 
         static void pushError(int code, const char* st, bool web_error = 500, uint16_t timeout = 1000);
@@ -125,21 +126,21 @@ namespace WebUI {
         static void sendWithOurAddress(const char* s, int code);
         static void sendCaptivePortal();
         static void send404Page();
-        static void handleGetPenConfig();  
-        static void handleSetPenConfig();  
-        static void handleDeletePen();     
-        // static void serveStatic(const char* uri, const char* path, const char* cache_header); 
+        static void handleGetPenConfig();
+        static void handleSetPenConfig();
+        static void handleDeletePen();
+        // static void serveStatic(const char* uri, const char* path, const char* cache_header);
         static int getPageid();
 
-        static const uint32_t WEBSOCKET_TIMEOUT = 60000; 
-        static const uint8_t MAX_RETRY_ATTEMPTS = 3;
-        static uint8_t retry_count;
-        static uint32_t last_ws_activity;
-        static void addCORSHeaders();  
-        static void handleGetToolConfig();     
-        static void handleSetToolConfig();     
-        static void handleUpdateToolPosition();
-        static void handleGetToolStatus();     
+        static const uint32_t WEBSOCKET_TIMEOUT  = 60000;
+        static const uint8_t  MAX_RETRY_ATTEMPTS = 3;
+        static uint8_t        retry_count;
+        static uint32_t       last_ws_activity;
+        static void           addCORSHeaders();
+        static void           handleGetToolConfig();
+        static void           handleSetToolConfig();
+        static void           handleUpdateToolPosition();
+        static void           handleGetToolStatus();
     };
 
     extern Web_Server webServer;

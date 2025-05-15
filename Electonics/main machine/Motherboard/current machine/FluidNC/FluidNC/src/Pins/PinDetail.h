@@ -24,10 +24,10 @@ namespace Pins {
         int _index;
 
         PinDetail(int number) : _index(number) {}
-        PinDetail(const PinDetail& o) = delete;
-        PinDetail(PinDetail&& o)      = delete;
+        PinDetail(const PinDetail& o)            = delete;
+        PinDetail(PinDetail&& o)                 = delete;
         PinDetail& operator=(const PinDetail& o) = delete;
-        PinDetail& operator=(PinDetail&& o) = delete;
+        PinDetail& operator=(PinDetail&& o)      = delete;
 
         virtual PinCapabilities capabilities() const = 0;
 

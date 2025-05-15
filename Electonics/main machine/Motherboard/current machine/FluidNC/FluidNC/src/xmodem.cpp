@@ -110,7 +110,7 @@ static int check(int crc, const uint8_t* buf, int sz) {
 }
 
 static void flushinput(void) {
-    while (_inbyte(((DLY_1S)*3) >> 1) >= 0)
+    while (_inbyte(((DLY_1S) * 3) >> 1) >= 0)
         ;
 }
 

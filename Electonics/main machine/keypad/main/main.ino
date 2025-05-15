@@ -50,7 +50,6 @@ enum MachineState
 MachineState machineState = IDLE;
 
 // State tracking variables
-bool alarm14Active = false;      // Whether alarm 14 (homing needed) is active
 bool isHoming = false;           // Whether machine is currently homing
 bool justFinishedHoming = false; // Flag for homing completion animation
 bool enableAlarmCheck = false;   // Whether to enable alarm checking
@@ -84,7 +83,7 @@ void fnc_putchar(uint8_t ch)
 }
 
 //---------------------------------------------------------------
-// Button Handling
+//                   Button Handling
 //---------------------------------------------------------------
 // Structure to track button state with debouncing
 struct ButtonState
@@ -108,6 +107,41 @@ ButtonState playPauseButton;
 //---------------------------------------------------------------
 //                          Setup
 //---------------------------------------------------------------
+/**
+ * Waits for the machine to report READY status before proceeding
+ * Shows breathing red animation while waiting - no timeout
+ */
+void waitForMachineReady()
+{
+    // Set initial state
+    machineState = ALARM;
+    
+    // Request status report
+    fnc_realtime(StatusReport);
+    
+    // Keep running breathing animation while waiting
+    unsigned long lastStatusRequest = 0;
+    
+    // Wait until machine enters HOMING state
+    while (machineState != HOMING)
+    {
+        // Show breathing red animation during this waiting phase
+        LEDControl::LedColors::breathingRedAnimation();
+        
+        // Request status periodically
+        unsigned long currentTime = millis();
+        if (currentTime - lastStatusRequest > 200)
+        {
+            fnc_realtime(StatusReport);
+            lastStatusRequest = currentTime;
+        }
+        
+        // Process incoming data
+        fnc_poll();
+    }
+    // No extra delay here; proceed immediately
+}
+
 void setup()
 {
     // Initialize hardware
@@ -120,23 +154,40 @@ void setup()
     pinMode(BUTTON_LEFT, INPUT_PULLUP);
     pinMode(BUTTON_PLAYPAUSE, INPUT_PULLUP);
 
-    // Set machine state to HOMING before initialization
+    // Set machine state to ALARM initially
+    machineState = ALARM;
+    
+    // Initialize NeoPixel hardware 
+    pixels.begin();
+    pixels.setBrightness(LEDControl::LedColors::DEFAULT_BRIGHTNESS);
+    pixels.clear();
+    pixels.show();
+    
+    // Initialize LED colors
+    LEDControl::LedColors::init(pixels);
+    
+    // Wait for GRBL to be ready and establish communication
+    fnc_wait_ready();
+    // Set a more frequent status report interval
+    fnc_send_line("$Report/Interval=50", 100);
+    delay(200);
+    
+    // Reset _machine_ready flag before waiting for it
+    _machine_ready = false;
+    
+    // Wait for machine to report READY status while running breathing animation
+    waitForMachineReady();
+    
+    // Now proceed with homing sequence
+    LEDControl::LedColors::transitionToHoming();
+    
+    // Send homing command with delay to ensure it's sent properly
+    delay(100); // Make sure any previous commands have been processed
+    Serial.flush(); // Flush any pending serial data
+    
+    // Update state to HOMING - this will trigger the homing animation
     machineState = HOMING;
     isHoming = true;
-
-    // Initialize LEDs with startup animation
-    LEDControl::LedColors::init(pixels);
-
-    // Wait for GRBL to be ready
-    fnc_wait_ready();
-    fnc_send_line("$Report/Interval=50", 100);
-
-    // Send homing command
-    fnc_send_line("$H", 100);
-
-    // Initialize state flags
-    alarm14Active = false;
-    enableAlarmCheck = true;
 }
 
 //---------------------------------------------------------------
@@ -171,7 +222,6 @@ void loop()
  */
 void updateButtonState(ButtonState &btn, bool currentRead)
 {
-    // Remove the unused variable
     bool isPlayPauseButton = (&btn == &playPauseButton);
     
     // Check for state change
@@ -194,11 +244,9 @@ void updateButtonState(ButtonState &btn, bool currentRead)
                 btn.isPressed = true;
                 btn.pressTime = millis();
                 
-                // Debug for play/pause button
-                if (isPlayPauseButton) {
-                    // Reset long press flag on new press
-                    btn.longPressCommandSent = false;
-                }
+                // Reset long press flag for ALL buttons when newly pressed
+                // This ensures we can send multiple long press commands with the same button
+                btn.longPressCommandSent = false;
             }
             else
             {
@@ -308,6 +356,14 @@ void handleButtons()
         // Add a small delay between jogs to prevent overwhelming the machine
         if ((millis() - lastJogTime) > 50)
         { // 50ms minimum between jogs
+            
+            // Handle directional buttons for jogging
+            // Each one follows the same pattern:
+            // 1. Check if button is pressed (short press) or held (long press)
+            // 2. Send appropriate jog command
+            // 3. Reset flags to prevent repeated commands
+            // 4. Update lastJogTime to enforce minimum interval between commands
+
             // UP button
             if (upButton.isPressed && !upButton.isHeld && !upButton.longPressCommandSent)
             {
@@ -401,6 +457,10 @@ void updateLEDs()
 {
     if (machineState == HOMING)
     {
+        if (!isHoming) {
+            // If not actually homing, don't run homing animation
+            return;
+        }
         LEDControl::LedColors::homingAnimation();
     }
     else if (machineState == IDLE)
@@ -458,12 +518,11 @@ void show_state(const char *state)
         startupTime = millis();
     }
 
-    // Ignore state changes during initial startup period
-    if (millis() - startupTime < 3000)
-    {
-        return; // Skip state processing during startup animation
-    }
+    // // Debug output to help diagnose state issues
+    // Serial.print("State received: ");
+    // Serial.println(state);
 
+    // Store the current state
     strncpy(current_machine_state, state, sizeof(current_machine_state));
 
     if (strstr(state, "Run") == state)
@@ -493,18 +552,21 @@ void show_state(const char *state)
             isHoming = false;
             machineState = IDLE;
             LEDControl::LedColors::updateMachineState(LEDControl::LedColors::IDLE);
+            // Serial.println("Homing complete, transitioning to IDLE");
         }
         else if (machineState == HOMING)
         {
             justFinishedHoming = true;
             machineState = IDLE;
             LEDControl::LedColors::updateMachineState(LEDControl::LedColors::IDLE);
+            // Serial.println("HOMING to IDLE transition");
         }
         else if (machineState == RUNNING)
-        { // Check if we're transitioning from RUNNING to IDLE
+        { 
             machineState = IDLE;
             LEDControl::LedColors::updateMachineState(LEDControl::LedColors::IDLE);
             LEDControl::LedColors::transitionToGreen();
+            // Serial.println("RUNNING to IDLE transition");
         }
         else
         {
@@ -512,11 +574,11 @@ void show_state(const char *state)
             LEDControl::LedColors::updateMachineState(LEDControl::LedColors::IDLE);
         }
     }
-    else if (strstr(state, "Alarm") == state && enableAlarmCheck)
+    else if (strstr(state, "Alarm") == state)
     {
         machineState = ALARM;
-        alarm14Active = _alarm14;
         isHoming = false;
+        // Serial.println("Machine in ALARM state");
     }
     else if (strstr(state, "Jog") == state)
     {
@@ -535,6 +597,7 @@ void show_state(const char *state)
         isHoming = true;
         justFinishedHoming = false;
         LEDControl::LedColors::isHomed = false; // Reset isHomed flag when starting homing
+        // Serial.println("Machine in HOMING state");
     }
 
     updateLEDs();

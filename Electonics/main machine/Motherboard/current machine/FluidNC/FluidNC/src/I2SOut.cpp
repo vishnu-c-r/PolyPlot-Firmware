@@ -816,7 +816,7 @@ int i2s_out_init(i2s_out_init_t& init_param) {
     I2S0.sample_rate_conf.tx_bits_mod = 32;
     I2S0.sample_rate_conf.rx_bits_mod = 32;
 #    endif
-    I2S0.conf.tx_mono                 = 0;   // Set this bit to enable transmitter’s mono mode in PCM standard mode.
+    I2S0.conf.tx_mono = 0;  // Set this bit to enable transmitter’s mono mode in PCM standard mode.
 
     I2S0.conf_chan.rx_chan_mod = 1;  // 1: right+right
     I2S0.conf.rx_mono          = 0;
@@ -854,7 +854,7 @@ int i2s_out_init(i2s_out_init_t& init_param) {
     // i2s_ll_rx_clk_set_src(dev, I2S_CLK_D2CLK);
     I2S0.clkm_conf.clka_en = 0;  // Use 160 MHz PLL_D2_CLK as reference
 #    endif
-        // N + b/a = 0
+    // N + b/a = 0
 #    if I2S_OUT_NUM_BITS == 16
     // N = 10
     I2S0.clkm_conf.clkm_div_num = 10;  // minimum value of 2, reset value of 4, max 256 (I²S clock divider’s integral value)

@@ -73,9 +73,6 @@ static std::string uriEncodeGrblCharacters(const char* clear) {
             case '~':  // Cmd::CycleStart
                 escaped += "%7E";
                 break;
-            case '*':  // Cmd::CancelJob
-                escaped += "%2A";
-                break;
             default:
                 escaped += c;
                 break;

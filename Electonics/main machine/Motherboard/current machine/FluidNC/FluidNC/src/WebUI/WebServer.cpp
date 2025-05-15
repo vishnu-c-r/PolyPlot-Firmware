@@ -28,7 +28,7 @@
 
 #    include "WebClient.h"
 
-#    include "src/Protocol.h"  
+#    include "src/Protocol.h"
 #    include "src/FluidPath.h"
 #    include "src/WebUI/JSONEncoder.h"
 
@@ -38,7 +38,7 @@
 #    include "PenConfig.h"
 #    include "ToolConfig.h"
 
-extern volatile bool pen_change; 
+extern volatile bool pen_change;
 
 namespace WebUI {
     const byte DNS_PORT = 53;
@@ -84,12 +84,12 @@ namespace WebUI {
         http_port   = new IntSetting("HTTP Port", WEBSET, WA, "ESP121", "HTTP/Port", DEFAULT_HTTP_PORT, MIN_HTTP_PORT, MAX_HTTP_PORT);
         http_enable = new EnumSetting("HTTP Enable", WEBSET, WA, "ESP120", "HTTP/Enable", DEFAULT_HTTP_STATE, &onoffOptions);
         http_block_during_motion = new EnumSetting("Block serving HTTP content during motion",
-                                                    WEBSET,
-                                                    WA,
-                                                    "",
-                                                    "HTTP/BlockDuringMotion",
-                                                    DEFAULT_HTTP_BLOCKED_DURING_MOTION,
-                                                    &onoffOptions);
+                                                   WEBSET,
+                                                   WA,
+                                                   "",
+                                                   "HTTP/BlockDuringMotion",
+                                                   DEFAULT_HTTP_BLOCKED_DURING_MOTION,
+                                                   &onoffOptions);
     }
     Web_Server::~Web_Server() {
         end();
@@ -139,7 +139,7 @@ namespace WebUI {
         _webserver->on("/", [this]() { handle_root("/"); });
         _webserver->on("/admin", [this]() { handle_root("/admin"); });
         _webserver->on("/wifi", [this]() { handle_root("/wifi"); });
-        _webserver->on("/atc",[this]() { handle_root("/atc"); });
+        _webserver->on("/atc", [this]() { handle_root("/atc"); });
 
         _webserver->onNotFound(handle_not_found);
 
@@ -166,18 +166,18 @@ namespace WebUI {
             // provided IP to all DNS request
             dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
             log_info("Captive Portal Started");
-            
+
             // Redirect captive portal detection URLs directly to WiFi configuration page
             _webserver->on("/generate_204", HTTP_ANY, [this]() {
                 _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
                 _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
             });
-            
+
             _webserver->on("/gconnectivitycheck.gstatic.com", HTTP_ANY, [this]() {
                 _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
                 _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
             });
-            
+
             _webserver->on("/fwlink/", HTTP_ANY, [this]() {
                 _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
                 _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
@@ -227,18 +227,16 @@ namespace WebUI {
 
         // Add explicit routes for JS module and CSS files with correct MIME types
 
-
         // Add generic handler for other assets in /ui/assets/
         _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
 
         // Add explicit routes for JS module and CSS files with correct MIME types
 
-
         // Add generic handler for other assets in /ui/assets/
         _webserver->on("/ui/assets/", HTTP_GET, [this]() {
             String path = _webserver->uri();
             _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
-            
+
             if (path.endsWith(".js")) {
                 _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
             } else if (path.endsWith(".css")) {
@@ -268,7 +266,7 @@ namespace WebUI {
         _webserver->on("/assets/", HTTP_GET, [this]() {
             String path = _webserver->uri();
             _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
-            
+
             if (path.endsWith(".js")) {
                 _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
             } else if (path.endsWith(".css")) {
@@ -337,12 +335,12 @@ namespace WebUI {
             addCORSHeaders();
             handlePenChangeMode();
         });
-        
+
         _webserver->on("/penchangemode", HTTP_POST, [this]() {
             addCORSHeaders();
             handlePenChangeMode();
         });
-        
+
         _webserver->on("/penchangemode", HTTP_OPTIONS, [this]() {
             addCORSHeaders();
             _webserver->send(204);
@@ -356,7 +354,7 @@ namespace WebUI {
                 _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
                 return;
             }
-            
+
             _webserver->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Restarting system\"}");
             delay_ms(500);  // Give time for response to be sent
             COMMANDS::restart_MCU();
@@ -414,15 +412,15 @@ namespace WebUI {
     static bool endsWithCI(const char* suffix, const char* test) {
         size_t slen = strlen(suffix);
         size_t tlen = strlen(test);
-        
+
         if (slen > tlen) {
             return false;
         }
-        
+
         // Compare from the end of both strings
         const char* s = suffix + slen - 1;
         const char* t = test + tlen - 1;
-        
+
         while (s >= suffix) {
             if (tolower(*s) != tolower(*t)) {
                 return false;
@@ -435,7 +433,7 @@ namespace WebUI {
 
     bool Web_Server::myStreamFile(const char* path, bool download) {
         std::error_code ec;
-        // log_debug("Trying to serve file: " << path); 
+        // log_debug("Trying to serve file: " << path);
 
         // Try to open the file from the SD card first
         FluidPath sdPath { path, sdName, ec };
@@ -457,18 +455,18 @@ namespace WebUI {
     }
 
     bool Web_Server::streamFileFromPath(const FluidPath& fpath, bool download) {
-        FileStream* file = nullptr;
-        bool isGzip = false;
-        std::string actualPath;
-        size_t fileSize = 0;
-        static const size_t CHUNK_SIZE = 2048; // Read 1KB at a time
-        uint8_t chunk[CHUNK_SIZE];
-        
+        FileStream*         file   = nullptr;
+        bool                isGzip = false;
+        std::string         actualPath;
+        size_t              fileSize   = 0;
+        static const size_t CHUNK_SIZE = 2048;  // Read 1KB at a time
+        uint8_t             chunk[CHUNK_SIZE];
+
         // First try to get file size without keeping file open
         try {
-            file = new FileStream(fpath, "r", "");
+            file       = new FileStream(fpath, "r", "");
             actualPath = fpath.c_str();
-            fileSize = file->size();
+            fileSize   = file->size();
             delete file;
             file = nullptr;
         } catch (const Error err) {
@@ -476,14 +474,14 @@ namespace WebUI {
                 delete file;
                 file = nullptr;
             }
-            
+
             try {
                 std::filesystem::path gzpath(fpath);
                 gzpath += ".gz";
-                file = new FileStream(gzpath, "r", "");
-                isGzip = true;
+                file       = new FileStream(gzpath, "r", "");
+                isGzip     = true;
                 actualPath = gzpath.string();
-                fileSize = file->size();
+                fileSize   = file->size();
                 delete file;
                 file = nullptr;
             } catch (const Error err) {
@@ -524,7 +522,7 @@ namespace WebUI {
         const char* contentType = getContentType(fpath.c_str());
         if (endsWithCI(".js", fpath.c_str())) {
             _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
-        } 
+        }
         _webserver->send(200, contentType, "");
 
         // Now open file again for streaming
@@ -544,11 +542,9 @@ namespace WebUI {
                     break;
                 }
                 bytesRemaining -= bytesToRead;
-                delay(0); // Prevent watchdog trigger
+                delay(0);  // Prevent watchdog trigger
             }
-        } catch (const Error err) {
-            success = false;
-        }
+        } catch (const Error err) { success = false; }
 
         if (file) {
             delete file;
@@ -598,14 +594,14 @@ namespace WebUI {
 
     void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
-        
+
         // If in AP mode and requesting root page, redirect to WiFi config page
         if (path == "/" && WiFi.getMode() == WIFI_AP) {
             _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
             _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
             return;
         }
-        
+
         if (path == "/admin") {
             if (myStreamFile("/ui/admin.html"))
                 return;
@@ -622,7 +618,7 @@ namespace WebUI {
                 return;
             }
         }
-        
+
         // If we did not send any HTML, send the default content
         _webserver->sendHeader("Content-Encoding", "gzip");
         _webserver->send_P(200, "text/html", PAGE_NOFILES, PAGE_NOFILES_SIZE);
@@ -635,7 +631,6 @@ namespace WebUI {
         _webserver->send(204);  // No Content response for OPTIONS request
     }
 
-
     // Handle filenames and other things that are not explicitly registered
     void Web_Server::handle_not_found() {
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
@@ -645,21 +640,20 @@ namespace WebUI {
         }
 
         std::string path(_webserver->urlDecode(_webserver->uri()).c_str());
-        
+
         // If pen change mode is active, restrict access to non-ATC pages
         // This ensures safety by keeping the user in the ATC interface until the flag is unset
-        if (pen_change && 
-            path.find("/atc") == std::string::npos && 
-            path.find("/penchangemode") == std::string::npos &&
-            path != "/command" && // Allow commands to be sent
-            path != "/command_silent") { // Allow silent commands
-            
+        if (pen_change && path.find("/atc") == std::string::npos && path.find("/penchangemode") == std::string::npos &&
+            path != "/command" &&         // Allow commands to be sent
+            path != "/command_silent") {  // Allow silent commands
+
             // Redirect to ATC page with a clear message about the restriction
-            _webserver->send(403, "text/html", 
-                "<html><body><h2>Pen Change Mode Active</h2>"
-                "<p>The machine is in pen change mode. Other UI functions are temporarily restricted.</p>"
-                "<p><a href='/atc'>Go to ATC interface</a></p>"
-                "</body></html>");
+            _webserver->send(403,
+                             "text/html",
+                             "<html><body><h2>Pen Change Mode Active</h2>"
+                             "<p>The machine is in pen change mode. Other UI functions are temporarily restricted.</p>"
+                             "<p><a href='/atc'>Go to ATC interface</a></p>"
+                             "</body></html>");
             return;
         }
 
@@ -1489,23 +1483,21 @@ namespace WebUI {
     struct mime_type {
         const char* suffix;
         const char* mime_type;
-    } mime_types[] = {
-        { ".html", "text/html" },
-        { ".htm", "text/html" },
-        { ".css", "text/css" },
-        { ".js", "application/javascript" },
-        { ".png", "image/png" },
-        { ".gif", "image/gif" },
-        { ".jpeg", "image/jpeg" },
-        { ".jpg", "image/jpeg" },
-        { ".ico", "image/x-icon" },
-        { ".xml", "text/xml" },
-        { ".pdf", "application/x-pdf" },
-        { ".zip", "application/x-zip" },
-        { ".gz", "application/x-gzip" },
-        { ".txt", "text/plain" },
-        { "", "application/octet-stream" }
-    };
+    } mime_types[] = { { ".html", "text/html" },
+                       { ".htm", "text/html" },
+                       { ".css", "text/css" },
+                       { ".js", "application/javascript" },
+                       { ".png", "image/png" },
+                       { ".gif", "image/gif" },
+                       { ".jpeg", "image/jpeg" },
+                       { ".jpg", "image/jpeg" },
+                       { ".ico", "image/x-icon" },
+                       { ".xml", "text/xml" },
+                       { ".pdf", "application/x-pdf" },
+                       { ".zip", "application/x-zip" },
+                       { ".gz", "application/x-gzip" },
+                       { ".txt", "text/plain" },
+                       { "", "application/octet-stream" } };
 
     const char* Web_Server::getContentType(const char* filename) {
         mime_type* m;
@@ -1694,8 +1686,8 @@ namespace WebUI {
         }
 
         std::string jsonData = _webserver->arg("plain").c_str();
-        PenConfig& config = PenConfig::getInstance();
-        
+        PenConfig&  config   = PenConfig::getInstance();
+
         if (config.fromJSON(jsonData)) {
             if (config.saveConfig()) {
                 _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1721,7 +1713,7 @@ namespace WebUI {
         }
 
         std::string penName = _webserver->arg("name").c_str();
-        PenConfig& config = PenConfig::getInstance();
+        PenConfig&  config  = PenConfig::getInstance();
 
         if (config.deletePen(penName)) {
             config.saveConfig();
@@ -1764,8 +1756,8 @@ namespace WebUI {
         }
 
         std::string jsonData = _webserver->arg("plain").c_str();
-        ToolConfig& config = ToolConfig::getInstance();
-        
+        ToolConfig& config   = ToolConfig::getInstance();
+
         if (config.fromJSON(jsonData)) {
             if (config.saveConfig()) {
                 _webserver->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -1794,29 +1786,27 @@ namespace WebUI {
         }
 
         std::string jsonData = _webserver->arg("plain").c_str();
-        ToolConfig& config = ToolConfig::getInstance();
-        
+        ToolConfig& config   = ToolConfig::getInstance();
+
         Tool position;  // Changed from ToolPosition to Tool
         try {
             // Parse each field from the JSON
-            int number;
+            int   number;
             float x, y, z;
-            bool occupied;
+            bool  occupied;
 
             // Use helper functions to parse the JSON fields
-            if (!config.parseJsonNumber(jsonData, "number", number) ||
-                !config.parseJsonFloat(jsonData, "x", x) ||
-                !config.parseJsonFloat(jsonData, "y", y) ||
-                !config.parseJsonFloat(jsonData, "z", z)) {
+            if (!config.parseJsonNumber(jsonData, "number", number) || !config.parseJsonFloat(jsonData, "x", x) ||
+                !config.parseJsonFloat(jsonData, "y", y) || !config.parseJsonFloat(jsonData, "z", z)) {
                 _webserver->send(400, "application/json", "{\"error\":\"Invalid position format\"}");
                 return;
             }
 
             // Build the position object
-            position.number = number;
-            position.x = x;
-            position.y = y;
-            position.z = z;
+            position.number   = number;
+            position.x        = x;
+            position.y        = y;
+            position.z        = z;
             position.occupied = (jsonData.find("\"occupied\":true") != std::string::npos);
 
             // Validate position against known ranges
@@ -1837,9 +1827,7 @@ namespace WebUI {
             } else {
                 _webserver->send(500, "application/json", "{\"error\":\"Failed to update position\"}");
             }
-        } catch (...) {
-            _webserver->send(400, "application/json", "{\"error\":\"Failed to parse position data\"}");
-        }
+        } catch (...) { _webserver->send(400, "application/json", "{\"error\":\"Failed to parse position data\"}"); }
     }
 
     // GET /toolconfig/status
@@ -1854,8 +1842,8 @@ namespace WebUI {
         }
 
         ToolConfig& config = ToolConfig::getInstance();
-        ToolStatus status = config.getStatus();
-        
+        ToolStatus  status = config.getStatus();
+
         std::string output;
         JSONencoder j(&output);
         j.begin();
@@ -1866,10 +1854,10 @@ namespace WebUI {
         if (status.error) {
             j.member("lastError", status.lastError.c_str());
         }
-        
+
         // Include full position information for all tools
         j.begin_array("positions");
-        for (int i = 1; i <= 6; i++) {  // Iterate through all tools
+        for (int i = 1; i <= 6; i++) {      // Iterate through all tools
             Tool* pos = config.getTool(i);  // Changed from getPosition to getTool
             if (pos) {
                 j.begin_object();
@@ -1882,14 +1870,14 @@ namespace WebUI {
             }
         }
         j.end_array();
-        
+
         j.end();
         _webserver->send(200, "application/json", output.c_str());
     }
 
     void Web_Server::handlePenChangeMode() {
         log_info("PenChangeMode endpoint called with method: " << _webserver->method());
-        
+
         addCORSHeaders();
         AuthenticationLevel auth_level = is_authenticated();
         if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
@@ -1907,11 +1895,11 @@ namespace WebUI {
             _webserver->send(200, "application/json", output.c_str());
             return;
         }
-        
+
         // POST request - set pen_change flag state
         if (_webserver->method() == HTTP_POST) {
             bool enable_mode = false;
-            
+
             if (_webserver->hasArg("plain")) {
                 std::string jsonData = _webserver->arg("plain").c_str();
                 log_info("Received JSON data: " << jsonData.c_str());
@@ -1928,17 +1916,17 @@ namespace WebUI {
                 _webserver->send(400, "application/json", "{\"error\":\"Missing data\"}");
                 return;
             }
-            
+
             // Update the pen_change flag state
             pen_change = enable_mode;
-            
+
             // Log the state change
             if (enable_mode) {
                 log_info("Pen change mode enabled via API");
             } else {
                 log_info("Pen change mode disabled via API");
             }
-            
+
             // Send JSON response with updated state
             std::string output;
             JSONencoder j(&output);
@@ -1949,7 +1937,7 @@ namespace WebUI {
             _webserver->send(200, "application/json", output.c_str());
             return;
         }
-        
+
         // Reject other HTTP methods
         _webserver->send(405, "text/plain", "Method Not Allowed");
     }

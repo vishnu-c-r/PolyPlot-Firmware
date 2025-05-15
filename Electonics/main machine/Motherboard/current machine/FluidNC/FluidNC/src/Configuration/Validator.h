@@ -12,7 +12,7 @@ namespace Configuration {
     class Configurable;
 
     class Validator : public HandlerBase {
-        Validator(const Validator&) = delete;
+        Validator(const Validator&)            = delete;
         Validator& operator=(const Validator&) = delete;
 
         std::vector<const char*> _path;

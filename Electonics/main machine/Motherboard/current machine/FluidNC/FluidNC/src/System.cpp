@@ -24,10 +24,10 @@ void system_reset() {
     bool  prior_abort = sys.abort;
     memset(&sys, 0, sizeof(system_t));  // Clear system struct variable.
     set_state(prior_state);
-    sys.abort             = prior_abort;
-    sys.f_override        = FeedOverride::Default;          // Set to 100%
-    sys.r_override        = RapidOverride::Default;         // Set to 100%
-    memset(probe_steps, 0, sizeof(probe_steps));            // Clear probe position.
+    sys.abort      = prior_abort;
+    sys.f_override = FeedOverride::Default;       // Set to 100%
+    sys.r_override = RapidOverride::Default;      // Set to 100%
+    memset(probe_steps, 0, sizeof(probe_steps));  // Clear probe position.
     report_ovr_counter = 0;
     report_wco_counter = 0;
 }

@@ -18,7 +18,9 @@ namespace MotorDrivers {
     }
 
     // Configuration handlers:
-    void StepStick::validate() { StandardStepper::validate(); }
+    void StepStick::validate() {
+        StandardStepper::validate();
+    }
 
     void StepStick::group(Configuration::HandlerBase& handler) {
         StandardStepper::group(handler);
@@ -40,7 +42,9 @@ namespace MotorDrivers {
     }
 
     // Name of the configurable. Must match the name registered in the cpp file.
-    const char* StepStick::name() const { return "stepstick"; }
+    const char* StepStick::name() const {
+        return "stepstick";
+    }
 
     // Configuration registration
     namespace {

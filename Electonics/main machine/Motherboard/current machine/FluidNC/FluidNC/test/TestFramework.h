@@ -15,10 +15,16 @@
 
 #    define Test(testCase, testName)                                                                                                       \
         struct TEST_CLASS_NAME(testCase, testName) : TestBase {                                                                            \
-            TEST_CLASS_NAME(testCase, testName)() { TestFactory::instance().registerTest(this); }                                          \
+            TEST_CLASS_NAME(testCase, testName)() {                                                                                        \
+                TestFactory::instance().registerTest(this);                                                                                \
+            }                                                                                                                              \
                                                                                                                                            \
-            const char* unitTestCase() const override { return #testCase; }                                                                \
-            const char* unitTestName() const override { return #testName; }                                                                \
+            const char* unitTestCase() const override {                                                                                    \
+                return #testCase;                                                                                                          \
+            }                                                                                                                              \
+            const char* unitTestName() const override {                                                                                    \
+                return #testName;                                                                                                          \
+            }                                                                                                                              \
                                                                                                                                            \
             static void runDetail();                                                                                                       \
             static void runWrap() {                                                                                                        \
@@ -28,9 +34,13 @@
                     TEST_FAIL_MESSAGE("Failed for unknown reason.");                                                                       \
                 }                                                                                                                          \
             }                                                                                                                              \
-            void run() override { runWrap(); }                                                                                             \
+            void run() override {                                                                                                          \
+                runWrap();                                                                                                                 \
+            }                                                                                                                              \
                                                                                                                                            \
-            TestFunction getFunction() override { return runWrap; }                                                                        \
+            TestFunction getFunction() override {                                                                                          \
+                return runWrap;                                                                                                            \
+            }                                                                                                                              \
         };                                                                                                                                 \
                                                                                                                                            \
         TEST_CLASS_NAME(testCase, testName) TEST_INST_NAME(testCase, testName);                                                            \
@@ -110,11 +120,17 @@ inline void PrintSerial(const char* format, ...) {
 
 #    define Test(testCase, testName)                                                                                                       \
         struct TEST_CLASS_NAME(testCase, testName) : TestBase {                                                                            \
-            TEST_CLASS_NAME(testCase, testName)() { TestFactory::instance().registerTest(this); }                                          \
+            TEST_CLASS_NAME(testCase, testName)() {                                                                                        \
+                TestFactory::instance().registerTest(this);                                                                                \
+            }                                                                                                                              \
                                                                                                                                            \
-            const char* unitTestCase() const override { return #testCase; }                                                                \
-            const char* unitTestName() const override { return #testName; }                                                                \
-            void        run() override;                                                                                                    \
+            const char* unitTestCase() const override {                                                                                    \
+                return #testCase;                                                                                                          \
+            }                                                                                                                              \
+            const char* unitTestName() const override {                                                                                    \
+                return #testName;                                                                                                          \
+            }                                                                                                                              \
+            void run() override;                                                                                                           \
         };                                                                                                                                 \
                                                                                                                                            \
         TEST_CLASS_NAME(testCase, testName) TEST_INST_NAME(testCase, testName);                                                            \

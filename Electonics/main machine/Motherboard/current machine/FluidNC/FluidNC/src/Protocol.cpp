@@ -574,46 +574,6 @@ static void move_to_safe_position() {
     // Wait for the movement to complete
     protocol_buffer_synchronize();
 }
-static void protocol_do_cancel_job() {
-    // Step 1: Suspend Current Operations
-    if (!(sys.suspend.bit.motionCancel || sys.suspend.bit.jogCancel)) {
-        protocol_start_holding();  // Gracefully hold the machine before canceling
-    }
-
-    // Step 2: Handle Specific States
-    switch (sys.state) {
-        case State::Homing:
-            log_info("Cancel job ignored during homing; use Reset instead");
-            return;
-        case State::Cycle:
-        case State::Hold:
-            protocol_execute_realtime();  // Process real-time commands to pause ongoing cycle
-            break;
-        case State::Jog:
-            protocol_cancel_jogging();  // Cancel jogging safely
-            break;
-        case State::Idle:
-            return;  // No action needed if the machine is idle
-        default:
-            break;
-    }
-
-    // Step 3: Synchronize the Planner and Stop Motion
-    protocol_buffer_synchronize();  // Synchronize the planner to stop all movements immediately
-
-    // Step 5: Disable Stepper Motors
-    protocol_disable_steppers();  // Disables all stepper motors to ensure no unintended movement
-
-    // Step 6: Reset G-code Parser and Clear Buffers
-    protocol_reset();  // Clear all G-code commands in the buffer
-
-    // Step 7: Move to Safe Position
-    move_to_safe_position();  // Move the machine to a predefined safe position
-
-    // Step 8: Set System State to Idle
-    set_state(State::Idle);  // Transition the machine to the Idle state
-}
-
 static void protocol_do_safety_door() {
     // log_debug("protocol_do_safety_door " << int(sys.state));
     // Execute a safety door stop with a feed hold and disable spindle/coolant.
@@ -1075,8 +1035,6 @@ const NoArgEvent debugEvent { report_realtime_debug };
 const NoArgEvent startEvent { protocol_do_start };
 const NoArgEvent restartEvent { protocol_do_restart };
 const NoArgEvent runStartupLinesEvent { protocol_run_startup_lines };
-const NoArgEvent cancelJobEvent { protocol_do_cancel_job };
-
 const NoArgEvent rtResetEvent { protocol_do_rt_reset };
 
 // The problem is that report_realtime_status needs a channel argument

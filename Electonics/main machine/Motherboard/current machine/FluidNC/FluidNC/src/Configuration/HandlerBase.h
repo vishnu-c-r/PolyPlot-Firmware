@@ -16,9 +16,9 @@ namespace Configuration {
     class Configurable;
 
     typedef struct {
-        float        percent = 0.0;
-        uint32_t     offset  = 0;
-        uint32_t     scale   = 0;
+        float    percent = 0.0;
+        uint32_t offset  = 0;
+        uint32_t scale   = 0;
     } speedEntry;
 
     template <typename BaseType>
@@ -64,7 +64,7 @@ namespace Configuration {
                 if (matchesUninitialized(name)) {
                     Assert(value == nullptr, "Duplicate section %s", name);
                     value = new T(args...);
-                     enterSection(name, value);
+                    enterSection(name, value);
                 }
             } else {
                 if (value != nullptr) {

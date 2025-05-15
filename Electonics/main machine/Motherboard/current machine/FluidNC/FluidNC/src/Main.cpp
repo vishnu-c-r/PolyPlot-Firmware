@@ -115,8 +115,6 @@ void setup() {
 
         // Initialize system state.
         if (!state_is(State::ConfigAlarm)) {
-
-
             config->_coolant->init();
             config->_probe->init();
         }
@@ -126,12 +124,11 @@ void setup() {
         log_config_error("Critical error in main_init: " << ex.what());
     }
 
-        WebUI::wifi_config.begin();
+    WebUI::wifi_config.begin();
 
     allChannels.ready();
     allChannels.deregistration(&startupLog);
     protocol_send_event(&startEvent);
-    
 }
 
 void loop() {

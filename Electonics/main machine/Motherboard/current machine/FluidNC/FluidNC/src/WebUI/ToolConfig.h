@@ -62,12 +62,12 @@ namespace WebUI {
         bool ensureLoaded();  // Moved to public section
 
     private:
-        bool              configLoaded = false;
-        bool              cacheValid   = false;
-        std::vector<Tool> tools;
-        std::string       cachedJson;
-        const char*       configPath = "/spiffs/toolconfig.json";
-        const char*       stateFile  = "/spiffs/penstate.json";
-        static constexpr int   MAX_TOOLS = 6;
+        bool                 configLoaded = false;
+        bool                 cacheValid   = false;
+        std::vector<Tool>    tools;
+        std::string          cachedJson;
+        const char*          configPath = "/spiffs/toolconfig.json";
+        const char*          stateFile  = "/spiffs/penstate.json";
+        static constexpr int MAX_TOOLS  = 6;
     };
 }

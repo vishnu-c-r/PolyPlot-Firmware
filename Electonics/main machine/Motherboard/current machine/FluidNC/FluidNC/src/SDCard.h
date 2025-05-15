@@ -46,7 +46,7 @@ private:
 
 public:
     SDCard();
-    SDCard(const SDCard&) = delete;
+    SDCard(const SDCard&)            = delete;
     SDCard& operator=(const SDCard&) = delete;
 
     void afterParse() override;

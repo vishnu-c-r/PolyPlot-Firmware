@@ -6,7 +6,7 @@ namespace Machine {
     class ProbeEventPin : public EventPin {
     private:
         bool _value = 0;
-        Pin* _pin = nullptr;
+        Pin* _pin   = nullptr;
 
     public:
         ProbeEventPin(const char* legend, Pin& pin);

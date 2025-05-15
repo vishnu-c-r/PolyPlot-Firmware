@@ -97,8 +97,8 @@ void Channel::autoReportGCodeState() {
         (!motionState() && (_lastFeedRate != gc_state.feed_rate))) {
         report_gcode_modes(*this);
         memcpy(&_lastModal, &gc_state.modal, sizeof(_lastModal));
-        _lastTool         = gc_state.tool;
-        _lastFeedRate     = gc_state.feed_rate;
+        _lastTool     = gc_state.tool;
+        _lastFeedRate = gc_state.feed_rate;
     }
 }
 void Channel::autoReport() {

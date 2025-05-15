@@ -13,7 +13,9 @@ namespace WebUI {
         count[level] = 0;
     }
 
-    JSONencoder::JSONencoder(std::string* str) : level(0), _str(str), category("nvs") { count[level] = 0; }
+    JSONencoder::JSONencoder(std::string* str) : level(0), _str(str), category("nvs") {
+        count[level] = 0;
+    }
 
     void JSONencoder::flush() {
         if (_channel && (*_str).length()) {
@@ -116,7 +118,9 @@ namespace WebUI {
     }
 
     // Private function to increment the nesting level.
-    void JSONencoder::dec_level() { --level; }
+    void JSONencoder::dec_level() {
+        --level;
+    }
 
     void JSONencoder::indent() {
         for (int i = 0; i < 2 * level; i++) {
@@ -158,7 +162,9 @@ namespace WebUI {
     }
 
     // Begins the JSON encoding process, creating an unnamed object
-    void JSONencoder::begin() { begin_object(); }
+    void JSONencoder::begin() {
+        begin_object();
+    }
 
     // Finishes the JSON encoding process, closing the unnamed object
     // and returning the encoded string
@@ -228,7 +234,9 @@ namespace WebUI {
     }
 
     // Creates a "tag":"value" member from an integer
-    void JSONencoder::member(const char* tag, int value) { member(tag, std::to_string(value)); }
+    void JSONencoder::member(const char* tag, int value) {
+        member(tag, std::to_string(value));
+    }
 
     // Creates an Esp32_WebUI configuration item specification from
     // a value passed in as a C-style string.

@@ -38,10 +38,10 @@ namespace MotorDrivers {
                                    .mem_block_num = 2,
                                    .flags         = 0,
                                    .tx_config     = {
-                                       .carrier_freq_hz      = 0,
-                                       .carrier_level        = RMT_CARRIER_LEVEL_LOW,
-                                       .idle_level           = invert_step ? RMT_IDLE_LEVEL_HIGH : RMT_IDLE_LEVEL_LOW,
-                                       .carrier_duty_percent = 50,
+                                           .carrier_freq_hz      = 0,
+                                           .carrier_level        = RMT_CARRIER_LEVEL_LOW,
+                                           .idle_level           = invert_step ? RMT_IDLE_LEVEL_HIGH : RMT_IDLE_LEVEL_LOW,
+                                           .carrier_duty_percent = 50,
 #if SOC_RMT_SUPPORT_TX_LOOP_COUNT
                                        .loop_count = 1,
 #endif
@@ -67,7 +67,9 @@ namespace MotorDrivers {
         config_message();
     }
 
-    void StandardStepper::read_settings() { init_step_dir_pins(); }
+    void StandardStepper::read_settings() {
+        init_step_dir_pins();
+    }
 
     void StandardStepper::init_step_dir_pins() {
         auto axisIndex = axis_index();
@@ -116,9 +118,13 @@ namespace MotorDrivers {
         }
     }
 
-    void IRAM_ATTR StandardStepper::set_direction(bool dir) { _dir_pin.write(dir); }
+    void IRAM_ATTR StandardStepper::set_direction(bool dir) {
+        _dir_pin.write(dir);
+    }
 
-    void IRAM_ATTR StandardStepper::set_disable(bool disable) { _disable_pin.synchronousWrite(disable); }
+    void IRAM_ATTR StandardStepper::set_disable(bool disable) {
+        _disable_pin.synchronousWrite(disable);
+    }
 
     // Configuration registration
     namespace {

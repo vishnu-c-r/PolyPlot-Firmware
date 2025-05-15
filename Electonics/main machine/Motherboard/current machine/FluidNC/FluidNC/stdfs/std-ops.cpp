@@ -85,9 +85,13 @@ fs::path fs::absolute(const path& p, error_code& ec) {
 }
 namespace {
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-    inline bool is_dot(wchar_t c) { return c == L'.'; }
+    inline bool is_dot(wchar_t c) {
+        return c == L'.';
+    }
 #else
-    inline bool is_dot(char c) { return c == '.'; }
+    inline bool is_dot(char c) {
+        return c == '.';
+    }
 #endif
     inline bool is_dot(const fs::path& path) {
         const auto& filename = path.native();
@@ -188,7 +192,9 @@ void fs::copy(const path& from, const path& to, copy_options options) {
 }
 namespace std::filesystem {
     // Need this as there's no 'perm_options::none' enumerator.
-    inline bool is_set(fs::perm_options obj, fs::perm_options bits) { return (obj & bits) != fs::perm_options {}; }
+    inline bool is_set(fs::perm_options obj, fs::perm_options bits) {
+        return (obj & bits) != fs::perm_options {};
+    }
 }
 #ifdef _GLIBCXX_HAVE_SYS_STAT_H
 #    ifdef NEED_DO_COPY_FILE
@@ -705,8 +711,7 @@ std::uintmax_t fs::file_size(const path& p, error_code& ec) noexcept {
         file_type type;
         size_t    size;
     };
-    auto s = do_stat(
-        p, ec, [](const auto& st) { return S { st }; }, S {});
+    auto s = do_stat(p, ec, [](const auto& st) { return S { st }; }, S {});
     if (s.type == file_type::regular)
         return s.size;
     if (!ec) {
@@ -749,8 +754,7 @@ fs::file_time_type fs::last_write_time(const path& p) {
     return t;
 }
 fs::file_time_type fs::last_write_time(const path& p, error_code& ec) noexcept {
-    return do_stat(
-        p, ec, [&ec](const auto& st) { return file_time(st, ec); }, file_time_type::min());
+    return do_stat(p, ec, [&ec](const auto& st) { return file_time(st, ec); }, file_time_type::min());
 }
 void fs::last_write_time(const path& p, file_time_type new_time) {
     error_code ec;
@@ -780,8 +784,7 @@ void fs::last_write_time(const path& p __attribute__((__unused__)), file_time_ty
 #elif _GLIBCXX_HAVE_UTIME_H
     ::utimbuf times;
     times.modtime = s.count();
-    times.actime  = do_stat(
-        p, ec, [](const auto& st) { return st.st_atime; }, times.modtime);
+    times.actime  = do_stat(p, ec, [](const auto& st) { return st.st_atime; }, times.modtime);
     if (::utime(p.c_str(), &times))
         ec.assign(errno, std::generic_category());
     else

@@ -12,7 +12,7 @@ class ProbeEventPin;
 
 class Probe : public Configuration::Configurable {
     // Inverts the probe pin state depending on user settings and probing cycle mode.
-    bool _away = false;
+    bool           _away = false;
     ProbeEventPin* _probeEventPin;
     ProbeEventPin* _toolsetterEventPin;
 

@@ -52,7 +52,9 @@ namespace WebUI {
         return length;
     }
 
-    size_t WebClient::write(uint8_t data) { return write(&data, 1); }
+    size_t WebClient::write(uint8_t data) {
+        return write(&data, 1);
+    }
 
     void WebClient::flush() {
         if (_webserver && _buflen) {
@@ -61,18 +63,28 @@ namespace WebUI {
         }
     }
 
-    void WebClient::sendLine(MsgLevel level, const char* line) { print_msg(level, line); }
+    void WebClient::sendLine(MsgLevel level, const char* line) {
+        print_msg(level, line);
+    }
     void WebClient::sendLine(MsgLevel level, const std::string* line) {
         print_msg(level, line->c_str());
         delete line;
     }
-    void WebClient::sendLine(MsgLevel level, const std::string& line) { print_msg(level, line.c_str()); }
+    void WebClient::sendLine(MsgLevel level, const std::string& line) {
+        print_msg(level, line.c_str());
+    }
 
-    void WebClient::out(const char* s, const char* tag) { write((uint8_t*)s, strlen(s)); }
+    void WebClient::out(const char* s, const char* tag) {
+        write((uint8_t*)s, strlen(s));
+    }
 
-    void WebClient::out(const std::string& s, const char* tag) { write((uint8_t*)s.c_str(), s.size()); }
+    void WebClient::out(const std::string& s, const char* tag) {
+        write((uint8_t*)s.c_str(), s.size());
+    }
 
-    void WebClient::out_acked(const std::string& s, const char* tag) { out(s, tag); }
+    void WebClient::out_acked(const std::string& s, const char* tag) {
+        out(s, tag);
+    }
 
     void WebClient::sendError(int code, const std::string& line) {
         if (_webserver) {

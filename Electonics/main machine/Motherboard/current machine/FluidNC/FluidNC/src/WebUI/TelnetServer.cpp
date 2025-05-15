@@ -92,7 +92,9 @@ namespace WebUI {
             allChannels.registration(tnc);
         }
     }
-    TelnetServer::~TelnetServer() { end(); }
+    TelnetServer::~TelnetServer() {
+        end();
+    }
 }
 
 #endif

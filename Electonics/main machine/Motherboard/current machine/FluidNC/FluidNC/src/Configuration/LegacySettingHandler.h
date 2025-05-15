@@ -10,10 +10,10 @@ namespace Configuration {
     public:
         inline LegacySettingHandler() { LegacySettingRegistry::registerHandler(this); }
 
-        LegacySettingHandler(const LegacySettingHandler&) = delete;
-        LegacySettingHandler(LegacySettingHandler&&)      = delete;
+        LegacySettingHandler(const LegacySettingHandler&)            = delete;
+        LegacySettingHandler(LegacySettingHandler&&)                 = delete;
         LegacySettingHandler& operator=(const LegacySettingHandler&) = delete;
-        LegacySettingHandler& operator=(LegacySettingHandler&&) = delete;
+        LegacySettingHandler& operator=(LegacySettingHandler&&)      = delete;
 
         virtual int  index()                     = 0;
         virtual void setValue(const char* value) = 0;

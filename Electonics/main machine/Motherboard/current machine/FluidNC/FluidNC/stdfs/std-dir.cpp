@@ -149,7 +149,7 @@ const fs::directory_entry& fs::recursive_directory_iterator::operator*() const {
     return _M_dirs->top().entry;
 }
 fs::recursive_directory_iterator& fs::recursive_directory_iterator::operator=(const recursive_directory_iterator& other) noexcept = default;
-fs::recursive_directory_iterator& fs::recursive_directory_iterator::operator=(recursive_directory_iterator&& other) noexcept = default;
+fs::recursive_directory_iterator& fs::recursive_directory_iterator::operator=(recursive_directory_iterator&& other) noexcept      = default;
 fs::recursive_directory_iterator& fs::recursive_directory_iterator::operator++() {
     error_code ec;
     increment(ec);

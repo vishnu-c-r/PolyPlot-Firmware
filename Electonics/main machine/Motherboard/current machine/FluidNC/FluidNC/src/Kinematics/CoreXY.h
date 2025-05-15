@@ -20,10 +20,10 @@ namespace Kinematics {
     public:
         CoreXY() = default;
 
-        CoreXY(const CoreXY&) = delete;
-        CoreXY(CoreXY&&)      = delete;
+        CoreXY(const CoreXY&)            = delete;
+        CoreXY(CoreXY&&)                 = delete;
         CoreXY& operator=(const CoreXY&) = delete;
-        CoreXY& operator=(CoreXY&&) = delete;
+        CoreXY& operator=(CoreXY&&)      = delete;
 
         // Kinematic Interface
 

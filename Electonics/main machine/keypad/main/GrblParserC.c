@@ -7,7 +7,7 @@ static size_t _report_len = 0;
 static char _report[REPORT_BUFFER_LEN];
 bool _ackwait = false;
 int _ack_time_limit = 0;
-bool _alarm14 = false;  // Change from static bool _alarm14 to just bool _alarm14
+bool _machine_ready = false; // Flag to detect when machine is ready
 
 // Core communication functions
 void fnc_send_line(const char* line, int timeout_ms) {
@@ -53,23 +53,31 @@ static void parse_report() {
         return;
     }
 
+    // Check for READY message
+    if (strcmp(_report, "READY") == 0) {
+        _machine_ready = true;  // <-- Updated here when literal "READY" message is received
+        return;
+    }
+
     // Handle status reports - Format is like <Idle|...>
     if (_report[0] == '<') {
         char* state_end = strchr(_report + 1, '|');
         if (state_end) {
             *state_end = '\0';  // Split at the first | character
+            
+            // If state is "Idle", consider machine ready
+            if (strcmp(_report + 1, "Idle") == 0) {
+                _machine_ready = true;  // <-- Also updated here when Idle state is detected
+            }
+            
             parse_state(_report + 1);  // Send state string to callback
         }
         return;
     }
 
-    // Handle alarms
+    // Handle alarms - just pass to callback, we don't track specific alarms anymore
     if (strncmp(_report, "ALARM:", 6) == 0) {
-        int alarmCode = atoi(_report + 6);
-        if (alarmCode == 14) {
-            _alarm14 = true;
-        }
-        show_alarm(alarmCode);
+        show_alarm(atoi(_report + 6));
         return;
     }
 
@@ -136,7 +144,7 @@ void fnc_wait_ready() {
             delay(1);
         }
         
-        if (_alarm14) {
+        if (_machine_ready) {
             machine_ready = true;
             break;
         }

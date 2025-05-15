@@ -49,7 +49,8 @@ namespace WebUI {
     };
 
     const enum_opt_t wifiContryOptions = {
-        { "01", WiFiCountry01 },{ "IN", WiFiCountryIN },
+        { "01", WiFiCountry01 },
+        { "IN", WiFiCountryIN },
     };
 
     EnumSetting* wifi_mode;

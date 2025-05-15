@@ -8,10 +8,10 @@ namespace Kinematics {
     public:
         HBot() = default;
 
-        HBot(const HBot&) = delete;
-        HBot(HBot&&)      = delete;
+        HBot(const HBot&)            = delete;
+        HBot(HBot&&)                 = delete;
         HBot& operator=(const HBot&) = delete;
-        HBot& operator=(HBot&&) = delete;
+        HBot& operator=(HBot&&)      = delete;
 
         // Kinematic Interface
 

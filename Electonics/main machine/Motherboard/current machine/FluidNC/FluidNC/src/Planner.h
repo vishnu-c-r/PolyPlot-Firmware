@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "Config.h"            // MAX_N_AXIS
-#include "GCode.h"             // CoolantState
-#include "Types.h"             // AxisMask
+#include "Config.h"  // MAX_N_AXIS
+#include "GCode.h"   // CoolantState
+#include "Types.h"   // AxisMask
 
 // Forward declare dependencies
 class Stepper;
@@ -23,21 +23,21 @@ struct PlMotion {
 
 // Define plan_line_data_t before including pen.h
 struct plan_line_data_t {
-    float        feed_rate;       // Desired feed rate for line motion. Value is ignored, if rapid motion.
-    PlMotion     motion;          // Bitflag variable to indicate motion conditions. See defines above.
+    float        feed_rate;  // Desired feed rate for line motion. Value is ignored, if rapid motion.
+    PlMotion     motion;     // Bitflag variable to indicate motion conditions. See defines above.
     CoolantState coolant;
-    int32_t      line_number;     // Desired line number to report when executing.
-    bool         is_jog;          // true if this was generated due to a jog command
-    bool         limits_checked;  // true if soft limits already checked
-    bool         use_exact_feedrate; // If true, always use feed_rate for this move
-    
+    int32_t      line_number;         // Desired line number to report when executing.
+    bool         is_jog;              // true if this was generated due to a jog command
+    bool         limits_checked;      // true if soft limits already checked
+    bool         use_exact_feedrate;  // If true, always use feed_rate for this move
+
     // Add pen tracking variables
-    int              prevPenNumber;  // Previous pen number before change
-    int              penNumber;      // Current/target pen number
-    
+    int prevPenNumber;  // Previous pen number before change
+    int penNumber;      // Current/target pen number
+
     // Pen change motion control feedrates
-    float        approach_feedrate;  // Fast approach feed rate for tool change
-    float        precise_feedrate;   // Slower precise movement feed rate for actual pen change
+    float approach_feedrate;  // Fast approach feed rate for tool change
+    float precise_feedrate;   // Slower precise movement feed rate for actual pen change
 };
 
 // Now safe to include pen.h
@@ -63,10 +63,10 @@ struct plan_block_t {
     // uint32_t     Module_Axis_steps;  // OLD: Remove this
 
     // Fields used by the motion planner to manage acceleration
-    float entry_speed_sqr;      
-    float max_entry_speed_sqr;  
+    float entry_speed_sqr;
+    float max_entry_speed_sqr;
     float acceleration;
-    float millimeters;   
+    float millimeters;
 
     // Rate limiting data
     float max_junction_speed_sqr;
@@ -76,13 +76,11 @@ struct plan_block_t {
     bool is_jog;
 
     // Add the new pen change tracking:
-    int currentPenNumber;   // Current pen number 
+    int currentPenNumber;   // Current pen number
     int previousPenNumber;  // Previous pen number
 };
 
-
 extern float last_position[MAX_N_AXIS];
-
 
 // Planner data prototype. Must be used when passing new motions to the planner.
 

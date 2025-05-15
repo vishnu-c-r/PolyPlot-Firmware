@@ -18,7 +18,6 @@ Control::Control() {
     _pins.push_back(new ControlPin(&macro3Event, "macro3_pin", '3'));
     _pins.push_back(new ControlPin(&faultPinEvent, "fault_pin", 'F'));
     _pins.push_back(new ControlPin(&faultPinEvent, "estop_pin", 'E'));
-    _pins.push_back(new ControlPin(&cancelJobEvent, "cancel_pin", 'C'));  // 'C' for Cancel
 }
 
 void Control::init() {

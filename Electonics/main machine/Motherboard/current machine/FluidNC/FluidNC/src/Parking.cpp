@@ -63,9 +63,9 @@ void Parking::setup() {
     block                           = plan_get_current_block();
 
     if (block) {
-        saved_coolant       = block->coolant;
+        saved_coolant = block->coolant;
     } else {
-        saved_coolant       = gc_state.modal.coolant;
+        saved_coolant = gc_state.modal.coolant;
     }
 }
 
@@ -86,9 +86,9 @@ void Parking::park(bool restart) {
         // the workpiece and waypoint motion doesn't exceed the parking target location.
         if (parking_target[_axis] < retract_waypoint) {
             log_debug("Parking pullout");
-            parking_target[_axis]   = retract_waypoint;
-            plan_data.feed_rate     = _pullout_rate;
-            plan_data.coolant       = saved_coolant;
+            parking_target[_axis] = retract_waypoint;
+            plan_data.feed_rate   = _pullout_rate;
+            plan_data.coolant     = saved_coolant;
             moveto(parking_target);
         }
 
@@ -142,13 +142,12 @@ void Parking::unpark(bool restart) {
             log_debug("Parking restore original state");
             // Whether or not a retraction happened, returning to the original
             // position should be valid, whether it moves or not.
-            plan_data.feed_rate     = _pullout_rate;
-            plan_data.coolant       = saved_coolant;
+            plan_data.feed_rate = _pullout_rate;
+            plan_data.coolant   = saved_coolant;
             moveto(restore_target);
         }
     }
 }
-
 
 void Parking::restore_coolant() {
     config->_coolant->set_state(saved_coolant);

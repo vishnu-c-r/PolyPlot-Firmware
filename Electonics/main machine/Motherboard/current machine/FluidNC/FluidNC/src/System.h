@@ -39,14 +39,13 @@ union Suspend {
 
 // Global system variables
 struct system_t {
-    volatile State state;              // Tracks the current system state
-    bool           abort;              // System abort flag. Forces exit back to main loop for reset.
-    Suspend        suspend;            // System suspend bitflag variable that manages holds, cancels, and safety door.
-    StepControl    step_control;       // Governs the step segment generator depending on system state.
-    Percent        f_override;         // Feed rate override value in percent
-    Percent        r_override;         // Rapids override value in percent
-    Override       override_ctrl;  
-    
+    volatile State state;         // Tracks the current system state
+    bool           abort;         // System abort flag. Forces exit back to main loop for reset.
+    Suspend        suspend;       // System suspend bitflag variable that manages holds, cancels, and safety door.
+    StepControl    step_control;  // Governs the step segment generator depending on system state.
+    Percent        f_override;    // Feed rate override value in percent
+    Percent        r_override;    // Rapids override value in percent
+    Override       override_ctrl;
 };
 extern system_t sys;
 

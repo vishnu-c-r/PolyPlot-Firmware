@@ -14,7 +14,7 @@ namespace Configuration {
         Configurable(Configurable&&)      = default;
 
         Configurable& operator=(const Configurable&) = delete;
-        Configurable& operator=(Configurable&&) = default;
+        Configurable& operator=(Configurable&&)      = default;
 
     public:
         Configurable() = default;

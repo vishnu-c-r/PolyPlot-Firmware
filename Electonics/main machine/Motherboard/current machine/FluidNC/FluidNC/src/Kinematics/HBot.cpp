@@ -34,17 +34,17 @@ namespace Kinematics {
         MotorMask toClear = axisMask & limited;
         clear_bits(axisMask, limited);
         clear_bits(motors, limited);
-        
+
         // Make sure to release motors and clear limit state
         releaseMotors(axisMask, motors);
-        
+
         // For HBot, when one limit is hit we need to ensure both motors handle it properly
         auto axes = config->_axes;
         if (limited) {
             axes->_axis[X_AXIS]->_motors[0]->unlimit();
             axes->_axis[Y_AXIS]->_motors[0]->unlimit();
         }
-        
+
         return bool(toClear);
     }
 
@@ -60,9 +60,9 @@ namespace Kinematics {
 
     bool HBot::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         // Add debug logging to track motion
-        // log_debug("HBot motion - target: " << target[X_AXIS] << "," << target[Y_AXIS] 
+        // log_debug("HBot motion - target: " << target[X_AXIS] << "," << target[Y_AXIS]
         //          << " position: " << position[X_AXIS] << "," << position[Y_AXIS]);
-        
+
         auto n_axis = config->_axes->_numberAxis;
 
         float motors[n_axis];
@@ -86,8 +86,8 @@ namespace Kinematics {
             log_error("Invalid motor positions detected");
             return;
         }
-        cartesian[X_AXIS] = (motors[Y_AXIS] - motors[X_AXIS]);   // X = B - A (removed negative)
-        cartesian[Y_AXIS] = -motors[X_AXIS];                     // Y = -A
+        cartesian[X_AXIS] = (motors[Y_AXIS] - motors[X_AXIS]);  // X = B - A (removed negative)
+        cartesian[Y_AXIS] = -motors[X_AXIS];                    // Y = -A
 
         for (int axis = Z_AXIS; axis < n_axis; axis++) {
             cartesian[axis] = motors[axis];

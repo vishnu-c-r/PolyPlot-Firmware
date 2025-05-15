@@ -46,7 +46,7 @@ EspClass esp;
 #endif
 
 volatile bool        protocol_pin_changed = false;
-extern volatile bool pen_change;  
+extern volatile bool pen_change;
 
 std::string report_pin_string;
 
@@ -351,7 +351,6 @@ void report_gcode_modes(Channel& channel) {
             break;
     }
 
-
     //report_util_gcode_modes_M();  // optional M7 and M8 should have been dealt with by here
     auto coolant = gc_state.modal.coolant;
     if (!coolant.Mist && !coolant.Flood) {
@@ -392,7 +391,7 @@ void report_build_info(const char* line, Channel& channel) {
     if (ALLOW_FEED_OVERRIDE_DURING_PROBE_CYCLES) {
         msg += "A";
     }
-    
+
     msg += "S";
     if (config->_enableParkingOverrideControl) {
         msg += "R";
@@ -446,21 +445,13 @@ void mpos_to_wpos(float* position) {
 }
 
 const char* state_name() {
-    // For pen_change operations, we're already in the Cycle state,
-    // but we can provide a more specific indication in the status
-    if (pen_change) {
-        return "Run";  // Still show a special status for tool changes
-    }
-    
+    // If the machine is in a special state, report that state even if a job is active
     switch (sys.state) {
-        case State::Idle:
-            return "Idle";
-        case State::Cycle:
-            return "Run";
         case State::Hold:
             if (!(sys.suspend.bit.jogCancel)) {
                 return sys.suspend.bit.holdComplete ? "Hold:0" : "Hold:1";
-            }  // Continues to print jog state during jog cancel.
+            }
+            // Continues to print jog state during jog cancel.
         case State::Jog:
             return "Jog";
         case State::Homing:
@@ -482,8 +473,26 @@ const char* state_name() {
             return "Door:2";  // Retracting
         case State::Sleep:
             return "Sleep";
+        default:
+            break;
     }
-    return "";
+    // If a job is active, always report "Run" to keep UI/LEDs showing busy (except for above states)
+    if (Job::active()) {
+        return "Run";
+    }
+    // For pen_change operations, we're already in the Cycle state,
+    // but we can provide a more specific indication in the status
+    if (pen_change) {
+        return "Run";  // Still show a special status for tool changes
+    }
+    switch (sys.state) {
+        case State::Idle:
+            return "Idle";
+        case State::Cycle:
+            return "Run";
+        default:
+            return "";
+    }
 }
 
 void report_recompute_pin_string() {

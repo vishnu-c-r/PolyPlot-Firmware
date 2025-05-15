@@ -60,14 +60,14 @@ protected:
     uint32_t _reportInterval = 0;
     int32_t  _nextReportTime = 0;
 
-    gc_modal_t  _lastModal        = modal_defaults;
-    uint8_t     _lastTool         = 0;
-    float       _lastFeedRate     = 0;
-    State       _lastState        = State::Idle;
-    MotorMask   _lastLimits       = 0;
-    bool        _lastProbe        = false;
-    bool        _lastJobActive    = false;
-    std::string _lastPinString    = "";
+    gc_modal_t  _lastModal     = modal_defaults;
+    uint8_t     _lastTool      = 0;
+    float       _lastFeedRate  = 0;
+    State       _lastState     = State::Idle;
+    MotorMask   _lastLimits    = 0;
+    bool        _lastProbe     = false;
+    bool        _lastJobActive = false;
+    std::string _lastPinString = "";
 
     bool       _reportOvr = true;
     bool       _reportWco = true;

@@ -12,7 +12,7 @@ namespace Configuration {
     class Configurable;
 
     class AfterParse : public HandlerBase {
-        AfterParse(const AfterParse&) = delete;
+        AfterParse(const AfterParse&)            = delete;
         AfterParse& operator=(const AfterParse&) = delete;
 
         std::vector<const char*> _path;

@@ -12,8 +12,8 @@
 #include <cstdint>
 
 // Global state variables
-extern bool soft_limit;    // Indicates if a soft limit violation has occurred
-extern volatile bool pen_change;  
+extern bool          soft_limit;  // Indicates if a soft limit violation has occurred
+extern volatile bool pen_change;
 
 /**
  * @brief Initialize the limits subsystem

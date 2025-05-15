@@ -78,9 +78,6 @@ void execute_realtime_command(Cmd command, Channel& channel) {
         case Cmd::Macro3:
             protocol_send_event(&macro3Event);
             break;
-        case Cmd::CancelJob:
-            protocol_send_event(&cancelJobEvent);
-            break;
     }
 }
 

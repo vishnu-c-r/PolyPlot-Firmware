@@ -88,9 +88,9 @@ namespace WebUI {
         static void handle_web_command() { _handle_web_command(false); }
         static void handle_web_command_silent() { _handle_web_command(true); }
         static void handle_Websocket_Event(uint8_t num, uint8_t type, uint8_t* payload, size_t length);
-        static void handle_Websocketv3_Event(uint8_t num, uint8_t type, uint8_t* payload, size_t length);
-        static void handleReloadBlocked();
+        static void handle_Websocketv3_Event(uint8_t num, uint8_t type, uint8_t* payload, size_t length);        static void handleReloadBlocked();
         static void handleFeedholdReload();
+        static void handleJobBlocked();
         static void LocalFSFileupload();
         static void handleFileList();
         static void handleUpdate();

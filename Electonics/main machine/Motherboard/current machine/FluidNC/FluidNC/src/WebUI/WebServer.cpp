@@ -5,6 +5,10 @@
 #include "../Config.h"
 #include "../Serial.h"    // is_realtime_command()
 #include "../Settings.h"  // settings_execute_line()
+#include "../Job.h"       // Job::active() function
+
+#include <cerrno>         // errno for safe parsing
+#include <exception>      // exception handling
 
 #ifdef ENABLE_WIFI
 
@@ -144,12 +148,92 @@ namespace WebUI {
         _webserver->onNotFound(handle_not_found);
 
         //need to be there even no authentication to say to UI no authentication
-        _webserver->on("/login", HTTP_ANY, handle_login);
-
-        //web commands
+        _webserver->on("/login", HTTP_ANY, handle_login);        //web commands
         _webserver->on("/command", HTTP_ANY, handle_web_command);
-        _webserver->on("/command_silent", HTTP_ANY, handle_web_command_silent);
-        _webserver->on("/feedhold_reload", HTTP_ANY, handleFeedholdReload);
+        _webserver->on("/command_silent", HTTP_ANY, handle_web_command_silent);        _webserver->on("/feedhold_reload", HTTP_ANY, handleFeedholdReload);
+          // Job status endpoint for checking if a job is active
+        _webserver->on("/jobstatus", HTTP_GET, [this]() {
+            _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+            _webserver->sendHeader("Content-Type", "application/json");
+            
+            bool jobActive = Job::active();
+            std::string response = "{\"active\":" + std::string(jobActive ? "true" : "false");
+            
+            if (jobActive) {
+                // Extract progress information from the active job with proper null checks
+                std::string filename = "";
+                float percentage = 0.0;
+                
+                try {
+                    // Safe null pointer check with exception handling
+                    Channel* jobChannel = Job::channel();
+                    if (jobChannel != nullptr && !jobChannel->_progress.empty()) {
+                        std::string progressStr = jobChannel->_progress;
+                        
+                        // Validate minimum string length before substring operations
+                        if (progressStr.length() >= 3) {
+                            // Parse the progress string format: "SD:percentage,filename"
+                            if (progressStr.substr(0, 3) == "SD:") {
+                                size_t commaPos = progressStr.find(',');
+                                if (commaPos != std::string::npos && commaPos > 3 && commaPos < progressStr.length() - 1) {
+                                    // Safe substring extraction with bounds checking
+                                    size_t percentStart = 3;
+                                    size_t percentLength = commaPos - 3;
+                                    size_t filenameStart = commaPos + 1;
+                                    
+                                    if (percentLength > 0 && filenameStart < progressStr.length()) {
+                                        std::string percentStr = progressStr.substr(percentStart, percentLength);
+                                        filename = progressStr.substr(filenameStart);
+                                        
+                                        // Safe string to float conversion with error handling
+                                        char* endPtr = nullptr;
+                                        errno = 0;
+                                        float parsedPercent = std::strtof(percentStr.c_str(), &endPtr);
+                                        
+                                        // Validate conversion success and range
+                                        if (errno == 0 && endPtr != percentStr.c_str() && *endPtr == '\0' && 
+                                            parsedPercent >= 0.0f && parsedPercent <= 100.0f) {
+                                            percentage = parsedPercent;
+                                        }
+                                        
+                                        // Sanitize filename to prevent JSON injection
+                                        std::string sanitizedFilename = "";
+                                        for (char c : filename) {
+                                            if (c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t') {
+                                                sanitizedFilename += "\\";
+                                                if (c == '"') sanitizedFilename += "\"";
+                                                else if (c == '\\') sanitizedFilename += "\\";
+                                                else if (c == '\n') sanitizedFilename += "n";
+                                                else if (c == '\r') sanitizedFilename += "r";
+                                                else if (c == '\t') sanitizedFilename += "t";
+                                            } else if (c >= 32 && c <= 126) {  // Printable ASCII only
+                                                sanitizedFilename += c;
+                                            }
+                                        }
+                                        filename = sanitizedFilename;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    // Log error but continue with default values
+                    log_error("Job status parsing error: " << e.what());
+                } catch (...) {
+                    // Catch any other exceptions
+                    log_error("Unknown error during job status parsing");
+                }
+                
+                response += ",\"percentage\":" + std::to_string(percentage);
+                response += ",\"filename\":\"" + filename + "\"";
+            }
+            
+            response += "}";
+            _webserver->send(200, "application/json", response.c_str());
+        });
+        
+        // Job blocked page endpoint
+        _webserver->on("/jobblocked", HTTP_GET, handleJobBlocked);
 
         //LocalFS
         _webserver->on("/files", HTTP_ANY, handleFileList, LocalFSFileupload);
@@ -590,15 +674,20 @@ namespace WebUI {
 
     void Web_Server::send404Page() {
         sendWithOurAddress(PAGE_404, 404);
-    }
-
-    void Web_Server::handle_root(const String& path) {
+    }    void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
 
         // If in AP mode and requesting root page, redirect to WiFi config page
         if (path == "/" && WiFi.getMode() == WIFI_AP) {
             _webserver->sendHeader(LOCATION_HEADER, "/wifi", true);
             _webserver->send(302, "text/plain", "Redirecting to WiFi configuration");
+            return;
+        }
+
+        // Check if a job is currently active and block new UI access
+        if (Job::active()) {
+            log_info("WebUI: Blocking access - job in progress from " << _webserver->client().remoteIP());
+            handleJobBlocked();
             return;
         }
 
@@ -629,9 +718,7 @@ namespace WebUI {
         _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
         _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
         _webserver->send(204);  // No Content response for OPTIONS request
-    }
-
-    // Handle filenames and other things that are not explicitly registered
+    }    // Handle filenames and other things that are not explicitly registered
     void Web_Server::handle_not_found() {
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->sendHeader(LOCATION_HEADER, "/");
@@ -640,6 +727,19 @@ namespace WebUI {
         }
 
         std::string path(_webserver->urlDecode(_webserver->uri()).c_str());
+
+        // Check if a job is currently active and block access to most resources
+        // Allow job status checking and commands that might be needed for monitoring
+        if (Job::active() && 
+            path != "/jobstatus" && 
+            path != "/jobblocked" && 
+            path != "/command" && 
+            path != "/command_silent") {
+            
+            log_info("WebUI: Blocking file access - job in progress: " << path);
+            handleJobBlocked();
+            return;
+        }
 
         // If pen change mode is active, restrict access to non-ATC pages
         // This ensures safety by keeping the user in the ATC interface until the flag is unset
@@ -959,13 +1059,227 @@ namespace WebUI {
                          "<button onclick='window.location.replace(\"/feedhold_reload\")'>Feedhold</button>"
                          "&nbsp;Stop the motion with feedhold and then retry<br>"
                          "</body></html>");
-    }
-    // This page issues a feedhold to pause the motion then retries the WebUI reload
+    }    // This page issues a feedhold to pause the motion then retries the WebUI reload
     void Web_Server::handleFeedholdReload() {
         protocol_send_event(&feedHoldEvent);
         // Go to the main page
         _webserver->sendHeader(LOCATION_HEADER, "/");
         _webserver->send(302);
+    }    // This page is shown when a job is running and new UI connections are blocked
+    void Web_Server::handleJobBlocked() {
+        _webserver->send(503,
+                         "text/html",
+                         "<!DOCTYPE html>"
+                         "<html lang='en'>"
+                         "<head>"
+                         "<meta charset='UTF-8'>"
+                         "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+                         "<title>Job In Progress - FluidNC</title>"
+                         "<style>"
+                         "* { margin: 0; padding: 0; box-sizing: border-box; }"
+                         "body {"
+                         "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;"
+                         "  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
+                         "  min-height: 100vh;"
+                         "  display: flex;"
+                         "  align-items: center;"
+                         "  justify-content: center;"
+                         "  color: #333;"
+                         "}"
+                         ".container {"
+                         "  background: white;"
+                         "  border-radius: 20px;"
+                         "  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);"
+                         "  padding: 40px;"
+                         "  text-align: center;"
+                         "  max-width: 500px;"
+                         "  width: 90%;"
+                         "  animation: slideIn 0.5s ease-out;"
+                         "}"
+                         "@keyframes slideIn {"
+                         "  from { opacity: 0; transform: translateY(-30px); }"
+                         "  to { opacity: 1; transform: translateY(0); }"
+                         "}"
+                         ".icon {"
+                         "  width: 80px;"
+                         "  height: 80px;"
+                         "  margin: 0 auto 20px;"
+                         "  background: linear-gradient(45deg, #ff9a56, #ffad56);"
+                         "  border-radius: 50%;"
+                         "  display: flex;"
+                         "  align-items: center;"
+                         "  justify-content: center;"
+                         "  font-size: 40px;"
+                         "  color: white;"
+                         "  animation: pulse 2s infinite;"
+                         "}"
+                         "@keyframes pulse {"
+                         "  0%, 100% { transform: scale(1); }"
+                         "  50% { transform: scale(1.05); }"
+                         "}"
+                         "h1 {"
+                         "  color: #2c3e50;"
+                         "  margin-bottom: 20px;"
+                         "  font-size: 28px;"
+                         "  font-weight: 600;"
+                         "}"
+                         ".description {"
+                         "  color: #7f8c8d;"
+                         "  margin-bottom: 30px;"
+                         "  line-height: 1.6;"
+                         "  font-size: 16px;"
+                         "}"
+                         ".status-card {"
+                         "  background: #f8f9fa;"
+                         "  border-radius: 12px;"
+                         "  padding: 20px;"
+                         "  margin: 20px 0;"
+                         "  border-left: 4px solid #3498db;"
+                         "}"
+                         ".status-label {"
+                         "  font-weight: 600;"
+                         "  color: #2c3e50;"
+                         "  margin-bottom: 8px;"
+                         "}"
+                         "#jobStatus {"
+                         "  font-size: 18px;"
+                         "  font-weight: 700;"
+                         "  color: #e74c3c;"
+                         "  display: inline-flex;"
+                         "  align-items: center;"
+                         "  gap: 8px;"
+                         "}"
+                         "#jobStatus.complete {"
+                         "  color: #27ae60;"
+                         "}"
+                         ".spinner {"
+                         "  display: inline-block;"
+                         "  width: 16px;"
+                         "  height: 16px;"
+                         "  border: 2px solid #bdc3c7;"
+                         "  border-top: 2px solid #e74c3c;"
+                         "  border-radius: 50%;"
+                         "  animation: spin 1s linear infinite;"
+                         "}"
+                         "@keyframes spin {"
+                         "  0% { transform: rotate(0deg); }"
+                         "  100% { transform: rotate(360deg); }"
+                         "}"
+                         ".retry-btn {"
+                         "  background: linear-gradient(45deg, #3498db, #2980b9);"
+                         "  color: white;"
+                         "  border: none;"
+                         "  border-radius: 50px;"
+                         "  padding: 15px 30px;"
+                         "  font-size: 16px;"
+                         "  font-weight: 600;"
+                         "  cursor: pointer;"
+                         "  transition: all 0.3s ease;"
+                         "  box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);"
+                         "}"
+                         ".retry-btn:hover {"
+                         "  transform: translateY(-2px);"
+                         "  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);"
+                         "}"
+                         ".retry-btn:active {"
+                         "  transform: translateY(0);"
+                         "}"
+                         ".footer {"
+                         "  margin-top: 30px;"
+                         "  color: #95a5a6;"
+                         "  font-size: 14px;"
+                         "}"
+                         ".progress-bar {"
+                         "  width: 100%;"
+                         "  height: 6px;"
+                         "  background: #ecf0f1;"
+                         "  border-radius: 3px;"
+                         "  overflow: hidden;"
+                         "  margin: 15px 0;"
+                         "}"
+                         ".progress-fill {"
+                         "  height: 100%;"
+                         "  background: linear-gradient(45deg, #3498db, #2980b9);"
+                         "  border-radius: 3px;"
+                         "  animation: progress 2s ease-in-out infinite;"
+                         "}"
+                         "@keyframes progress {"
+                         "  0% { width: 30%; }"
+                         "  50% { width: 70%; }"
+                         "  100% { width: 30%; }"
+                         "}"
+                         "</style>"
+                         "</head>"
+                         "<body>"
+                         "<div class='container'>"
+                         "<div class='icon'>⚙️</div>"
+                         "<h1>Job In Progress</h1>"                         "<p class='description'>"
+                         "A job is currently running on the machine. New UI connections are temporarily blocked to prevent interference and ensure optimal performance. Progress is shown below and updates automatically."
+                         "</p>"                         "<div class='status-card'>"
+                         "<div class='status-label'>Current Status:</div>"
+                         "<div id='jobStatus'>"
+                         "<span class='spinner'></span> Running..."
+                         "</div>"
+                         "<div class='progress-bar'>"
+                         "<div class='progress-fill'></div>"
+                         "</div>"
+                         "<div id='progressText' style='font-size: 12px; color: #7f8c8d; margin-top: 8px;'>Initializing...</div>"
+                         "</div>"
+                         "<button class='retry-btn' onclick='checkAndRetry()'>Check Status & Retry</button>"
+                         "<div class='footer'>"
+                         "FluidNC will automatically refresh when the job is complete"
+                         "</div>"
+                         "</div>"
+                         "<script>"
+                         "let checkInterval;"
+                         "function checkAndRetry() {"
+                         "  window.location.reload();"
+                         "}"                         "function updateStatus() {"
+                         "  fetch('/jobstatus')"
+                         "    .then(response => response.json())"
+                         "    .then(data => {"
+                         "      const statusEl = document.getElementById('jobStatus');"
+                         "      const progressBar = document.querySelector('.progress-fill');"
+                         "      const progressText = document.getElementById('progressText');"
+                         "      if (!data.active) {"
+                         "        statusEl.innerHTML = '✅ Complete';"
+                         "        statusEl.className = 'complete';"
+                         "        progressBar.style.width = '100%';"
+                         "        progressBar.style.background = '#27ae60';"
+                         "        progressBar.style.animation = 'none';"
+                         "        progressText.innerHTML = 'Job completed successfully';"
+                         "        clearInterval(checkInterval);"
+                         "        setTimeout(() => window.location.reload(), 2000);"
+                         "      } else {"
+                         "        let statusText = '<span class=\"spinner\"></span> Running';"
+                         "        let progressInfo = '';"
+                         "        if (data.filename) {"
+                         "          statusText += ': ' + data.filename;"
+                         "          progressInfo = 'File: ' + data.filename;"
+                         "        }"
+                         "        if (data.percentage !== undefined && data.percentage >= 0) {"
+                         "          statusText += ' (' + data.percentage.toFixed(1) + '%)';"
+                         "          progressBar.style.width = data.percentage + '%';"
+                         "          progressBar.style.animation = 'none';"
+                         "          progressBar.style.background = 'linear-gradient(45deg, #3498db, #2980b9)';"
+                         "          progressInfo += (progressInfo ? ' • ' : '') + data.percentage.toFixed(1) + '% complete';"
+                         "        } else {"
+                         "          progressBar.style.animation = 'progress 2s ease-in-out infinite';"
+                         "          progressInfo += (progressInfo ? ' • ' : '') + 'Progress updating...';"
+                         "        }"
+                         "        statusEl.innerHTML = statusText;"
+                         "        progressText.innerHTML = progressInfo || 'Preparing job...';"
+                         "      }"
+                         "    })"
+                         "    .catch(() => {"
+                         "      document.getElementById('jobStatus').innerHTML = '❓ Unknown';"
+                         "      document.getElementById('progressText').innerHTML = 'Unable to fetch status';"
+                         "    });"
+                         "}"
+                         "checkInterval = setInterval(updateStatus, 2000);"
+                         "updateStatus();"
+                         "</script>"
+                         "</body></html>");
     }
 
     //push error code and message to websocket.  Used by upload code

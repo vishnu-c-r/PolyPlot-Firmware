@@ -10,6 +10,7 @@
 
 #    include "../Serial.h"  // is_realtime_command
 #    include "../Limits.h"  // pen_change variable
+#    include "../Job.h"     // Job::active() function
 
 namespace WebUI {
     class WSChannels;
@@ -203,8 +204,18 @@ namespace WebUI {
             case WStype_DISCONNECTED:
                 log_debug("WebSocket disconnect " << num);
                 WSChannels::removeChannel(num);
-                break;
-            case WStype_CONNECTED: {
+                break;            case WStype_CONNECTED: {
+                // Check if a job is currently active and block new connections
+                if (Job::active()) {
+                    log_debug("WebSocket connection " << num << " blocked - job in progress");
+                    
+                    // Send job status message and immediately disconnect
+                    std::string jobBlockMsg = "{\"error\":\"job_in_progress\",\"message\":\"A job is currently running. Please wait for completion.\"}";
+                    server->sendTXT(num, jobBlockMsg.c_str());
+                    server->disconnect(num);
+                    return;
+                }
+
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -268,9 +279,20 @@ namespace WebUI {
             case WStype_DISCONNECTED:
                 log_debug("WebSocket disconnect " << num);
                 WSChannels::removeChannel(num);
-                break;
-            case WStype_CONNECTED: {
+                break;            case WStype_CONNECTED: {
                 log_debug("WStype_Connected");
+                
+                // Check if a job is currently active and block new connections
+                if (Job::active()) {
+                    log_debug("WebSocket v3 connection " << num << " blocked - job in progress");
+                    
+                    // Send job status message and immediately disconnect
+                    std::string jobBlockMsg = "{\"error\":\"job_in_progress\",\"message\":\"A job is currently running. Please wait for completion.\"}";
+                    server->sendTXT(num, jobBlockMsg.c_str());
+                    server->disconnect(num);
+                    return;
+                }
+
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");

@@ -96,6 +96,9 @@ namespace WebUI {
 
         static const char* modeName();
 
+        // NEW: Add checkDelayedFallback method for deferred operations
+        static void checkDelayedFallback();
+
         static Error listAPs(const char* parameter, AuthenticationLevel auth_level, Channel& out);
         static void  showWifiStats(Channel& out);
         static void  addWifiStatsToArray(JSONencoder& j);
@@ -107,6 +110,11 @@ namespace WebUI {
         static bool _events_registered;
 
         static std::string _hostname;
+        
+        // NEW: Static variables for WiFi heap corruption fix
+        static bool _delayed_fallback_pending;   // Flag for deferred AP fallback
+        static bool _fallback_in_progress;       // Race condition protection
+        static bool _connection_status_pending;  // Deferred connection logging
     };
 
     class PasswordSetting : public StringSetting {

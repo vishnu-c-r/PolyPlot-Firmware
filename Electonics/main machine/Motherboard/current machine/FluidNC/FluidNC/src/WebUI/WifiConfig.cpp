@@ -5,6 +5,7 @@
 
 #include "../Settings.h"
 #include "../Machine/MachineConfig.h"
+#include "../System.h"
 #include <sstream>
 #include <iomanip>
 
@@ -42,6 +43,11 @@ namespace WebUI {
         { "AP", WiFiAP },
         { "STA>AP", WiFiFallback },
     };
+
+    // NEW: Initialize static variables for WiFi heap corruption fix
+    bool WiFiConfig::_delayed_fallback_pending = false;
+    bool WiFiConfig::_fallback_in_progress = false;
+    bool WiFiConfig::_connection_status_pending = false;
 
     enum WiFiContry {
         WiFiCountry01 = 0,  // country "01" is the safest set of settings which complies with all regulatory domains
@@ -557,22 +563,90 @@ namespace WebUI {
      * SYSTEM_EVENT_ETH_DISCONNECTED         < ESP32 ethernet phy link down
      * SYSTEM_EVENT_ETH_GOT_IP               < ESP32 ethernet got IP from connected AP
      * SYSTEM_EVENT_MAX
-     */
-
-    void WiFiConfig::WiFiEvent(WiFiEvent_t event) {
+     */    void WiFiConfig::WiFiEvent(WiFiEvent_t event) {
+        // INTERRUPT CONTEXT: Only perform minimal operations to prevent heap corruption
         switch (event) {
             case SYSTEM_EVENT_STA_GOT_IP:
+                // Clear any pending fallback when successfully connected
+                // Simple flag operations only - no heap allocations
+                _delayed_fallback_pending = false;
+                _fallback_in_progress = false;
+                _connection_status_pending = true;  // Flag for deferred connection logging
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
-                log_info("WiFi Disconnected");
-                if (wifi_mode->get() == WiFiFallback) {
-                    log_info("Falling back to AP mode...");
-                    StartAP();
+                // CRITICAL: NO logging or string operations in interrupt context!
+                // Only set flags - all processing deferred to main thread
+                
+                // Simple condition check without complex operations
+                // Check wifi_mode pointer validity and fallback mode
+                if (wifi_mode && wifi_mode->get() == WiFiFallback) {
+                    // Race condition protection - simple flag check only
+                    if (!_fallback_in_progress) {
+                        // Set flag to request fallback - no heap operations
+                        _delayed_fallback_pending = true;
+                    }
                 }
                 break;
             default:
-                //log_info("WiFi event:" << event);
+                // No operations for other events to maintain interrupt safety
                 break;
+        }
+    }
+
+    /*
+     * Handle deferred WiFi operations safely outside interrupt context
+     * This method processes flags set by the interrupt-safe WiFiEvent handler
+     */
+    void WiFiConfig::checkDelayedFallback() {
+        // Handle deferred connection status logging
+        if (_connection_status_pending) {
+            _connection_status_pending = false;
+            log_info("WiFi STA Connected - IP: " << IP_string(WiFi.localIP()));
+        }
+
+        // Handle deferred AP fallback with job-aware timing
+        if (_delayed_fallback_pending && !_fallback_in_progress) {
+            _fallback_in_progress = true;  // Prevent race conditions
+            _delayed_fallback_pending = false;
+
+            // Check if we should delay fallback due to active job
+            bool should_delay_fallback = false;
+            
+            // Job-aware fallback: Check if CNC is currently running a job
+            // This prevents WiFi changes during critical operations
+            #ifdef ENABLE_SD_CARD
+            if (config && config->_sdCard && config->_sdCard->get_state() != State::Idle) {
+                should_delay_fallback = true;
+            }
+            #endif
+              // Check if motors are currently moving (indicates active job)
+            if (inMotionState()) {
+                should_delay_fallback = true;
+            }
+
+            if (should_delay_fallback) {
+                // Job is active - defer fallback and retry later
+                log_info("WiFi: Delaying AP fallback due to active CNC operation");
+                _delayed_fallback_pending = true;  // Retry later
+                _fallback_in_progress = false;
+                return;
+            }
+
+            // Safe to proceed with fallback
+            log_info("WiFi STA connection lost - falling back to AP mode");
+            
+            // Stop STA mode first
+            WiFi.disconnect(true);
+            delay(100);  // Allow disconnect to complete
+            
+            // Start AP mode
+            if (StartAP()) {
+                log_info("WiFi AP fallback successful");
+            } else {
+                log_error("WiFi AP fallback failed");
+            }
+            
+            _fallback_in_progress = false;
         }
     }
 
@@ -844,12 +918,15 @@ namespace WebUI {
     }
     bool WiFiConfig::isOn() {
         return !(WiFi.getMode() == WIFI_MODE_NULL);
-    }
-
-    /**
+    }    /**
      * Handle not critical actions that must be done in sync environment
      */
     void WiFiConfig::handle() {
+        // CRITICAL: Process deferred WiFi operations first
+        // This prevents heap corruption by handling interrupt-flagged operations
+        // in a safe main thread context
+        checkDelayedFallback();
+        
         wifi_services.handle();
     }
 

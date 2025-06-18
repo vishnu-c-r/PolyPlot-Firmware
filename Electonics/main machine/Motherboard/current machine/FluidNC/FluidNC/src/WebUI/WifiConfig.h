@@ -111,7 +111,7 @@ namespace WebUI {
 
         static std::string _hostname;
         
-        // NEW: Static variables for WiFi heap corruption fix
+        // NEW: Static variables for WiFi heap corruption fix test
         static bool _delayed_fallback_pending;   // Flag for deferred AP fallback
         static bool _fallback_in_progress;       // Race condition protection
         static bool _connection_status_pending;  // Deferred connection logging

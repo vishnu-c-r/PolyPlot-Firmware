@@ -20,7 +20,9 @@ namespace WebUI {
 
     void WebClient::detachWS() {
         flush();
-        _webserver->sendContent("");  //close connection
+        if (_webserver) {
+            _webserver->sendContent("");  //close connection
+        }
         _webserver = nullptr;
     }
 
@@ -94,7 +96,9 @@ namespace WebUI {
 
     WebClient::~WebClient() {
         flush();
-        _webserver->sendContent("");  //close connection
+        if (_webserver) {
+            _webserver->sendContent("");  //close connection
+        }
     }
 }
 #endif

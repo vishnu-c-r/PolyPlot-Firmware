@@ -503,7 +503,6 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     if (!safeMove(pl_data, currentPos))
         return false;
 
-    // Remove forced sys.state change for pen change (revert previous edit)
     pen_change = true;
     if (current_loaded_pen > 0 && current_loaded_pen == nextPen) {
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
@@ -553,7 +552,7 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     protocol_buffer_synchronize();
     plan_sync_position();
 
-    targetPos[Z_AXIS] = pickupPos[Z_AXIS];
+    targetPos[Z_AXIS] = -1.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
 
@@ -575,7 +574,19 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    targetPos[Z_AXIS] = 0;
+    targetPos[Z_AXIS] = pickupPos[Z_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    targetPos[X_AXIS] = -480.0f;  
+    if (!safeMove(pl_data, targetPos))
+        return false;
+
+    targetPos[Z_AXIS] = 0.0f;
+        if (!safeMove(pl_data, targetPos))
+        return false;
+
+    targetPos[X_AXIS] = -440.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
 
@@ -585,9 +596,9 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     protocol_buffer_synchronize();
     plan_sync_position();
 
-    targetPos[X_AXIS] = -440.0f;
-    if (!safeMove(pl_data, targetPos))
-        return false;
+    // targetPos[X_AXIS] = -440.0f;
+    // if (!safeMove(pl_data, targetPos))
+    //     return false;
 
     pl_data->feed_rate = original_feed_rate;
     return true;
@@ -615,7 +626,7 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     protocol_buffer_synchronize();
     plan_sync_position();
 
-    targetPos[Z_AXIS] = 0;
+    targetPos[Z_AXIS] = -1.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
 
@@ -633,11 +644,19 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     protocol_buffer_synchronize();
     plan_sync_position();
 
-    targetPos[X_AXIS] = dropPos[X_AXIS];
+    targetPos[X_AXIS] = -480.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    targetPos[Z_AXIS] = dropPos[Z_AXIS];
+    targetPos[Z_AXIS] =  dropPos[Z_AXIS];  
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    
+    targetPos[X_AXIS] = dropPos[X_AXIS];
+    if (!safeMove(pl_data, targetPos))
+        return false;
+    
+    targetPos[Z_AXIS] = -1.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
 

@@ -1024,6 +1024,24 @@ namespace WebUI {
         return Error::Ok;
     }
 
+    static Error getWorkOrigin(const char* parameter, AuthenticationLevel auth_level, Channel& out) {  // COFF
+        // Debug: print to serial
+        Serial.println("getWorkOrigin handler called");
+        JSONencoder j(true, &out);  // Encapsulated JSON
+        j.begin();
+        // j.member("cmd", "Config/GetWorkAreaOrigin");
+        if (config && config->_workArea) {
+            j.member("X0", config->_workArea->_originX);
+            j.member("Y0", config->_workArea->_originY);
+            j.member("status", "ok");
+        } else {
+            j.member("status", "error");
+            j.member("error", "Work area not found");
+        }
+        j.end();
+        return Error::Ok;
+    }
+
     void make_authentication_settings() {
 #ifdef ENABLE_AUTHENTICATION
         new WebCommand("password", WEBCMD, WA, "ESP555", "WebUI/SetUserPassword", setUserPassword);
@@ -1078,5 +1096,6 @@ namespace WebUI {
 
         // Add the new check command
         new WebCommand("path", WEBCMD, WU, "ESP219", "SD/Check", checkSDFile, nullptr);
+        new WebCommand(NULL, WEBCMD, WU, "COFF", "Config/GetWorkAreaOrigin", getWorkOrigin);
     }
 }

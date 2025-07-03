@@ -280,8 +280,8 @@ void protocol_main_loop() {
             activeChannel = nullptr;
         }
 
-        // Added: Always enable motors on each iteration.
-        config->_axes->set_disable(false);
+        // // Added: Always enable motors on each iteration.
+        // config->_axes->set_disable(false);
 
         // Auto-cycle start any queued moves.
         protocol_auto_cycle_start();
@@ -554,26 +554,7 @@ static void protocol_do_feedhold() {
     }
     set_state(State::Hold);
 }
-static void move_to_safe_position() {
-    // Set the safe coordinates to move after job cancellation
-    float safe_x = 600.0f;
-    float safe_y = 600.0f;
-    float safe_z = 0.0f;  // Optionally, lift Z-axis to a safe height
 
-    // Create a target position array
-    float target[MAX_N_AXIS] = { safe_x, safe_y, safe_z };
-
-    // Prepare motion parameters
-    plan_line_data_t pl_data;
-    memset(&pl_data, 0, sizeof(plan_line_data_t));
-    pl_data.feed_rate = 5000.0f;  // Set an appropriate feed rate
-
-    // Plan the movement to the safe position
-    plan_buffer_line(target, &pl_data);
-
-    // Wait for the movement to complete
-    protocol_buffer_synchronize();
-}
 static void protocol_do_safety_door() {
     // log_debug("protocol_do_safety_door " << int(sys.state));
     // Execute a safety door stop with a feed hold and disable spindle/coolant.

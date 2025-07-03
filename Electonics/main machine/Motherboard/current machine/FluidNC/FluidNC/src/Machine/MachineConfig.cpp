@@ -61,6 +61,9 @@ namespace Machine {
         handler.item("laser_offset_x", _laserOffsetX);
         handler.item("laser_offset_y", _laserOffsetY);
 
+        // Add work area configuration
+        handler.section("work_area", _workArea);
+
         handler.section("control", _control);
         handler.section("coolant", _coolant);
         handler.section("probe", _probe);
@@ -126,6 +129,10 @@ namespace Machine {
 
         if (_start == nullptr) {
             _start = new Start();
+        }
+
+        if (_workArea == nullptr) {
+            _workArea = new WorkArea();
         }
 
         if (_parking == nullptr) {

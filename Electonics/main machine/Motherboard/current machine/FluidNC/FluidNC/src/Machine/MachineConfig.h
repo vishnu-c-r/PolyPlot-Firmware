@@ -61,6 +61,34 @@ namespace Machine {
         ~Start() = default;
     };
 
+    class WorkArea : public Configuration::Configurable {
+    public:
+        float _minX                    = -1000.0f;  // Default to very large area if not configured
+        float _minY                    = -1000.0f;
+        float _maxX                    = 1000.0f;
+        float _maxY                    = 1000.0f;
+        float _originX                 = 0.0f;  // The X coordinate to move to after homing
+        float _originY                 = 0.0f;  // The Y coordinate to move to after homing
+        bool  _enabled                 = true;  // Add enable/disable flag
+        bool  _moveToOriginAfterHoming = true;  // Whether to move to origin after homing
+
+    public:
+        WorkArea() {}
+
+        void group(Configuration::HandlerBase& handler) {
+            handler.item("min_x", _minX);
+            handler.item("min_y", _minY);
+            handler.item("max_x", _maxX);
+            handler.item("max_y", _maxY);
+            handler.item("origin_x", _originX);
+            handler.item("origin_y", _originY);
+            handler.item("enabled", _enabled);
+            handler.item("move_to_origin", _moveToOriginAfterHoming);
+        }
+
+        ~WorkArea() = default;
+    };
+
     class MachineConfig : public Configuration::Configurable {
     public:
         MachineConfig() = default;
@@ -78,6 +106,7 @@ namespace Machine {
         SDCard*                   _sdCard         = nullptr;
         Macros*                   _macros         = nullptr;
         Start*                    _start          = nullptr;
+        WorkArea*                 _workArea       = nullptr;
         Parking*                  _parking        = nullptr;
         OLED*                     _oled           = nullptr;
         Status_Outputs*           _stat_out       = nullptr;
@@ -130,6 +159,23 @@ namespace Machine {
         void  setLaserOffset(float x, float y) {
             _laserOffsetX = x;
             _laserOffsetY = y;
+        }
+
+        // Work area getter methods
+        bool  useWorkAreaLimits() const { return _workArea != nullptr && _workArea->_enabled; }
+        float getWorkAreaMinX() const { return _workArea ? _workArea->_minX : -1000.0f; }
+        float getWorkAreaMinY() const { return _workArea ? _workArea->_minY : -1000.0f; }
+        float getWorkAreaMaxX() const { return _workArea ? _workArea->_maxX : 1000.0f; }
+        float getWorkAreaMaxY() const { return _workArea ? _workArea->_maxY : 1000.0f; }
+
+        // Work area control methods
+        void enableWorkArea() {
+            if (_workArea)
+                _workArea->_enabled = true;
+        }
+        void disableWorkArea() {
+            if (_workArea)
+                _workArea->_enabled = false;
         }
 
         ~MachineConfig();

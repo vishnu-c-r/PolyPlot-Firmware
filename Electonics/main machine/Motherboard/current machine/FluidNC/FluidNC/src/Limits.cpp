@@ -6,6 +6,7 @@
 #include "Protocol.h"       // protocol_execute_realtime
 #include "Platform.h"       // WEAK_LINK
 #include "Machine/Axis.h"
+#include "GCode.h"  // laser_offset_disabled
 
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -81,6 +82,22 @@ float limitsMaxPosition(size_t axis) {
     // This prevents accidental collisions during tool changes
     auto maxtravel = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
+    // Check if custom work area limits are configured and should be applied
+    // Work area limits are disabled during:
+    // 1. pen_change operations (tool changing)
+    // 2. Normal job execution (when machine is in Cycle state)
+    // Work area limits are ENABLED during:
+    // - Manual jogging and alignment (Idle state)
+    // - Setup operations with laser pointer
+    if (config->useWorkAreaLimits() && !pen_change && !state_is(State::Cycle)) {
+        if (axis == X_AXIS) {
+            return config->getWorkAreaMaxX();
+        } else if (axis == Y_AXIS) {
+            return config->getWorkAreaMaxY();
+        }
+        // For Z axis and other axes, fall through to normal calculation
+    }
+
     return (!homing || homing->_positiveDirection) ? mpos : mpos + maxtravel;
 }
 
@@ -90,8 +107,24 @@ float limitsMinPosition(size_t axis) {
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
 
-    // Apply same pen_change travel restriction to minimum positions
+    // Apply pen_change travel restriction to minimum positions
     auto maxtravel = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
+
+    // Check if custom work area limits are configured and should be applied
+    // Work area limits are disabled during:
+    // 1. pen_change operations (tool changing)
+    // 2. Normal job execution (when machine is in Cycle state)
+    // Work area limits are ENABLED during:
+    // - Manual jogging and alignment (Idle state)
+    // - Setup operations with laser pointer
+    if (config->useWorkAreaLimits() && !pen_change && !state_is(State::Cycle)) {
+        if (axis == X_AXIS) {
+            return config->getWorkAreaMinX();
+        } else if (axis == Y_AXIS) {
+            return config->getWorkAreaMinY();
+        }
+        // For Z axis and other axes, fall through to normal calculation
+    }
 
     return (!homing || homing->_positiveDirection) ? mpos - maxtravel : mpos;
 }

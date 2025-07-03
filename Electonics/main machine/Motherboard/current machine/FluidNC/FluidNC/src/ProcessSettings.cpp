@@ -35,7 +35,6 @@
 // WU Readable and writable as user and admin
 // WA Readable as user and admin, writable as admin
 
-
 // If authentication is disabled, auth_level will be LEVEL_ADMIN
 static bool auth_failed(Word* w, const char* value, WebUI::AuthenticationLevel auth_level) {
     permissions_t permissions = w->getPermissions();
@@ -408,6 +407,22 @@ static Error home(AxisMask axisMask, Channel& out) {
     } while (state_is(State::Homing));
 
     if (!Homing::unhomed_axes()) {
+        // Check if we should move to the origin position after homing
+        if (config->_workArea && config->_workArea->_moveToOriginAfterHoming) {
+            // Move to the workarea origin position after homing
+            std::string cmd = "G0X" + std::to_string(config->_workArea->_originX) + "Y" + std::to_string(config->_workArea->_originY);
+            // Execute the command directly instead of just printing it
+            char line[LINE_BUFFER_SIZE];
+            strncpy(line, cmd.c_str(), LINE_BUFFER_SIZE - 1);
+            line[LINE_BUFFER_SIZE - 1] = '\0';  // Ensure null termination
+            gc_execute_line(line);              // This actually executes the movement
+
+            // Print the command to the output for logging purposes
+            out.print("Moving to origin: ");
+            out.print(cmd.c_str());
+            out.print("\n");
+        }
+
         config->_macros->_after_homing.run(&out);
     }
 
@@ -878,7 +893,6 @@ void make_user_commands() {
     new UserCommand("SS", "Startup/Show", showStartupLog, anyState);
 
     new UserCommand("RI", "Report/Interval", setReportInterval, anyState);
-
 
     new AsyncUserCommand("J", "Jog", doJog, notIdleOrJog);
     new AsyncUserCommand("G", "GCode/Modes", report_gcode, anyState);

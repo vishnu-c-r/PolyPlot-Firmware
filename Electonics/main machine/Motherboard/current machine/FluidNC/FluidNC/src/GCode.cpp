@@ -751,6 +751,14 @@ Error gc_execute_line(char* line) {
                     case 151:
                         remove_laser_pointer_offset();
                         break;
+                    case 160:  // M160 - Enable work area limits
+                        config->enableWorkArea();
+                        log_debug("Work area limits enabled");
+                        break;
+                    case 161:  // M161 - Disable work area limits
+                        config->disableWorkArea();
+                        log_debug("Work area limits disabled");
+                        break;
                     default:
                         FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported M command]
                 }
@@ -1525,7 +1533,7 @@ Error gc_execute_line(char* line) {
         pl_data->prevPenNumber         = gc_state.prev_tool;
         pl_data->penNumber             = gc_state.tool;
         pl_data->feed_rate             = 10000.0f;  // Default feed rate
-        pl_data->approach_feedrate     = 8000.0f;  // Fast approach feed rate
+        pl_data->approach_feedrate     = 8000.0f;   // Fast approach feed rate
         pl_data->precise_feedrate      = 2000.0f;   // Slower precise movement feed rate for actual pen change
         pl_data->line_number           = gc_block.values.n;
         pl_data->motion.noFeedOverride = 1;  // Use noFeedOverride to ensure exact feed rate

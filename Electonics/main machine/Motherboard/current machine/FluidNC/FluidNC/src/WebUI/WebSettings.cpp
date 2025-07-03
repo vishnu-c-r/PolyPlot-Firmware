@@ -1033,7 +1033,7 @@ namespace WebUI {
         if (config && config->_workArea) {
             j.member("X0", config->_workArea->_originX);
             j.member("Y0", config->_workArea->_originY);
-            j.member("status", "ok");
+            // j.member("status", "ok");
         } else {
             j.member("status", "error");
             j.member("error", "Work area not found");

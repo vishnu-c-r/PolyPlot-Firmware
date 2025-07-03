@@ -418,9 +418,9 @@ static Error home(AxisMask axisMask, Channel& out) {
             gc_execute_line(line);              // This actually executes the movement
 
             // Print the command to the output for logging purposes
-            out.print("Moving to origin: ");
-            out.print(cmd.c_str());
-            out.print("\n");
+            log_debug("Moving to origin: ");
+            log_debug(cmd.c_str());
+            log_debug("\n");
         }
 
         config->_macros->_after_homing.run(&out);

@@ -420,7 +420,6 @@ static Error home(AxisMask axisMask, Channel& out) {
             // Print the command to the output for logging purposes
             log_debug("Moving to origin: ");
             log_debug(cmd.c_str());
-            log_debug("\n");
         }
 
         config->_macros->_after_homing.run(&out);

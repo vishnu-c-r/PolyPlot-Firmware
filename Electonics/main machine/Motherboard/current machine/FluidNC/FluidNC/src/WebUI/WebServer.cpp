@@ -7,8 +7,8 @@
 #include "../Settings.h"  // settings_execute_line()
 #include "../Job.h"       // Job::active() function
 
-#include <cerrno>         // errno for safe parsing
-#include <exception>      // exception handling
+#include <cerrno>     // errno for safe parsing
+#include <exception>  // exception handling
 
 #ifdef ENABLE_WIFI
 
@@ -27,7 +27,7 @@
 #    include <ESP32SSDP.h>
 #    include <DNSServer.h>
 #    include "WebSettings.h"
-
+#    include "Authentication.h"
 #    include "WSChannel.h"
 
 #    include "WebClient.h"
@@ -41,6 +41,7 @@
 
 #    include "PenConfig.h"
 #    include "ToolConfig.h"
+#    include "src/MotionControl.h"  // for mc_drop_pen and motion helpers
 
 extern volatile bool pen_change;
 
@@ -144,32 +145,135 @@ namespace WebUI {
         _webserver->on("/admin", [this]() { handle_root("/admin"); });
         _webserver->on("/wifi", [this]() { handle_root("/wifi"); });
         _webserver->on("/atc", [this]() { handle_root("/atc"); });
+        // Minimal embedded job control page and endpoints (SD-independent)
+        _webserver->on("/jobcontrol", HTTP_GET, [this]() {
+            _webserver->send(
+                200,
+                "text/html",
+                "<!DOCTYPE html><html lang='en'><head>"
+                "<meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>"
+                "<title>Job Control</title>"
+                "<style>"
+                ":root{--bg:#0b1020;--card:#111938;--text:#e6e9f2;--muted:#a0a8c3;--accent:#6c8cff;--accent2:#26c281;--warn:#f0b429;--"
+                "danger:#ff5a6b;--border:#1d2755;}"
+                "*{box-sizing:border-box}body{margin:0;background:radial-gradient(1200px 800px at 20% -10%,#1b2a60,rgba(0,0,0,0) "
+                "70%),linear-gradient(180deg,#0b1020,#0a0e1a);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe "
+                "UI,Roboto,Ubuntu;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}"
+                ".wrap{width:100%;max-width:720px}"
+                ".card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid "
+                "var(--border);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);backdrop-filter:blur(6px);overflow:hidden}"
+                ".hdr{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--border)}"
+                ".dot{width:10px;height:10px;border-radius:50%} .run{background:var(--accent2)} .hold{background:var(--warn)} "
+                ".idle{background:#8a93a8}"
+                ".title{font-size:18px;font-weight:600} .sub{color:var(--muted);font-size:13px}"
+                ".body{padding:20px}"
+                ".file{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;color:var(--muted)}"
+                ".progress{height:10px;background:#14204a;border-radius:999px;overflow:hidden;position:relative}"
+                ".bar{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#4f6bff);transition:width .35s ease}"
+                ".nums{display:flex;justify-content:space-between;margin-top:8px;color:var(--muted);font-size:12px}"
+                ".actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}"
+                ".btn{appearance:none;border:none;border-radius:12px;padding:12px "
+                "18px;font-size:15px;font-weight:600;color:#0a0e1a;cursor:pointer;transition:transform .1s ease,filter .2s "
+                "ease;display:inline-flex;align-items:center;gap:8px}"
+                ".btn:disabled{opacity:.6;cursor:not-allowed} .btn:active{transform:translateY(1px)}"
+                ".primary{background:var(--accent);color:white} .success{background:var(--accent2);color:white} "
+                ".warn{background:var(--warn);color:#1a1200} .danger{background:var(--danger);color:white}"
+                ".hint{margin-top:10px;color:var(--muted);font-size:12px}"
+                "</style></head><body><div class='wrap'><div class='card'>"
+                "<div class='hdr'><div id='stateDot' class='dot idle'></div><div><div class='title'>Job Control</div><div id='subtitle' "
+                "class='sub'>Connecting…</div></div></div>"
+                "<div class='body'>"
+                "<div class='file'><div id='fileLabel'>File: —</div><div id='percentLabel'>0%</div></div>"
+                "<div class='progress'><div id='bar' class='bar'></div></div>"
+                "<div class='nums'><div id='statusLabel'>Idle</div><div id='etaLabel'></div></div>"
+                "<div class='actions'>"
+                "<button id='pauseBtn' class='btn warn'>⏸ Pause</button>"
+                "<button id='resumeBtn' class='btn success' style='display:none'>▶ Resume</button>"
+                "<button id='stopBtn' class='btn danger'>⏹ Stop</button>"
+                "</div>"
+                "<div class='hint'>Tip: Use this lightweight page during a running job. The full UI will return automatically when the job "
+                "finishes or is canceled.</div>"
+                "</div></div></div>"
+                "<script>"
+                "let polling;let lastPct=0;let pending=false;let stoppedByUser=false;"
+                "const qs=id=>document.getElementById(id);"
+                "const pauseBtn=qs('pauseBtn'), resumeBtn=qs('resumeBtn'), stopBtn=qs('stopBtn');"
+                "function setBusy(b){[pauseBtn,resumeBtn,stopBtn].forEach(el=>el.disabled=b)}"
+                "async function post(url){setBusy(true);try{await fetch(url,{method:'POST'})}catch(e){}finally{setBusy(false)}}"
+                "pauseBtn.onclick=()=>post('/job/pause');"
+                "resumeBtn.onclick=()=>post('/job/resume');"
+                "stopBtn.onclick=async()=>{stoppedByUser=true;await post('/job/stop');};"
+                "function fmtPct(p){return (Math.max(0,Math.min(100,p||0))).toFixed(1)+'%'}"
+                "function setState(paused){qs('stateDot').className='dot "
+                "'+(paused?'hold':'run');qs('statusLabel').textContent=paused?'Paused':'Running';qs('subtitle').textContent=paused?'Feed "
+                "hold active':'Job in progress'}"
+                "function updateUI(data){"
+                "  if(!data||!data.active){return}"
+                "  const paused=!!data.paused;setState(paused);"
+                "  const pct=Number.isFinite(data.percentage)?data.percentage:NaN;"
+                "  const hasPct=Number.isFinite(pct);"
+                "  if(hasPct){lastPct=pct;qs('bar').style.width=pct+'%';qs('percentLabel').textContent=fmtPct(pct)}"
+                "  qs('fileLabel').textContent='File: '+(data.filename||'—');"
+                "  pauseBtn.style.display=paused?'none':'inline-flex';"
+                "  resumeBtn.style.display=paused?'inline-flex':'none';"
+                "}"
+                "async function poll(){try{const r=await fetch('/jobstatus');const data=await "
+                "r.json();if(!data||!data.active){window.location.replace('/');return}updateUI(data);}catch(e){}}"
+                "polling=setInterval(poll, 1000);poll();"
+                "</script></body></html>");
+        });
+        _webserver->on("/job/pause", HTTP_POST, [this]() {
+            protocol_send_event(&feedHoldEvent);
+            // Proactively push a status update so main UI reflects Hold immediately
+            report_realtime_status(allChannels);
+            _webserver->send(200, "application/json", "{\"ok\":true}");
+        });
+        _webserver->on("/job/resume", HTTP_POST, [this]() {
+            protocol_send_event(&cycleStartEvent);
+            // Proactively push a status update so main UI reflects Run immediately
+            report_realtime_status(allChannels);
+            _webserver->send(200, "application/json", "{\"ok\":true}");
+        });
+        // Nudge status for UI consumers
+        report_realtime_status(allChannels);
+        _webserver->send(200, "application/json", "{\"ok\":true}");
+        _webserver->on("/job/stop", HTTP_POST, [this]() {
+            // Immediate reset; no auto-home logic here
+            protocol_send_event(&rtResetEvent);
+            _webserver->send(200, "application/json", "{\"ok\":true}");
+        });
 
         _webserver->onNotFound(handle_not_found);
 
         //need to be there even no authentication to say to UI no authentication
-        _webserver->on("/login", HTTP_ANY, handle_login);        //web commands
+        _webserver->on("/login", HTTP_ANY, handle_login);  //web commands
         _webserver->on("/command", HTTP_ANY, handle_web_command);
-        _webserver->on("/command_silent", HTTP_ANY, handle_web_command_silent);        _webserver->on("/feedhold_reload", HTTP_ANY, handleFeedholdReload);
-          // Job status endpoint for checking if a job is active
+        _webserver->on("/command_silent", HTTP_ANY, handle_web_command_silent);
+        _webserver->on("/feedhold_reload", HTTP_ANY, handleFeedholdReload);
+        // Job status endpoint for checking if a job is active
         _webserver->on("/jobstatus", HTTP_GET, [this]() {
             _webserver->sendHeader("Access-Control-Allow-Origin", "*");
             _webserver->sendHeader("Content-Type", "application/json");
-            
-            bool jobActive = Job::active();
-            std::string response = "{\"active\":" + std::string(jobActive ? "true" : "false");
-            
+
+            bool        jobActive = Job::active();
+            std::string response  = "{\"active\":" + std::string(jobActive ? "true" : "false");
+
             if (jobActive) {
+                // Determine paused state from system state
+                bool paused = false;
+                try {
+                    paused = (sys.state == State::Hold);
+                } catch (...) { paused = false; }
                 // Extract progress information from the active job with proper null checks
-                std::string filename = "";
-                float percentage = 0.0;
-                
+                std::string filename   = "";
+                float       percentage = 0.0;
+
                 try {
                     // Safe null pointer check with exception handling
                     Channel* jobChannel = Job::channel();
                     if (jobChannel != nullptr && !jobChannel->_progress.empty()) {
                         std::string progressStr = jobChannel->_progress;
-                        
+
                         // Validate minimum string length before substring operations
                         if (progressStr.length() >= 3) {
                             // Parse the progress string format: "SD:percentage,filename"
@@ -177,35 +281,40 @@ namespace WebUI {
                                 size_t commaPos = progressStr.find(',');
                                 if (commaPos != std::string::npos && commaPos > 3 && commaPos < progressStr.length() - 1) {
                                     // Safe substring extraction with bounds checking
-                                    size_t percentStart = 3;
+                                    size_t percentStart  = 3;
                                     size_t percentLength = commaPos - 3;
                                     size_t filenameStart = commaPos + 1;
-                                    
+
                                     if (percentLength > 0 && filenameStart < progressStr.length()) {
                                         std::string percentStr = progressStr.substr(percentStart, percentLength);
-                                        filename = progressStr.substr(filenameStart);
-                                        
+                                        filename               = progressStr.substr(filenameStart);
+
                                         // Safe string to float conversion with error handling
-                                        char* endPtr = nullptr;
-                                        errno = 0;
+                                        char* endPtr        = nullptr;
+                                        errno               = 0;
                                         float parsedPercent = std::strtof(percentStr.c_str(), &endPtr);
-                                        
+
                                         // Validate conversion success and range
-                                        if (errno == 0 && endPtr != percentStr.c_str() && *endPtr == '\0' && 
-                                            parsedPercent >= 0.0f && parsedPercent <= 100.0f) {
+                                        if (errno == 0 && endPtr != percentStr.c_str() && *endPtr == '\0' && parsedPercent >= 0.0f &&
+                                            parsedPercent <= 100.0f) {
                                             percentage = parsedPercent;
                                         }
-                                        
+
                                         // Sanitize filename to prevent JSON injection
                                         std::string sanitizedFilename = "";
                                         for (char c : filename) {
                                             if (c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t') {
                                                 sanitizedFilename += "\\";
-                                                if (c == '"') sanitizedFilename += "\"";
-                                                else if (c == '\\') sanitizedFilename += "\\";
-                                                else if (c == '\n') sanitizedFilename += "n";
-                                                else if (c == '\r') sanitizedFilename += "r";
-                                                else if (c == '\t') sanitizedFilename += "t";
+                                                if (c == '"')
+                                                    sanitizedFilename += "\"";
+                                                else if (c == '\\')
+                                                    sanitizedFilename += "\\";
+                                                else if (c == '\n')
+                                                    sanitizedFilename += "n";
+                                                else if (c == '\r')
+                                                    sanitizedFilename += "r";
+                                                else if (c == '\t')
+                                                    sanitizedFilename += "t";
                                             } else if (c >= 32 && c <= 126) {  // Printable ASCII only
                                                 sanitizedFilename += c;
                                             }
@@ -223,15 +332,16 @@ namespace WebUI {
                     // Catch any other exceptions
                     log_error("Unknown error during job status parsing");
                 }
-                
+
+                response += ",\"paused\":" + std::string(paused ? "true" : "false");
                 response += ",\"percentage\":" + std::to_string(percentage);
                 response += ",\"filename\":\"" + filename + "\"";
             }
-            
+
             response += "}";
             _webserver->send(200, "application/json", response.c_str());
         });
-        
+
         // Job blocked page endpoint
         _webserver->on("/jobblocked", HTTP_GET, handleJobBlocked);
 
@@ -309,109 +419,83 @@ namespace WebUI {
         _webserver->on("/toolconfig/position", HTTP_POST, handleUpdateToolPosition);
         _webserver->on("/toolconfig/status", HTTP_GET, handleGetToolStatus);
 
-        // Add explicit routes for JS module and CSS files with correct MIME types
-
-        // Add generic handler for other assets in /ui/assets/
+        // Add explicit routes for JS module and CSS files with correct MIME types (consolidated below)
         _webserver->on("/penconfig", HTTP_DELETE, handleDeletePen);
 
-        // Add explicit routes for JS module and CSS files with correct MIME types
+        // Small local helpers to DRY common patterns
+        auto redirectIfJobActive = [this]() -> bool {
+            if (Job::active()) {
+                _webserver->sendHeader(LOCATION_HEADER, "/jobcontrol", true);
+                _webserver->send(302, "text/plain", "Redirecting to job control");
+                return true;
+            }
+            return false;
+        };
 
-        // Add generic handler for other assets in /ui/assets/
-        _webserver->on("/ui/assets/", HTTP_GET, [this]() {
-            String path = _webserver->uri();
-            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
-
+        auto setMimeFromPath = [this](const String& path) {
             if (path.endsWith(".js")) {
                 _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
             } else if (path.endsWith(".css")) {
                 _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
+            } else if (path.endsWith(".html")) {
+                _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
             } else if (path.endsWith(".woff2")) {
                 _webserver->sendHeader("Content-Type", "font/woff2");
             } else if (path.endsWith(".ttf")) {
                 _webserver->sendHeader("Content-Type", "font/ttf");
             }
+        };
 
-            // Try to serve gzipped version first
+        auto serveWithGzip = [this](const String& path) {
             if (myStreamFile((path + ".gz").c_str())) {
                 _webserver->sendHeader("Content-Encoding", "gzip");
             } else {
                 myStreamFile(path.c_str());
             }
-        });
+        };
 
         // Add generic handler for static assets with proper caching and compression
-        _webserver->on("/index.html", HTTP_GET, [this]() {
+        _webserver->on("/index.html", HTTP_GET, [this, &redirectIfJobActive, &serveWithGzip]() {
+            if (redirectIfJobActive())
+                return;
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
             _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
-            myStreamFile("/index.html");
-        });
-
-        // Generic handler for assets folder
-        _webserver->on("/assets/", HTTP_GET, [this]() {
-            String path = _webserver->uri();
-            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
-
-            if (path.endsWith(".js")) {
-                _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
-            } else if (path.endsWith(".css")) {
-                _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
-            } else if (path.endsWith(".woff2")) {
-                _webserver->sendHeader("Content-Type", "font/woff2");
-            } else if (path.endsWith(".ttf")) {
-                _webserver->sendHeader("Content-Type", "font/ttf");
-            }
-
-            // Try to serve gzipped version first
-            if (myStreamFile((path + ".gz").c_str())) {
-                _webserver->sendHeader("Content-Encoding", "gzip");
-            } else {
-                myStreamFile(path.c_str());
-            }
+            serveWithGzip("/index.html");
         });
 
         // Static file handlers
-        _webserver->on("/admin.html", HTTP_GET, [this]() {
+        _webserver->on("/admin.html", HTTP_GET, [this, &redirectIfJobActive, &serveWithGzip]() {
+            if (redirectIfJobActive())
+                return;
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
-            _webserver->sendHeader("Content-Encoding", "gzip");
-            myStreamFile("/ui/admin.html.gz");
+            serveWithGzip("/ui/admin.html");
         });
 
-        _webserver->on("/ui/index.html", HTTP_GET, [this]() {
+        _webserver->on("/ui/index.html", HTTP_GET, [this, &redirectIfJobActive, &serveWithGzip]() {
+            if (redirectIfJobActive())
+                return;
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
-            _webserver->sendHeader("Content-Encoding", "gzip");
-            myStreamFile("/ui/index.html.gz");
+            serveWithGzip("/ui/index.html");
         });
 
         // Handle all assets dynamically, ignoring hashes in filenames
-        _webserver->on("/assets/", HTTP_GET, [this]() {
-            String path = _webserver->uri();  // Define 'path' before using it
-            // log_debug("Asset request: " << path.c_str());
-            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");  // Cache for 1 year
-            _webserver->sendHeader("Access-Control-Allow-Origin", "*");
+        auto assetHandler = [this, &setMimeFromPath, &serveWithGzip]() {
+            String path = _webserver->uri();
+            _webserver->sendHeader("Cache-Control", "public, max-age=31536000");
+            addCORSHeaders();
+            setMimeFromPath(path);
+            serveWithGzip(path);
+        };
 
-            if (path.indexOf("index-") >= 0 && path.endsWith(".js")) {
-                _webserver->sendHeader("Content-Type", "application/javascript; charset=utf-8");
-            } else if (path.indexOf("index-") >= 0 && path.endsWith(".css")) {
-                _webserver->sendHeader("Content-Type", "text/css; charset=utf-8");
-            } else if (path.endsWith(".woff2")) {
-                _webserver->sendHeader("Content-Type", "font/woff2");
-            } else if (path.endsWith(".ttf")) {
-                _webserver->sendHeader("Content-Type", "font/ttf");
-            }
-
-            // Try to serve gzipped version first
-            if (myStreamFile((path + ".gz").c_str())) {
-                _webserver->sendHeader("Content-Encoding", "gzip");
-            } else {
-                myStreamFile(path.c_str());
-            }
-        });
+        _webserver->on("/assets/", HTTP_GET, assetHandler);
+        _webserver->on("/ui/assets/", HTTP_GET, assetHandler);
 
         // Root handler with optimized file serving
-        _webserver->on("/", [this]() {
+        _webserver->on("/", [this, &redirectIfJobActive, &serveWithGzip]() {
+            if (redirectIfJobActive())
+                return;
             _webserver->sendHeader("Content-Type", "text/html; charset=utf-8");
-            _webserver->sendHeader("Content-Encoding", "gzip");
-            myStreamFile("/index.html.gz");
+            serveWithGzip("/index.html");
         });
 
         // Add toggle endpoint for pen change mode
@@ -517,33 +601,52 @@ namespace WebUI {
 
     bool Web_Server::myStreamFile(const char* path, bool download) {
         std::error_code ec;
-        // log_debug("Trying to serve file: " << path);
+        // Serving policy:
+        // - During an active job: avoid SD entirely (prevent VFS FD exhaustion); use LocalFS only.
+        // - When idle (no active job): prefer SD first; fall back to LocalFS if not present.
 
-        // Try to open the file from the SD card first
-        FluidPath sdPath { path, sdName, ec };
-        if (!ec) {
-            // log_debug("Found file on SD: " << sdPath.c_str());
-            return streamFileFromPath(sdPath, download);
+        if (Job::active()) {
+            FluidPath spiffsPath { path, localfsName, ec };
+            if (!ec) {
+                return streamFileFromPath(spiffsPath, download);
+            }
+            return false;
         }
-        // log_debug("SD file error: " << ec.message());
 
-        // If the file isn't on the SD card, fallback to SPIFFS
-        FluidPath spiffsPath { path, localfsName, ec };
-        if (!ec) {
-            // log_debug("Found file on SPIFFS: " << spiffsPath.c_str());
-            return streamFileFromPath(spiffsPath, download);
+        // No active job: SD first
+        {
+            FluidPath sdPath { path, sdName, ec };
+            if (!ec) {
+                if (streamFileFromPath(sdPath, download)) {
+                    return true;
+                }
+            }
         }
-        // log_debug("SPIFFS file error: " << ec.message());
-
+        // Fallback to LocalFS (SPIFFS)
+        {
+            FluidPath spiffsPath { path, localfsName, ec };
+            if (!ec) {
+                return streamFileFromPath(spiffsPath, download);
+            }
+        }
         return false;
     }
 
     bool Web_Server::streamFileFromPath(const FluidPath& fpath, bool download) {
+        // If a job is active and the path refers to SD, avoid opening it (prevent VFS FAT fd exhaustion)
+        if (Job::active()) {
+            std::string p = fpath.c_str();
+            // Heuristic: sdName is the FS key for SD card. If present at start, treat as SD path.
+            if (p.find(sdName) != std::string::npos) {
+                log_info("Avoiding SD file open during active job: " << p);
+                return false;
+            }
+        }
         FileStream*         file   = nullptr;
         bool                isGzip = false;
         std::string         actualPath;
         size_t              fileSize   = 0;
-        static const size_t CHUNK_SIZE = 2048;  // Read 1KB at a time
+        static const size_t CHUNK_SIZE = 1024;  // Read 1KB at a time
         uint8_t             chunk[CHUNK_SIZE];
 
         // First try to get file size without keeping file open
@@ -626,7 +729,7 @@ namespace WebUI {
                     break;
                 }
                 bytesRemaining -= bytesToRead;
-                delay(0);  // Prevent watchdog trigger
+                delay(0);  // Prevent watchdog trigger and free CPU
             }
         } catch (const Error err) { success = false; }
 
@@ -674,7 +777,8 @@ namespace WebUI {
 
     void Web_Server::send404Page() {
         sendWithOurAddress(PAGE_404, 404);
-    }    void Web_Server::handle_root(const String& path) {
+    }
+    void Web_Server::handle_root(const String& path) {
         log_info("WebUI: Request from " << _webserver->client().remoteIP());
 
         // If in AP mode and requesting root page, redirect to WiFi config page
@@ -684,11 +788,17 @@ namespace WebUI {
             return;
         }
 
-        // Check if a job is currently active and block new UI access
+        // When a job is active, make the minimal Job Control page the default landing page
         if (Job::active()) {
-            log_info("WebUI: Blocking access - job in progress from " << _webserver->client().remoteIP());
-            handleJobBlocked();
+            _webserver->sendHeader(LOCATION_HEADER, "/jobcontrol", true);
+            _webserver->send(302, "text/plain", "Redirecting to job control");
             return;
+        }
+
+        // During an active job, allow UI to load so user can monitor/control via WebSocket
+        // Heavy operations (uploads, large file ops) remain gated elsewhere.
+        if (Job::active()) {
+            log_info("WebUI: Job in progress - redirecting to job control for " << _webserver->client().remoteIP());
         }
 
         if (path == "/admin") {
@@ -718,7 +828,7 @@ namespace WebUI {
         _webserver->sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
         _webserver->sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
         _webserver->send(204);  // No Content response for OPTIONS request
-    }    // Handle filenames and other things that are not explicitly registered
+    }  // Handle filenames and other things that are not explicitly registered
     void Web_Server::handle_not_found() {
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->sendHeader(LOCATION_HEADER, "/");
@@ -728,17 +838,17 @@ namespace WebUI {
 
         std::string path(_webserver->urlDecode(_webserver->uri()).c_str());
 
-        // Check if a job is currently active and block access to most resources
-        // Allow job status checking and commands that might be needed for monitoring
-        if (Job::active() && 
-            path != "/jobstatus" && 
-            path != "/jobblocked" && 
-            path != "/command" && 
-            path != "/command_silent") {
-            
-            log_info("WebUI: Blocking file access - job in progress: " << path);
-            handleJobBlocked();
-            return;
+        // While a job is active, default new connections to /jobcontrol and block static UI/assets
+        // Allow only minimal control/status/API endpoints to avoid filesystem contention
+        if (Job::active()) {
+            bool allowed = (path == "/jobcontrol" || path == "/job/pause" || path == "/job/resume" || path == "/job/stop" ||
+                            path == "/jobstatus" || path == "/command" || path == "/command_silent");
+            if (!allowed) {
+                log_info("WebUI: Restricting access during job, redirecting: " << path);
+                _webserver->sendHeader(LOCATION_HEADER, "/jobcontrol", true);
+                _webserver->send(302, "text/plain", "Redirecting to job control");
+                return;
+            }
         }
 
         // If pen change mode is active, restrict access to non-ATC pages
@@ -1059,13 +1169,13 @@ namespace WebUI {
                          "<button onclick='window.location.replace(\"/feedhold_reload\")'>Feedhold</button>"
                          "&nbsp;Stop the motion with feedhold and then retry<br>"
                          "</body></html>");
-    }    // This page issues a feedhold to pause the motion then retries the WebUI reload
+    }  // This page issues a feedhold to pause the motion then retries the WebUI reload
     void Web_Server::handleFeedholdReload() {
         protocol_send_event(&feedHoldEvent);
         // Go to the main page
         _webserver->sendHeader(LOCATION_HEADER, "/");
         _webserver->send(302);
-    }    // This page is shown when a job is running and new UI connections are blocked
+    }  // This page is shown when a job is running and new UI connections are blocked
     void Web_Server::handleJobBlocked() {
         _webserver->send(503,
                          "text/html",
@@ -1166,7 +1276,7 @@ namespace WebUI {
                          "  100% { transform: rotate(360deg); }"
                          "}"
                          ".retry-btn {"
-                         "  background: linear-gradient(45deg, #3498db, #2980b9);"
+                         "   background: linear-gradient(45deg, #3498db, #2980b9);"
                          "  color: white;"
                          "  border: none;"
                          "  border-radius: 50px;"
@@ -1213,9 +1323,12 @@ namespace WebUI {
                          "<body>"
                          "<div class='container'>"
                          "<div class='icon'>⚙️</div>"
-                         "<h1>Job In Progress</h1>"                         "<p class='description'>"
-                         "A job is currently running on the machine. New UI connections are temporarily blocked to prevent interference and ensure optimal performance. Progress is shown below and updates automatically."
-                         "</p>"                         "<div class='status-card'>"
+                         "<h1>Job In Progress</h1>"
+                         "<p class='description'>"
+                         "A job is currently running on the machine. New UI connections are temporarily blocked to prevent interference "
+                         "and ensure optimal performance. Progress is shown below and updates automatically."
+                         "</p>"
+                         "<div class='status-card'>"
                          "<div class='status-label'>Current Status:</div>"
                          "<div id='jobStatus'>"
                          "<span class='spinner'></span> Running..."
@@ -1227,14 +1340,15 @@ namespace WebUI {
                          "</div>"
                          "<button class='retry-btn' onclick='checkAndRetry()'>Check Status & Retry</button>"
                          "<div class='footer'>"
-                         "FluidNC will automatically refresh when the job is complete"
+                         "PolyPlot will automatically refresh when the job is complete"
                          "</div>"
                          "</div>"
                          "<script>"
                          "let checkInterval;"
                          "function checkAndRetry() {"
                          "  window.location.reload();"
-                         "}"                         "function updateStatus() {"
+                         "}"
+                         "function updateStatus() {"
                          "  fetch('/jobstatus')"
                          "    .then(response => response.json())"
                          "    .then(data => {"
@@ -1779,8 +1893,11 @@ namespace WebUI {
         if (_socket_serverv3 && _setupdone) {
             _socket_serverv3->loop();
         }
-        if ((millis() - start_time) > 3000 && _socket_server) {
-            WSChannels::sendPing();
+        // Reduce ping frequency and ping only when we have sockets
+        if ((millis() - start_time) > 8000) {
+            if (_socket_server || _socket_serverv3) {
+                WSChannels::sendPing();
+            }
             start_time = millis();
         }
     }

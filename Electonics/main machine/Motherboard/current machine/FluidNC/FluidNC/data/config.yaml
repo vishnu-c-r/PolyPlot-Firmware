@@ -1,0 +1,128 @@
+name: Poly-plot
+board: ESP32
+use_line_numbers: true
+planner_blocks: 20
+kinematics:
+  hbot: null
+axes:
+  x:
+    steps_per_mm: 160
+    max_rate_mm_per_min: 15000
+    acceleration_mm_per_sec2: 3000
+    max_travel_mm: 460
+    pen_change_travel_mm: 510
+    soft_limits: true
+    homing:
+      cycle: 2
+      mpos_mm: 0
+      positive_direction: true
+      feed_mm_per_min: 500
+      seek_mm_per_min: 4000
+      settle_ms: 250
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+    motor0:
+      limit_all_pin: NO_PIN
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: gpio.14:low
+      hard_limits: false
+      pulloff_mm: 2
+      stepstick:
+        step_pin: gpio.33
+        direction_pin: gpio.32:low
+        disable_pin: NO_PIN
+        ms1_pin: NO_PIN
+        ms2_pin: NO_PIN
+        ms3_pin: NO_PIN
+  shared_stepper_disable_pin: gpio.25
+  shared_stepper_reset_pin: NO_PIN
+  y:
+    steps_per_mm: 160
+    max_rate_mm_per_min: 15000
+    acceleration_mm_per_sec2: 3000
+    max_travel_mm: 322
+    pen_change_travel_mm: 322
+    soft_limits: true
+    homing:
+      cycle: 3
+      mpos_mm: 0
+      positive_direction: true
+      feed_mm_per_min: 500
+      seek_mm_per_min: 4000
+      settle_ms: 250
+      seek_scaler: 1.1
+      feed_scaler: 1.1
+    motor0:
+      limit_all_pin: NO_PIN
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: gpio.35:low
+      hard_limits: false
+      pulloff_mm: 2
+      stepstick:
+        step_pin: gpio.27
+        direction_pin: gpio.26:low
+        disable_pin: NO_PIN
+        ms1_pin: NO_PIN
+        ms2_pin: NO_PIN
+        ms3_pin: NO_PIN
+  z:
+    steps_per_mm: 160
+    max_rate_mm_per_min: 2200
+    acceleration_mm_per_sec2: 200
+    max_travel_mm: 25
+    pen_change_travel_mm: 25
+    soft_limits: true
+    homing:
+      cycle: 1
+    motor0:
+      limit_all_pin: NO_PIN
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 0.1
+      rc_servo:
+        output_pin: gpio.13
+        min_pulse_us: 2500
+        max_pulse_us: 500
+start:
+  check_limits: true
+  must_home: false
+stepping:
+  engine: RMT
+  idle_ms: 250
+  pulse_us: 4
+  dir_delay_us: 0
+  disable_delay_us: 0
+spi:
+  miso_pin: gpio.19
+  mosi_pin: gpio.23
+  sck_pin: gpio.18
+sdcard:
+  card_detect_pin: NO_PIN
+  cs_pin: gpio.5
+uart1:
+  txd_pin: gpio.17
+  rxd_pin: gpio.16
+  rts_pin: NO_PIN
+  cts_pin: NO_PIN
+  baud: 115200
+  mode: 8N1
+uart_channel1:
+  report_interval_ms: 50
+  uart_num: 1
+macros:
+  startup_line1: $H
+  after_homing: M64 P1
+user_outputs:
+  digital1_pin: gpio.4
+laser_offset_x: -22
+laser_offset_y: 13
+work_area:
+  enabled: true
+  min_x: -449.5
+  min_y: -302
+  max_x: -29
+  max_y: -5
+  origin_x: -29
+  origin_y: -5
+  move_to_origin: true

@@ -204,18 +204,8 @@ namespace WebUI {
             case WStype_DISCONNECTED:
                 log_debug("WebSocket disconnect " << num);
                 WSChannels::removeChannel(num);
-                break;            case WStype_CONNECTED: {
-                // Check if a job is currently active and block new connections
-                if (Job::active()) {
-                    log_debug("WebSocket connection " << num << " blocked - job in progress");
-                    
-                    // Send job status message and immediately disconnect
-                    std::string jobBlockMsg = "{\"error\":\"job_in_progress\",\"message\":\"A job is currently running. Please wait for completion.\"}";
-                    server->sendTXT(num, jobBlockMsg.c_str());
-                    server->disconnect(num);
-                    return;
-                }
-
+                break;
+            case WStype_CONNECTED: {
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -243,11 +233,23 @@ namespace WebUI {
                         std::string report_cmd = "$Report/Interval=50\n";
                         wsChannel->push(report_cmd);
                     }
+
+                    // Ensure only one client is connected at a time to conserve resources
+                    // Prefer the most recent connection
+                    for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++)
+                        if (i != num && server->clientIsConnected(i)) {
+                            server->disconnect(i);
+                        }
                 }
             } break;
             case WStype_TEXT: {
                 try {
                     std::string msg = (const char*)payload;
+                    // Respond to simple ping from UI to keep connection alive
+                    if (msg == "ping" || msg == "PING" || msg == "\"ping\"") {
+                        server->sendTXT(num, "pong");
+                        break;
+                    }
                     if (msg.rfind("PONG:", 0) == 0) {
                         // Handle PONG response
                         if (auto* channel = _wsChannels.at(num)) {
@@ -279,20 +281,10 @@ namespace WebUI {
             case WStype_DISCONNECTED:
                 log_debug("WebSocket disconnect " << num);
                 WSChannels::removeChannel(num);
-                break;            case WStype_CONNECTED: {
+                break;
+            case WStype_CONNECTED: {
                 log_debug("WStype_Connected");
                 
-                // Check if a job is currently active and block new connections
-                if (Job::active()) {
-                    log_debug("WebSocket v3 connection " << num << " blocked - job in progress");
-                    
-                    // Send job status message and immediately disconnect
-                    std::string jobBlockMsg = "{\"error\":\"job_in_progress\",\"message\":\"A job is currently running. Please wait for completion.\"}";
-                    server->sendTXT(num, jobBlockMsg.c_str());
-                    server->disconnect(num);
-                    return;
-                }
-
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -316,7 +308,7 @@ namespace WebUI {
                         s += std::to_string(wsChannel->id());
                         server->broadcastTXT(s.c_str());
 
-                        // Send initial connection success message
+                        // Send initial connection success message and current job state
                         std::string connected = "{\"status\":\"connected\"}";
                         wsChannel->sendTXT(connected);
 
@@ -328,6 +320,7 @@ namespace WebUI {
                         log_debug("Set report interval to 50ms for WebSocket " << num);
                     }
 
+                    // Ensure only one client is connected at a time to conserve resources
                     for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++)
                         if (i != num && server->clientIsConnected(i)) {
                             server->disconnect(i);
@@ -337,6 +330,11 @@ namespace WebUI {
             case WStype_TEXT: {
                 try {
                     std::string msg = (const char*)payload;
+                    // Respond to simple ping from UI
+                    if (msg == "ping" || msg == "PING" || msg == "\"ping\"") {
+                        server->sendTXT(num, "pong");
+                        break;
+                    }
                     if (msg.rfind("PONG:", 0) == 0) {
                         // Handle PONG response
                         if (auto* channel = _wsChannels.at(num)) {

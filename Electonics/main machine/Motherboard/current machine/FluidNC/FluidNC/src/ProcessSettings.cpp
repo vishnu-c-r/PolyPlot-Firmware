@@ -31,6 +31,9 @@
 #include <map>
 #include <filesystem>
 
+// External reference to soft_limit flag
+extern bool soft_limit;
+
 // WG Readable and writable as guest
 // WU Readable and writable as user and admin
 // WA Readable as user and admin, writable as admin
@@ -281,13 +284,18 @@ static Error disable_alarm_lock(const char* value, WebUI::AuthenticationLevel au
     if (state_is(State::ConfigAlarm)) {
         return Error::ConfigurationInvalid;
     }
-    if (state_is(State::Alarm)) {
+    // Handle both Alarm and Critical states for alarm clearing
+    if (state_is(State::Alarm) || state_is(State::Critical)) {
         Error err = isStuck();
         if (err != Error::Ok) {
             return err;
         }
         Homing::set_all_axes_homed();
         config->_kinematics->releaseMotors(config->_axes->motorMask, config->_axes->hardLimitMask());
+        
+        // Reset soft_limit flag to ensure it doesn't prevent recovery
+        soft_limit = false;
+        
         report_feedback_message(Message::AlarmUnlock);
         set_state(State::Idle);
     }

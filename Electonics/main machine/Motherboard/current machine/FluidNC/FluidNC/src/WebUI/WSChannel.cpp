@@ -15,7 +15,11 @@
 namespace WebUI {
     class WSChannels;
 
-    WSChannel::WSChannel(WebSocketsServer* server, uint8_t clientNum) : Channel("websocket"), _server(server), _clientNum(clientNum) {}
+    WSChannel::WSChannel(WebSocketsServer* server, uint8_t clientNum) : Channel("websocket"), _server(server), _clientNum(clientNum) {
+        // Initialize the last pong time to current time to start the timeout window
+        _lastPongTime = millis();
+        _pingFailCount = 0;
+    }
 
     int WSChannel::read() {
         if (!_active) {
@@ -189,8 +193,24 @@ namespace WebUI {
     void WSChannels::sendPing() {
         for (auto it = _wsChannels.begin(); it != _wsChannels.end();) {
             WSChannel* wsChannel = it->second;
+            
+            // Check if this channel has timed out
+            if (wsChannel->isConnectionTimedOut()) {
+                // Increment the ping failure counter
+                wsChannel->incrementPingFailures();
+                
+                // If too many consecutive ping failures, disconnect this client
+                if (wsChannel->tooManyPingFailures()) {
+                    log_debug("WebSocket " << wsChannel->id() << " timed out, disconnecting");
+                    
+                    // Store the iterator before removing the channel
+                    auto to_remove = it++;
+                    removeChannel(to_remove->second);
+                    continue;
+                }
+            }
 
-            // Original simple ping code
+            // Send a ping message to keep the connection alive
             std::string s("PING:");
             s += std::to_string(wsChannel->id());
             wsChannel->sendTXT(s);
@@ -234,12 +254,25 @@ namespace WebUI {
                         wsChannel->push(report_cmd);
                     }
 
-                    // Ensure only one client is connected at a time to conserve resources
-                    // Prefer the most recent connection
-                    for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++)
-                        if (i != num && server->clientIsConnected(i)) {
-                            server->disconnect(i);
+                    // Allow up to 5 clients to be connected simultaneously
+                    // Count current connections and disconnect if we have too many
+                    int connectedClients = 0;
+                    for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+                        if (server->clientIsConnected(i)) {
+                            connectedClients++;
                         }
+                    }
+                    
+                    // If we have more than 5 clients, disconnect the oldest ones
+                    if (connectedClients > 5) {
+                        int toDisconnect = connectedClients - 5;
+                        for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX && toDisconnect > 0; i++) {
+                            if (i != num && server->clientIsConnected(i)) {
+                                server->disconnect(i);
+                                toDisconnect--;
+                            }
+                        }
+                    }
                 }
             } break;
             case WStype_TEXT: {
@@ -266,8 +299,10 @@ namespace WebUI {
                 // Handle WebSocket protocol level pong
                 try {
                     if (auto* channel = _wsChannels.at(num)) {
-                        // Commented out due to function being disabled
-                        // channel->updateLastPong();
+                        // Update last pong time and reset ping failure counter
+                        channel->updateLastPong();
+                        channel->resetPingFailures();
+                        log_debug("Received PONG from WebSocket " << num);
                     }
                 } catch (std::out_of_range& oor) {}
                 break;
@@ -320,11 +355,25 @@ namespace WebUI {
                         log_debug("Set report interval to 50ms for WebSocket " << num);
                     }
 
-                    // Ensure only one client is connected at a time to conserve resources
-                    for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++)
-                        if (i != num && server->clientIsConnected(i)) {
-                            server->disconnect(i);
+                    // Allow up to 5 clients to be connected simultaneously
+                    // Count current connections and disconnect if we have too many
+                    int connectedClients = 0;
+                    for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+                        if (server->clientIsConnected(i)) {
+                            connectedClients++;
                         }
+                    }
+                    
+                    // If we have more than 5 clients, disconnect the oldest ones
+                    if (connectedClients > 5) {
+                        int toDisconnect = connectedClients - 5;
+                        for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX && toDisconnect > 0; i++) {
+                            if (i != num && server->clientIsConnected(i)) {
+                                server->disconnect(i);
+                                toDisconnect--;
+                            }
+                        }
+                    }
                 }
             } break;
             case WStype_TEXT: {
@@ -353,8 +402,10 @@ namespace WebUI {
             case WStype_PONG:
                 try {
                     if (auto* channel = _wsChannels.at(num)) {
-                        // Commented out due to function being disabled
-                        // channel->updateLastPong();
+                        // Update last pong time and reset ping failure counter
+                        channel->updateLastPong();
+                        channel->resetPingFailures();
+                        log_debug("Received PONG from WebSocket " << num);
                     }
                 } catch (std::out_of_range& oor) {}
                 break;

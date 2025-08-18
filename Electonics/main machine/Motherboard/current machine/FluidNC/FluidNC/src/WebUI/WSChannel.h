@@ -59,16 +59,16 @@ namespace WebUI {
 
         void autoReport() override;
 
-        // Add new methods for ping/pong tracking
-        /*
+        // Methods for ping/pong tracking
         void updateLastPong() { _lastPongTime = millis(); }
         bool isConnectionTimedOut() const { 
             return (millis() - _lastPongTime) > WEBSOCKET_TIMEOUT; 
         }
         void incrementPingFailures() { _pingFailCount++; }
-        static const uint32_t WEBSOCKET_TIMEOUT = 10000; // 10 second timeout
+        void resetPingFailures() { _pingFailCount = 0; }
+        bool tooManyPingFailures() const { return _pingFailCount >= MAX_PING_FAILURES; }
+        static const uint32_t WEBSOCKET_TIMEOUT = 30000; // 30 second timeout - increased for long jobs
         static const uint8_t MAX_PING_FAILURES = 3;  // Number of ping failures before disconnect
-        */
 
     private:
         WebSocketsServer* _server;
@@ -81,10 +81,9 @@ namespace WebUI {
         // homing where GCode handling is blocked.
         int _rtchar = -1;
 
-        /*
+        // Variables for ping/pong tracking
         uint32_t _lastPongTime = 0;
         uint8_t _pingFailCount = 0;  // Track consecutive ping failures
-        */
 
         // Make these classes friends so they can access _server
         friend class WSChannels;

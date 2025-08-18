@@ -451,7 +451,9 @@ static void protocol_do_alarm(void* alarmVoid) {
         return;
     }
     if (lastAlarm == ExecAlarm::SoftLimit) {
-        set_state(State::Critical);  // Set system alarm state
+        // Set system to regular Alarm state instead of Critical for soft limits
+        // This allows the alarm to be cleared with $X command
+        set_state(State::Alarm);
         report_error_message(Message::CriticalEvent);
         return;
     }

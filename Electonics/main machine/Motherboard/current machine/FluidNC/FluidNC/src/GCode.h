@@ -65,6 +65,7 @@ enum class NonModal : gcodenum_t {
     AbsoluteOverride      = 530,  // G53
     SetCoordinateOffset   = 920,  // G92
     ResetCoordinateOffset = 921,  // G92.1
+    ToolCalibration       = 155,  // M155 (changed from M600)
 };
 
 // Modal Group G1: Motion modes

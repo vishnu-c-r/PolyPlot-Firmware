@@ -744,6 +744,7 @@ float Stepper::get_realtime_rate() {
     switch (sys.state) {
         case State::Cycle:
         case State::Homing:
+        case State::ToolCalibration:
         case State::Hold:
         case State::Jog:
         case State::SafetyDoor:

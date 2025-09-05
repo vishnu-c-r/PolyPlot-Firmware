@@ -21,6 +21,7 @@
 #include "Machine/LimitPin.h"
 #include "Job.h"
 #include "Config.h"
+#include "ToolCalibration.h"
 
 volatile ExecAlarm lastAlarm;  // The most recent alarm code
 
@@ -136,11 +137,6 @@ void polling_loop(void* unused) {
             } else {
                 if (state_is(State::Alarm) || state_is(State::ConfigAlarm)) {
                     log_debug("Unwinding from Alarm");
-                    Job::abort();
-                    unwind_cause = nullptr;
-                    continue;
-                }
-                if (unwind_cause) {
                     Job::abort();
                     unwind_cause = nullptr;
                     continue;
@@ -673,6 +669,14 @@ static void protocol_initiate_homing_cycle() {
     Stepper::prep_buffer();                    // Initialize step segment buffer before beginning cycle.
     Stepper::wake_up();
 }
+static void protocol_initiate_tool_calibration_cycle() {
+    // log_debug("protocol_initiate_tool_calibration_cycle " << state_name());
+    sys.step_control                  = {};    // Restore step control to normal operation
+    sys.suspend.value                 = 0;     // Break suspend state.
+    sys.step_control.executeSysMotion = true;  // Treat like a system motion (similar to homing)
+    Stepper::prep_buffer();                    // Initialize segment buffer
+    Stepper::wake_up();
+}
 
 static void protocol_do_cycle_start() {
     // log_debug("protocol_do_cycle_start " << state_name());
@@ -696,6 +700,9 @@ static void protocol_do_cycle_start() {
         case State::Homing:
             protocol_initiate_homing_cycle();
             break;
+        case State::ToolCalibration:
+            protocol_initiate_tool_calibration_cycle();
+            break;
         case State::Hold:
             // Cycle start only when IDLE or when a hold is complete and ready to resume.
             if (sys.suspend.bit.holdComplete) {
@@ -713,8 +720,8 @@ static void protocol_do_cycle_start() {
 }
 
 void protocol_disable_steppers() {
-    if (state_is(State::Homing)) {
-        // Leave steppers enabled while homing
+    if (state_is(State::Homing) || state_is(State::ToolCalibration)) {
+        // Leave steppers enabled while homing or tool calibration
         config->_axes->set_disable(false);
         return;
     }
@@ -793,6 +800,8 @@ void protocol_do_cycle_stop() {
         case State::Homing:
             Machine::Homing::cycleStop();
             break;
+        case State::ToolCalibration:
+            break; // rollback: nothing extra on cycle stop
     }
 }
 
@@ -837,6 +846,7 @@ void protocol_exec_rt_system() {
         case State::Hold:
         case State::SafetyDoor:
         case State::Homing:
+        case State::ToolCalibration:
         case State::Jog:
             Stepper::prep_buffer();
             break;
@@ -969,6 +979,11 @@ static void protocol_do_limit(void* arg) {
         Machine::Homing::limitReached();
         return;
     }
+    // Calibration override: treat limit trip as measurement not alarm
+    if (ToolCalibration::isCalibrating()) {
+        ToolCalibration::onLimit(limit);
+        return;
+    }
     if ((state_is(State::Cycle) || state_is(State::Jog) || state_is(State::Idle) || state_is(State::Hold) || state_is(State::SafetyDoor)) &&
         limit->isHard()) {
         mc_critical(ExecAlarm::HardLimit);
@@ -985,6 +1000,10 @@ static void protocol_do_fault_pin(void* arg) {
 void protocol_do_rt_reset() {
     if (state_is(State::Homing)) {
         Machine::Homing::fail(ExecAlarm::HomingFailReset);
+    } else if (state_is(State::ToolCalibration)) {
+        // Stop tool calibration and restore to idle
+        Stepper::stop_stepping();
+        ToolCalibration::abortCalibration();
     } else if (state_is(State::Cycle) || state_is(State::Jog) || sys.step_control.executeHold || sys.step_control.executeSysMotion) {
         Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
         protocol_do_alarm((void*)ExecAlarm::AbortCycle);

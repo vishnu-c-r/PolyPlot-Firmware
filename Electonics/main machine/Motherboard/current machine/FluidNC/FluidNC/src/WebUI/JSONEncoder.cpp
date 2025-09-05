@@ -238,6 +238,27 @@ namespace WebUI {
         member(tag, std::to_string(value));
     }
 
+    // Creates a "tag":"value" member from a floating point value
+    // Format using up to 3 decimal places, trimming trailing zeros.
+    void JSONencoder::fmember(const char* tag, float value) {
+        // Use a fixed-format buffer to ensure predictable formatting
+        char buf[64];
+        // Print with 3 decimal places
+        int len = snprintf(buf, sizeof(buf), "%.3f", value);
+        if (len < 0) {
+            member(tag, "0");
+            return;
+        }
+        // Trim trailing zeros and possible trailing decimal point
+        while (len > 0 && buf[len - 1] == '0') {
+            buf[--len] = '\0';
+        }
+        if (len > 0 && buf[len - 1] == '.') {
+            buf[--len] = '\0';
+        }
+        member(tag, buf);
+    }
+
     // Creates an Esp32_WebUI configuration item specification from
     // a value passed in as a C-style string.
     void JSONencoder::begin_webui(const char* name, const char* help, const char* type, const char* val) {

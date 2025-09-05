@@ -1024,15 +1024,13 @@ namespace WebUI {
         return Error::Ok;
     }
 
-    static Error getWorkOrigin(const char* parameter, AuthenticationLevel auth_level, Channel& out) {  // COFF
-        // Debug: print to serial
-        Serial.println("getWorkOrigin handler called");
+    Error getWorkOrigin(const char* parameter, AuthenticationLevel auth_level, Channel& out) {  // COFF
         JSONencoder j(true, &out);  // Encapsulated JSON
         j.begin();
         // j.member("cmd", "Config/GetWorkAreaOrigin");
         if (config && config->_workArea) {
-            j.member("X0", config->_workArea->_originX);
-            j.member("Y0", config->_workArea->_originY);
+            j.fmember("X0", config->_workArea->_originX);
+            j.fmember("Y0", config->_workArea->_originY);
             // j.member("status", "ok");
         } else {
             j.member("status", "error");

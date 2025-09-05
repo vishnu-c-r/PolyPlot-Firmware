@@ -16,6 +16,7 @@
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
 #include "Job.h"
+#include "ToolCalibration.h"      // Tool calibration functionality
 #include "Pen.h"
 #include "WebUI/ToolConfig.h"
 
@@ -758,6 +759,15 @@ Error gc_execute_line(char* line) {
                     case 161:  // M161 - Disable work area limits
                         config->disableWorkArea();
                         log_debug("Work area limits disabled");
+                        break;
+                    case 155:  // M155 - Tool calibration / Z update
+                        // If a Z word is present, treat as tool Z update (even if calibration finished)
+                        if (bitnum_is_true(axis_words, Z_AXIS)) {
+                            ToolCalibration::setToolZ(gc_block.values.xyz[Z_AXIS]);
+                        } else {
+                            gc_block.non_modal_command = NonModal::ToolCalibration;
+                            mg_word_bit                = ModalGroup::MM4;
+                        }
                         break;
                     default:
                         FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported M command]
@@ -1733,6 +1743,13 @@ Error gc_execute_line(char* line) {
             clear_vector(gc_state.coord_offset);  // Disable G92 offsets by zeroing offset vector.
             gc_ngc_changed(CoordIndex::G92);
             gc_wco_changed();
+            break;
+        case NonModal::ToolCalibration:
+            {
+                log_info("Starting tool calibration...");
+                ToolCalibration::startCalibration();
+                log_info("Tool calibration initiated");
+            }
             break;
         default:
             break;

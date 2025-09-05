@@ -43,6 +43,7 @@ namespace WebUI {
         bool              deleteTool(int number);
         std::vector<Tool> getTools() { return tools; }
         Tool*             getTool(int number);
+        void              sortByNumber();
         std::string       toJSON();
         bool              fromJSON(const std::string& jsonStr);
 

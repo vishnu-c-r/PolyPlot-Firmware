@@ -15,11 +15,7 @@
 namespace WebUI {
     class WSChannels;
 
-    WSChannel::WSChannel(WebSocketsServer* server, uint8_t clientNum) : Channel("websocket"), _server(server), _clientNum(clientNum) {
-        // Initialize the last pong time to current time to start the timeout window
-        _lastPongTime = millis();
-        _pingFailCount = 0;
-    }
+    WSChannel::WSChannel(WebSocketsServer* server, uint8_t clientNum) : Channel("websocket"), _server(server), _clientNum(clientNum) {}
 
     int WSChannel::read() {
         if (!_active) {
@@ -193,24 +189,6 @@ namespace WebUI {
     void WSChannels::sendPing() {
         for (auto it = _wsChannels.begin(); it != _wsChannels.end();) {
             WSChannel* wsChannel = it->second;
-            
-            // Check if this channel has timed out
-            if (wsChannel->isConnectionTimedOut()) {
-                // Increment the ping failure counter
-                wsChannel->incrementPingFailures();
-                
-                // If too many consecutive ping failures, disconnect this client
-                if (wsChannel->tooManyPingFailures()) {
-                    log_debug("WebSocket " << wsChannel->id() << " timed out, disconnecting");
-                    
-                    // Store the iterator before removing the channel
-                    auto to_remove = it++;
-                    removeChannel(to_remove->second);
-                    continue;
-                }
-            }
-
-            // Send a ping message to keep the connection alive
             std::string s("PING:");
             s += std::to_string(wsChannel->id());
             wsChannel->sendTXT(s);
@@ -224,8 +202,18 @@ namespace WebUI {
             case WStype_DISCONNECTED:
                 log_debug("WebSocket disconnect " << num);
                 WSChannels::removeChannel(num);
-                break;
-            case WStype_CONNECTED: {
+                break;            case WStype_CONNECTED: {
+                // Check if a job is currently active and block new connections
+                if (Job::active()) {
+                    log_debug("WebSocket connection " << num << " blocked - job in progress");
+                    
+                    // Send job status message and immediately disconnect
+                    std::string jobBlockMsg = "{\"error\":\"job_in_progress\",\"message\":\"A job is currently running. Please wait for completion.\"}";
+                    server->sendTXT(num, jobBlockMsg.c_str());
+                    server->disconnect(num);
+                    return;
+                }
+
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -278,11 +266,6 @@ namespace WebUI {
             case WStype_TEXT: {
                 try {
                     std::string msg = (const char*)payload;
-                    // Respond to simple ping from UI to keep connection alive
-                    if (msg == "ping" || msg == "PING" || msg == "\"ping\"") {
-                        server->sendTXT(num, "pong");
-                        break;
-                    }
                     if (msg.rfind("PONG:", 0) == 0) {
                         // Handle PONG response
                         if (auto* channel = _wsChannels.at(num)) {
@@ -299,10 +282,8 @@ namespace WebUI {
                 // Handle WebSocket protocol level pong
                 try {
                     if (auto* channel = _wsChannels.at(num)) {
-                        // Update last pong time and reset ping failure counter
-                        channel->updateLastPong();
-                        channel->resetPingFailures();
-                        log_debug("Received PONG from WebSocket " << num);
+                        // Commented out due to function being disabled
+                        // channel->updateLastPong();
                     }
                 } catch (std::out_of_range& oor) {}
                 break;
@@ -316,10 +297,20 @@ namespace WebUI {
             case WStype_DISCONNECTED:
                 log_debug("WebSocket disconnect " << num);
                 WSChannels::removeChannel(num);
-                break;
-            case WStype_CONNECTED: {
+                break;            case WStype_CONNECTED: {
                 log_debug("WStype_Connected");
                 
+                // Check if a job is currently active and block new connections
+                if (Job::active()) {
+                    log_debug("WebSocket v3 connection " << num << " blocked - job in progress");
+                    
+                    // Send job status message and immediately disconnect
+                    std::string jobBlockMsg = "{\"error\":\"job_in_progress\",\"message\":\"A job is currently running. Please wait for completion.\"}";
+                    server->sendTXT(num, jobBlockMsg.c_str());
+                    server->disconnect(num);
+                    return;
+                }
+
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -343,7 +334,7 @@ namespace WebUI {
                         s += std::to_string(wsChannel->id());
                         server->broadcastTXT(s.c_str());
 
-                        // Send initial connection success message and current job state
+                        // Send initial connection success message
                         std::string connected = "{\"status\":\"connected\"}";
                         wsChannel->sendTXT(connected);
 
@@ -379,11 +370,6 @@ namespace WebUI {
             case WStype_TEXT: {
                 try {
                     std::string msg = (const char*)payload;
-                    // Respond to simple ping from UI
-                    if (msg == "ping" || msg == "PING" || msg == "\"ping\"") {
-                        server->sendTXT(num, "pong");
-                        break;
-                    }
                     if (msg.rfind("PONG:", 0) == 0) {
                         // Handle PONG response
                         if (auto* channel = _wsChannels.at(num)) {
@@ -402,10 +388,8 @@ namespace WebUI {
             case WStype_PONG:
                 try {
                     if (auto* channel = _wsChannels.at(num)) {
-                        // Update last pong time and reset ping failure counter
-                        channel->updateLastPong();
-                        channel->resetPingFailures();
-                        log_debug("Received PONG from WebSocket " << num);
+                        // Commented out due to function being disabled
+                        // channel->updateLastPong();
                     }
                 } catch (std::out_of_range& oor) {}
                 break;

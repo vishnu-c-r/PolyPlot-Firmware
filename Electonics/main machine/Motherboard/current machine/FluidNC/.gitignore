@@ -35,3 +35,7 @@ data-wmb/
 .codacy/
 .github/copilot-instructions.md
 codacy-analysis-cli/
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md

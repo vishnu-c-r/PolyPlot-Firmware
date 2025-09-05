@@ -11,6 +11,9 @@
 namespace WebUI {
     bool get_param(const char* parameter, const char* key, std::string& s);
 
+    // Work origin API function
+    Error getWorkOrigin(const char* parameter, AuthenticationLevel auth_level, Channel& out);
+
 #ifdef ENABLE_AUTHENTICATION
     extern AuthPasswordSetting* user_password;
     extern AuthPasswordSetting* admin_password;

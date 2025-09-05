@@ -528,6 +528,31 @@ namespace WebUI {
             COMMANDS::restart_MCU();
         });
 
+        // Add work origin endpoint (COFF command as HTTP API)
+        _webserver->on("/workorigin", HTTP_GET, [this]() {
+            addCORSHeaders();
+            AuthenticationLevel auth_level = is_authenticated();
+            if (auth_level == AuthenticationLevel::LEVEL_GUEST) {
+                _webserver->send(401, "application/json", "{\"error\":\"Authentication failed\"}");
+                return;
+            }
+
+            _webserver->sendHeader("Content-Type", "application/json");
+            
+            // Call the same function that handles the COFF command
+            webClient.attachWS(_webserver, false);
+            Error err = WebUI::getWorkOrigin("", auth_level, webClient);
+            if (err != Error::Ok) {
+                _webserver->send(500, "application/json", "{\"error\":\"Failed to get work origin\"}");
+            }
+            webClient.detachWS();
+        });
+
+        _webserver->on("/workorigin", HTTP_OPTIONS, [this]() {
+            addCORSHeaders();
+            _webserver->send(204);
+        });
+
         log_info("HTTP started on port " << WebUI::http_port->get());
         //start webserver
         _webserver->begin();
@@ -2372,5 +2397,5 @@ namespace WebUI {
         // Reject other HTTP methods
         _webserver->send(405, "text/plain", "Method Not Allowed");
     }
+}  // namespace WebUI
 #endif
-}  // namespace web_server

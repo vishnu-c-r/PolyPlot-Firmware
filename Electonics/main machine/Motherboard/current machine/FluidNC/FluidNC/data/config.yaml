@@ -8,7 +8,7 @@ axes:
   x:
     steps_per_mm: 160
     max_rate_mm_per_min: 15000
-    acceleration_mm_per_sec2: 3000
+    acceleration_mm_per_sec2: 2250
     max_travel_mm: 460
     pen_change_travel_mm: 510
     soft_limits: true
@@ -39,7 +39,7 @@ axes:
   y:
     steps_per_mm: 160
     max_rate_mm_per_min: 15000
-    acceleration_mm_per_sec2: 3000
+    acceleration_mm_per_sec2: 2250
     max_travel_mm: 322
     pen_change_travel_mm: 322
     soft_limits: true

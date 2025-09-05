@@ -456,6 +456,8 @@ const char* state_name() {
             return "Jog";
         case State::Homing:
             return "Home";
+        case State::ToolCalibration:
+            return "ToolCalibration";
         case State::Critical:
         case State::ConfigAlarm:
         case State::Alarm:
@@ -573,6 +575,7 @@ void report_realtime_status(Channel& channel) {
     } else {
         switch (sys.state) {
             case State::Homing:
+            case State::ToolCalibration:
             case State::Cycle:
             case State::Hold:
             case State::Jog:
@@ -593,6 +596,7 @@ void report_realtime_status(Channel& channel) {
     } else {
         switch (sys.state) {
             case State::Homing:
+            case State::ToolCalibration:
             case State::Cycle:
             case State::Hold:
             case State::Jog:

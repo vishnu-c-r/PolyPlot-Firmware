@@ -84,6 +84,10 @@ namespace WebUI {
         return nullptr;
     }
 
+    void ToolConfig::sortByNumber() {
+        std::sort(tools.begin(), tools.end(), [](const Tool& a, const Tool& b) { return a.number < b.number; });
+    }
+
     std::string ToolConfig::toJSON() {
         std::string output;
         JSONencoder j(&output);  // Add WebUI namespace
@@ -177,11 +181,13 @@ namespace WebUI {
                     // log_debug("Unquoted Z string: " << zStr);
                 }
                 tool.z = atof(zStr.c_str());
-                if (tool.z == 0.0f && zStr != "0" && zStr != "0.0") {
+                // Accept any numeric representation of zero (e.g. 0, 0.0, 0.000000); only fail if the string
+                // contains non-numeric characters (simple heuristic: after trimming quotes, must contain a digit)
+                bool hasDigit = false;
+                for (char c : zStr) { if (isdigit(static_cast<unsigned char>(c))) { hasDigit = true; break; } }
+                if (!hasDigit) {
                     log_error("Z value parsing failed for input: " << zStr);
                     validTool = false;
-                } else {
-                    // log_debug("Successfully parsed Z value: " << tool.z);
                 }
             } else {
                 log_error("No Z coordinate found in tool data");

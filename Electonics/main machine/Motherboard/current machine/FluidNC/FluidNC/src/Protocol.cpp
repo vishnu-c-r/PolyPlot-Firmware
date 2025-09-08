@@ -22,6 +22,7 @@
 #include "Job.h"
 #include "Config.h"
 #include "ToolCalibration.h"
+#include "WorkAreaCalibration.h"
 
 volatile ExecAlarm lastAlarm;  // The most recent alarm code
 
@@ -984,6 +985,11 @@ static void protocol_do_limit(void* arg) {
         ToolCalibration::onLimit(limit);
         return;
     }
+    // Work area calibration override
+    if (WorkAreaCalibration::isRunning()) {
+        WorkAreaCalibration::onLimit(limit);
+        return;
+    }
     if ((state_is(State::Cycle) || state_is(State::Jog) || state_is(State::Idle) || state_is(State::Hold) || state_is(State::SafetyDoor)) &&
         limit->isHard()) {
         mc_critical(ExecAlarm::HardLimit);
@@ -1000,6 +1006,10 @@ static void protocol_do_fault_pin(void* arg) {
 void protocol_do_rt_reset() {
     if (state_is(State::Homing)) {
         Machine::Homing::fail(ExecAlarm::HomingFailReset);
+    } else if (WorkAreaCalibration::isRunning()) {
+        // Stop work area calibration
+        Stepper::stop_stepping();
+        WorkAreaCalibration::abort();
     } else if (state_is(State::ToolCalibration)) {
         // Stop tool calibration and restore to idle
         Stepper::stop_stepping();

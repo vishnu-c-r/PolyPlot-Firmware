@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EventPin.h"
+#include "../Pin.h"
 
 namespace Machine {
     class LimitPin : public EventPin {

@@ -762,21 +762,16 @@ Error gc_execute_line(char* line) {
                         log_debug("Work area limits disabled");
                         break;
                     case 155:  // M155 - Tool calibration / Z update
-                        // If a Z word is present, update Tool 1 Z only, with NO motion.
+                        // If a Z word is present, treat as tool Z update (even if calibration finished)
                         if (bitnum_is_true(axis_words, Z_AXIS)) {
                             ToolCalibration::setToolZ(gc_block.values.xyz[Z_AXIS]);
-                            // Consume the Z word so it doesn't become an implicit motion target
-                            // and doesn't trip the "unused words" check later.
-                            clear_bits(value_words, bitnum_to_mask(GCodeWord::Z));
-                            axis_words &= ~bitnum_to_mask(Z_AXIS);
-                            // Mark this M as part of modal group MM4 to satisfy group checks
-                            mg_word_bit = ModalGroup::MM4;
                         } else {
                             gc_block.non_modal_command = NonModal::ToolCalibration;
                             mg_word_bit                = ModalGroup::MM4;
                         }
                         break;
-                    case 156:  // M156 - Work area calibration (origin and bounds)
+                    case 156:  // M156 - Work area calibration
+                        // Defer P validation to execution stage (like G4 dwell does)
                         gc_block.non_modal_command = NonModal::WorkAreaCalibration;
                         mg_word_bit                = ModalGroup::MM4;
                         break;
@@ -1054,6 +1049,12 @@ Error gc_execute_line(char* line) {
         clear_bitnum(value_words, GCodeWord::E);
         clear_bitnum(value_words, GCodeWord::Q);
     }
+    // Consume P early for M156 to avoid unused-word errors; validation is done at execution.
+    if (gc_block.non_modal_command == NonModal::WorkAreaCalibration) {
+        if (bitnum_is_true(value_words, GCodeWord::P)) {
+            clear_bitnum(value_words, GCodeWord::P);
+        }
+    }
     // [11. Set active plane ]: N/A
     switch (gc_block.modal.plane_select) {
         case Plane::XY:
@@ -1272,10 +1273,6 @@ Error gc_execute_line(char* line) {
                     if (!(probeExplicit || gc_block.modal.motion == Motion::Seek || gc_block.modal.motion == Motion::Linear)) {
                         FAIL(Error::GcodeG53InvalidMotionMode);  // [G53 G0/1 not active]
                     }
-                    break;
-                case NonModal::WorkAreaCalibration:  // M156 - Work area calibration (origin and bounds)
-                    // Clear P parameter if specified (used for calibration mode)
-                    clear_bits(value_words, bitnum_to_mask(GCodeWord::P));
                     break;
                 default:
                     break;
@@ -1766,25 +1763,20 @@ Error gc_execute_line(char* line) {
                 log_info("Tool calibration initiated");
             }
             break;
-        case NonModal::WorkAreaCalibration: {
-            int mode = (int)gc_block.values.p;  // 0 if not provided
-            if (mode == 1) {
-                // Auto-measure from max XY (seek X+/Y+)
-                log_info("Work Area: P1 auto-measure from max XY");
-                WorkAreaCalibration::startCaptureMax();
-            } else if (mode == 2) {
-                // Auto-measure from min XY (seek X-/Y-) and capture
-                log_info("Work Area: P2 auto-measure from min XY");
-                WorkAreaCalibration::startCaptureMin();
-            } else if (mode == 3) {
-                // Compute origin, save and reboot
-                log_info("Work Area: P3 finalize and save");
-                WorkAreaCalibration::finalizeAndSave();
-            } else {
-                // No default full auto
-                log_warn("Work Area: P mode required. Use P1 (capture max), P2 (capture min), P3 (finalize)");
+        case NonModal::WorkAreaCalibration:
+            {
+                // Default to pass 1 if P is omitted or 0; otherwise require 1 or 2
+                int pass = int(lroundf(gc_block.values.p));
+                if (pass == 0) {
+                    pass = 1;
+                }
+                if (pass != 1 && pass != 2) {
+                    FAIL(Error::GcodeValueWordMissing);
+                }
+                log_info("Starting work area calibration pass " << pass);
+                WorkAreaCalibration::startPass(pass);
             }
-        } break;
+            break;
         default:
             break;
     }

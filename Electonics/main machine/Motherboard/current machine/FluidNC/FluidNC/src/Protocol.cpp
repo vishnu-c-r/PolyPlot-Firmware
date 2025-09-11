@@ -679,6 +679,15 @@ static void protocol_initiate_tool_calibration_cycle() {
     Stepper::wake_up();
 }
 
+static void protocol_initiate_work_area_calibration_cycle() {
+    // Start a system-motion cycle for work area calibration
+    sys.step_control                  = {};    // Restore step control to normal operation
+    sys.suspend.value                 = 0;     // Break suspend state.
+    sys.step_control.executeSysMotion = true;  // Treat like a system motion
+    Stepper::prep_buffer();                    // Initialize segment buffer
+    Stepper::wake_up();
+}
+
 static void protocol_do_cycle_start() {
     // log_debug("protocol_do_cycle_start " << state_name());
     // Execute a cycle start by starting the stepper interrupt to begin executing the blocks in queue.
@@ -703,6 +712,9 @@ static void protocol_do_cycle_start() {
             break;
         case State::ToolCalibration:
             protocol_initiate_tool_calibration_cycle();
+            break;
+        case State::WorkAreaCalibration:
+            protocol_initiate_work_area_calibration_cycle();
             break;
         case State::Hold:
             // Cycle start only when IDLE or when a hold is complete and ready to resume.
@@ -843,12 +855,13 @@ void protocol_exec_rt_system() {
         case State::Idle:
         case State::Sleep:
             break;
-        case State::Cycle:
-        case State::Hold:
-        case State::SafetyDoor:
-        case State::Homing:
-        case State::ToolCalibration:
-        case State::Jog:
+    case State::Cycle:
+    case State::Hold:
+    case State::SafetyDoor:
+    case State::Homing:
+    case State::ToolCalibration:
+    case State::WorkAreaCalibration:
+    case State::Jog:
             Stepper::prep_buffer();
             break;
     }
@@ -985,8 +998,7 @@ static void protocol_do_limit(void* arg) {
         ToolCalibration::onLimit(limit);
         return;
     }
-    // Work area calibration override
-    if (WorkAreaCalibration::isRunning()) {
+    if (WorkAreaCalibration::isCalibrating()) {
         WorkAreaCalibration::onLimit(limit);
         return;
     }
@@ -1006,14 +1018,14 @@ static void protocol_do_fault_pin(void* arg) {
 void protocol_do_rt_reset() {
     if (state_is(State::Homing)) {
         Machine::Homing::fail(ExecAlarm::HomingFailReset);
-    } else if (WorkAreaCalibration::isRunning()) {
-        // Stop work area calibration
-        Stepper::stop_stepping();
-        WorkAreaCalibration::abort();
     } else if (state_is(State::ToolCalibration)) {
         // Stop tool calibration and restore to idle
         Stepper::stop_stepping();
         ToolCalibration::abortCalibration();
+    } else if (state_is(State::WorkAreaCalibration)) {
+        // Stop work area calibration and restore to idle
+        Stepper::stop_stepping();
+        WorkAreaCalibration::abortCalibration();
     } else if (state_is(State::Cycle) || state_is(State::Jog) || sys.step_control.executeHold || sys.step_control.executeSysMotion) {
         Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
         protocol_do_alarm((void*)ExecAlarm::AbortCycle);

@@ -23,6 +23,7 @@ enum class State : uint8_t {
     Critical,         // You can't do anything but reset with CTRL-x or the reset button
     PenChange,        // Added: State for pen change operations
     ToolCalibration,  // Added: State for tool calibration operations
+    WorkAreaCalibration, // Added: State for work area calibration (M156)
 };
 
 void set_state(State s);

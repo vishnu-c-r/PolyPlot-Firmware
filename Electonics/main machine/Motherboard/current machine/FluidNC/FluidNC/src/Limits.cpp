@@ -65,11 +65,12 @@ bool ambiguousLimit() {
     return false;
 }
 
-// Soft limits helpers with pen_change travel adjustments
+// These functions control soft limits behavior and integrate pen_change flag
 
 bool soft_limit = false;
 
-volatile bool pen_change = false;  // Set true during pen/tool change sequences
+// Define pen_change as volatile since it's accessed from multiple tasks
+volatile bool pen_change = false;  // Globally controlled flag to restrict travel during pen/tool changes
 
 // Calculate maximum allowed position based on configured limits and current mode
 float limitsMaxPosition(size_t axis) {
@@ -77,10 +78,17 @@ float limitsMaxPosition(size_t axis) {
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
 
-    // During pen_change restrict X/Y travel to _penChangeTravel
+    // When pen_change mode is active, use restricted travel limits for X and Y axes
+    // This prevents accidental collisions during tool changes
     auto maxtravel = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
-    // Apply work area limits only when not in pen_change and not in Cycle
+    // Check if custom work area limits are configured and should be applied
+    // Work area limits are disabled during:
+    // 1. pen_change operations (tool changing)
+    // 2. Normal job execution (when machine is in Cycle state)
+    // Work area limits are ENABLED during:
+    // - Manual jogging and alignment (Idle state)
+    // - Setup operations with laser pointer
     if (config->useWorkAreaLimits() && !pen_change && !state_is(State::Cycle)) {
         if (axis == X_AXIS) {
             return config->getWorkAreaMaxX();
@@ -99,10 +107,16 @@ float limitsMinPosition(size_t axis) {
     auto homing     = axisConfig->_homing;
     auto mpos       = homing ? homing->_mpos : 0;
 
-    // During pen_change restrict X/Y travel to _penChangeTravel
+    // Apply pen_change travel restriction to minimum positions
     auto maxtravel = (pen_change && axis != Z_AXIS) ? axisConfig->_penChangeTravel : axisConfig->_maxTravel;
 
-    // Apply work area limits only when not in pen_change and not in Cycle
+    // Check if custom work area limits are configured and should be applied
+    // Work area limits are disabled during:
+    // 1. pen_change operations (tool changing)
+    // 2. Normal job execution (when machine is in Cycle state)
+    // Work area limits are ENABLED during:
+    // - Manual jogging and alignment (Idle state)
+    // - Setup operations with laser pointer
     if (config->useWorkAreaLimits() && !pen_change && !state_is(State::Cycle)) {
         if (axis == X_AXIS) {
             return config->getWorkAreaMinX();

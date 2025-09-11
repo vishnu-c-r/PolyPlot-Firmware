@@ -498,12 +498,16 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     // Use fast approach feed rate for initial moves
     pl_data->feed_rate = approach_feedrate;
 
+    // During pen change, bypass soft-limit checks and widen allowable travel envelope.
+    // We also assert the global pen_change flag BEFORE any motion so limit math (if consulted)
+    // and any UI restrictions apply consistently for the whole sequence.
+    pl_data->limits_checked = true;  // Skip soft limit validation in mc_linear/invalid_line
+    pen_change              = true;
+
     // Move to safe Z height first
     currentPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, currentPos))
         return false;
-
-    pen_change = true;
     if (current_loaded_pen > 0 && (current_loaded_pen == nextPen || nextPen == 0)) {
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
             return false;

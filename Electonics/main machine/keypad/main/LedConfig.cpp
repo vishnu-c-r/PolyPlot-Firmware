@@ -143,8 +143,8 @@ namespace LEDControl
         static bool isTransitioning = false; // Whether we're between colors
         static uint16_t transitionStep = 0;  // Current step in transition (0-255)
 
-        // Don't run if already homed
-        if (isHomed)
+        // Only run if we're in HOMING state and not already homed
+        if (currentState != HOMING || isHomed)
             return;
 
         // Time-based animation
@@ -517,3 +517,4 @@ namespace LEDControl
         // Make sure lastColor is updated
         lastColor = Color1;
     }
+}

@@ -2,10 +2,10 @@
 
 // Pin definitions
 #define NEOPIXEL_PIN 10
-#define BUTTON_UP 9
-#define BUTTON_RIGHT 8
-#define BUTTON_DOWN 1
-#define BUTTON_LEFT 0
+#define BUTTON_UP 2
+#define BUTTON_RIGHT 9
+#define BUTTON_DOWN 0
+#define BUTTON_LEFT 1
 #define BUTTON_PLAYPAUSE 3
 
 // Jog distances

@@ -2,7 +2,6 @@
 
 #ifdef __cplusplus
 #include <Adafruit_NeoPixel.h>
-#include "main.h" // Include main.h to make WifiMode visible
 
 /**
  * LED Control namespace for CNC controller

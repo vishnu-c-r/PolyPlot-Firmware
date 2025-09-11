@@ -70,6 +70,8 @@ void fnc_realtime(realtime_cmd_t c);  // This now uses realtime_cmd_t from Realt
 extern int fnc_getchar();
 extern void fnc_putchar(uint8_t ch);
 
+// Optional debug
+
 // Weak callback functions
 extern void show_state(const char* state);
 extern void show_error(int error);
@@ -81,6 +83,7 @@ extern bool _ackwait;
 extern int _ack_time_limit;
 extern bool _alarm14;
 extern bool _machine_ready; // New flag to detect READY message
+
 
 #ifdef __cplusplus
 }

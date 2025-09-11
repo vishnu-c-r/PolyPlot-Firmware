@@ -122,8 +122,8 @@ void waitForMachineReady()
     // Keep running breathing animation while waiting
     unsigned long lastStatusRequest = 0;
     
-    // Wait until machine enters HOMING state
-    while (machineState != HOMING)
+    // Wait until machine leaves ALARM state (e.g., starts homing)
+    while (machineState == ALARM)
     {
         // Show breathing red animation during this waiting phase
         LEDControl::LedColors::breathingRedAnimation();
@@ -188,6 +188,7 @@ void setup()
     // Update state to HOMING - this will trigger the homing animation
     machineState = HOMING;
     isHoming = true;
+    LEDControl::LedColors::updateMachineState(LEDControl::LedColors::HOMING);
 }
 
 //---------------------------------------------------------------
@@ -280,6 +281,8 @@ void updateButtonState(ButtonState &btn, bool currentRead)
                 // Immediately trigger the homing command when hold detected for play/pause button
                 if (isPlayPauseButton && !btn.longPressCommandSent && 
                     (machineState == IDLE || machineState == JOGGING)) {
+                    // Transition from previous color to first homing color
+                    LEDControl::LedColors::transitionToHoming();
                     fnc_send_line("$H", 100);
                     btn.longPressCommandSent = true;
                 }
@@ -457,10 +460,6 @@ void updateLEDs()
 {
     if (machineState == HOMING)
     {
-        if (!isHoming) {
-            // If not actually homing, don't run homing animation
-            return;
-        }
         LEDControl::LedColors::homingAnimation();
     }
     else if (machineState == IDLE)

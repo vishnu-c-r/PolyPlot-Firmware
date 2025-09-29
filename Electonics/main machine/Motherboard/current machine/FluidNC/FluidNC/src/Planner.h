@@ -134,3 +134,12 @@ void plan_get_planner_mpos(float* target);
 
 // Add function declaration
 bool plan_buffer_pen_change(int new_pen, plan_line_data_t* pl_data);
+
+// Estimate remaining execution time (seconds) of all planned (queued) blocks including current.
+// This is a best-effort analytical calculation using trapezoid/triangular motion assumptions.
+// Returns 0 if no motion queued or estimation not possible.
+float plan_estimate_remaining_time_sec();
+
+// Higher resolution estimate including partially executed current block; may sample stepper state.
+// Falls back to plan_estimate_remaining_time_sec if stepper prep info unavailable.
+float plan_estimate_remaining_time_with_current_sec();

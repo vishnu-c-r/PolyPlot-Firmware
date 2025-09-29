@@ -23,7 +23,7 @@ namespace ToolCalibration {
     // --- Tool bank constants (adjust here as needed) ---
     static constexpr int   TOOL_BANK_COUNT    = 6;        // total tools (1..6)
     static constexpr float TOOL_BANK_SPACING  = 42.0f;    // mm between successive tools along -Y
-    static constexpr float TOOL_BANK_Z_DEFAULT = -10.0f;  // hardcoded Z for all tools (within -10.5 +/-0.5 range)
+    static constexpr float TOOL_BANK_Z_DEFAULT = -9.5f;  // hardcoded Z for all tools (within -10.5 +/-0.5 range)
     // Store exact measured floating values (no rounding)
 
     void loadPulloffFromConfig() {

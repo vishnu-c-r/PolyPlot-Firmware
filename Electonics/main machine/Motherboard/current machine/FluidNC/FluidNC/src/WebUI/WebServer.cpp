@@ -214,6 +214,17 @@ namespace WebUI {
                 "  const hasPct=Number.isFinite(pct);"
                 "  if(hasPct){lastPct=pct;qs('bar').style.width=pct+'%';qs('percentLabel').textContent=fmtPct(pct)}"
                 "  qs('fileLabel').textContent='File: '+(data.filename||'—');"
+                "  // ETA handling"
+                "  const etaEl = qs('etaLabel');"
+                "  if(data.eta_sec!==undefined && data.eta_sec>=0 && data.eta){"
+                "     let etaStr = 'ETA '+data.eta;"
+                "     if(data.eta_source){etaStr += ' ('+ (data.eta_source==='planner'?'planner':'progress') +')';}"
+                "     if(data.eta_confidence){etaStr += ' ['+data.eta_confidence+']';}"
+                "     if(paused){etaStr += ' (paused)';}"
+                "     etaEl.textContent = etaStr;"
+                "  } else {"
+                "     etaEl.textContent = 'ETA calculating…';"
+                "  }"
                 "  pauseBtn.style.display=paused?'none':'inline-flex';"
                 "  resumeBtn.style.display=paused?'inline-flex':'none';"
                 "}"
@@ -259,6 +270,20 @@ namespace WebUI {
             std::string response  = "{\"active\":" + std::string(jobActive ? "true" : "false");
 
             if (jobActive) {
+                // --- ETA tracking (simple exponential smoothing of progress rate) ---
+                // Static state persists across handler invocations.
+                static bool     prevActive          = false;
+                static uint32_t jobStartMillis      = 0;
+                static uint32_t lastSampleMillis    = 0;
+                static float    lastSamplePercent   = 0.0f;
+                static float    smoothedRatePctPerS = 0.0f;  // percent / second
+                uint32_t nowMs = millis();
+                if (!prevActive) {
+                    jobStartMillis      = nowMs;
+                    lastSampleMillis    = nowMs;
+                    lastSamplePercent   = 0.0f;
+                    smoothedRatePctPerS = 0.0f;
+                }
                 // Determine paused state from system state
                 bool paused = false;
                 try {
@@ -336,6 +361,87 @@ namespace WebUI {
                 response += ",\"paused\":" + std::string(paused ? "true" : "false");
                 response += ",\"percentage\":" + std::to_string(percentage);
                 response += ",\"filename\":\"" + filename + "\"";
+
+                // Update ETA calculation only if not paused and progress advanced
+                if (!paused) {
+                    uint32_t dtMs = nowMs - lastSampleMillis;
+                    if (dtMs >= 1000) {  // sample every >=1s
+                        float dPct = percentage - lastSamplePercent;
+                        if (dPct > 0.0001f) {
+                            float instRate = dPct / (dtMs / 1000.0f);  // percent per second
+                            if (smoothedRatePctPerS <= 0.00001f)
+                                smoothedRatePctPerS = instRate;
+                            else
+                                smoothedRatePctPerS = smoothedRatePctPerS * 0.7f + instRate * 0.3f;  // EMA
+                            lastSamplePercent = percentage;
+                            lastSampleMillis  = nowMs;
+                        } else if (dPct < -0.01f) {  // Job restarted or percentage reset unexpectedly
+                            lastSamplePercent   = percentage;
+                            lastSampleMillis    = nowMs;
+                            smoothedRatePctPerS = 0.0f;
+                        }
+                    }
+                }
+
+                // Compute ETA: prefer planner-based remaining time if available
+                int   elapsedSec = jobStartMillis > 0 ? (int)((nowMs - jobStartMillis) / 1000UL) : 0;
+                float remainingPct = (percentage < 100.0f) ? (100.0f - percentage) : 0.0f;
+                int   etaSec = -1;
+
+                float plannerRemaining = plan_estimate_remaining_time_with_current_sec();
+                if (plannerRemaining > 0.5f) {
+                    etaSec = (int)(plannerRemaining + 0.5f);
+                } else {
+                    // Fallback to progress-rate ETA if planner result not useful
+                    if (smoothedRatePctPerS > 0.01f && remainingPct > 0.05f) {
+                        float etaF = remainingPct / smoothedRatePctPerS;  // seconds
+                        if (etaF < 48 * 3600.0f) {                        // sanity cap at 48h
+                            etaSec = (int)(etaF + 0.5f);
+                        }
+                    }
+                }
+                // Format ETA string
+                char etaBuf[16] = "";
+                if (etaSec >= 0) {
+                    int h = etaSec / 3600;
+                    int m = (etaSec % 3600) / 60;
+                    int s = etaSec % 60;
+                    if (h > 0)
+                        snprintf(etaBuf, sizeof(etaBuf), "%d:%02d:%02d", h, m, s);
+                    else
+                        snprintf(etaBuf, sizeof(etaBuf), "%02d:%02d", m, s);
+                }
+                // Append timing fields
+                response += ",\"elapsed\":" + std::to_string(elapsedSec);
+                response += ",\"eta_sec\":" + std::to_string(etaSec);
+                response += ",\"eta\":\"" + std::string(etaSec >= 0 ? etaBuf : "") + "\"";
+                // Confidence heuristic
+                const char* etaSource = (plannerRemaining > 0.5f) ? "planner" : "progress";
+                const char* conf      = "low";
+                if (etaSec >= 0) {
+                    if (plannerRemaining > 0.5f) {
+                        if (plannerRemaining < 30) conf = "high";       // short remaining window
+                        else if (plannerRemaining < 300) conf = "medium";  // under 5 min
+                        else conf = "medium";  // default medium for long planner-based
+                    } else {
+                        // progress-based: require smoothed rate and decent progress
+                        if (percentage > 80.0f) conf = "medium";
+                        if (percentage > 95.0f) conf = "high";
+                    }
+                }
+                response += ",\"eta_source\":\"" + std::string(etaSource) + "\"";
+                response += ",\"eta_confidence\":\"" + std::string(conf) + "\"";
+                // Epoch finish estimate (seconds) if ETA known
+                if (etaSec >= 0) {
+                    uint32_t finishEpoch = (uint32_t)time(nullptr) + etaSec;  // fallback to system epoch
+                    response += ",\"finish_epoch\":" + std::to_string(finishEpoch);
+                }
+                prevActive = true;
+            } else {
+                // Reset active tracking state when job ends
+                // (static vars remain but will reinitialize on next active cycle)
+                static bool &prevActiveRef = *([]()->bool*{ static bool v=false; return &v; })();
+                prevActiveRef = false; // ensure re-init
             }
 
             response += "}";
@@ -1362,6 +1468,7 @@ namespace WebUI {
                          "<div class='progress-fill'></div>"
                          "</div>"
                          "<div id='progressText' style='font-size: 12px; color: #7f8c8d; margin-top: 8px;'>Initializing...</div>"
+                         "<div id='etaText' style='font-size: 12px; color: #2c3e50; margin-top: 4px;'>ETA: Calculating...</div>"
                          "</div>"
                          "<button class='retry-btn' onclick='checkAndRetry()'>Check Status & Retry</button>"
                          "<div class='footer'>"
@@ -1380,6 +1487,7 @@ namespace WebUI {
                          "      const statusEl = document.getElementById('jobStatus');"
                          "      const progressBar = document.querySelector('.progress-fill');"
                          "      const progressText = document.getElementById('progressText');"
+                         "      const etaEl = document.getElementById('etaText');"
                          "      if (!data.active) {"
                          "        statusEl.innerHTML = '✅ Complete';"
                          "        statusEl.className = 'complete';"
@@ -1387,6 +1495,7 @@ namespace WebUI {
                          "        progressBar.style.background = '#27ae60';"
                          "        progressBar.style.animation = 'none';"
                          "        progressText.innerHTML = 'Job completed successfully';"
+                         "        etaEl.innerHTML = 'ETA: 00:00';"
                          "        clearInterval(checkInterval);"
                          "        setTimeout(() => window.location.reload(), 2000);"
                          "      } else {"
@@ -1406,6 +1515,13 @@ namespace WebUI {
                          "          progressBar.style.animation = 'progress 2s ease-in-out infinite';"
                          "          progressInfo += (progressInfo ? ' • ' : '') + 'Progress updating...';"
                          "        }"
+                         "        // ETA display"
+                         "        if (data.eta_sec !== undefined && data.eta_sec > 0 && data.eta) {"
+                         "          const finishTime = data.finish_epoch ? new Date(data.finish_epoch * 1000).toLocaleTimeString() : '';"
+                         "          etaEl.innerHTML = 'ETA: ' + data.eta + (finishTime ? ' (≈ ' + finishTime + ')' : '');"
+                         "        } else {"
+                         "          etaEl.innerHTML = 'ETA: Calculating...';"
+                         "        }"
                          "        statusEl.innerHTML = statusText;"
                          "        progressText.innerHTML = progressInfo || 'Preparing job...';"
                          "      }"
@@ -1413,6 +1529,7 @@ namespace WebUI {
                          "    .catch(() => {"
                          "      document.getElementById('jobStatus').innerHTML = '❓ Unknown';"
                          "      document.getElementById('progressText').innerHTML = 'Unable to fetch status';"
+                         "      const etaEl = document.getElementById('etaText'); if (etaEl) etaEl.innerHTML='ETA: --';"
                          "    });"
                          "}"
                          "checkInterval = setInterval(updateStatus, 2000);"

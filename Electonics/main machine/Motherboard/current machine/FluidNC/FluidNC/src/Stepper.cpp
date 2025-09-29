@@ -119,6 +119,22 @@ typedef struct {
 } st_prep_t;
 static st_prep_t prep;
 
+// Accessor functions for planner ETA subsystem
+extern "C" float stepper_get_mm_remaining() {
+    // Remaining millimeters in the current executing planner block approx = steps_remaining / step_per_mm
+    if (prep.step_per_mm > 0.0f && prep.steps_remaining > 0.0f) {
+        return prep.steps_remaining / prep.step_per_mm;
+    }
+    return 0.0f;
+}
+
+extern "C" float stepper_get_current_block_nominal_speed_mm_per_min() {
+    // Use maximum_speed (which reflects ramp) falling back to current_speed
+    if (prep.maximum_speed > 1e-3f) return prep.maximum_speed;
+    if (prep.current_speed > 1e-3f) return prep.current_speed;
+    return 0.0f;
+}
+
 /* "The Stepper Driver Interrupt" - This timer interrupt is the workhorse, employing
    the venerable Bresenham line algorithm to manage and exactly synchronize multi-axis moves.
    Unlike the popular DDA algorithm, the Bresenham algorithm is not susceptible to numerical

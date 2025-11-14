@@ -108,7 +108,7 @@ macros:
   startup_line1: $H
   after_homing: M64 P1
 user_outputs:
-  digital1_pin: gpio.4
+  digital1_pin: gpio.33
 laser_offset_x: -22
 laser_offset_y: 13
 work_area:

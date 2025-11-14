@@ -66,7 +66,7 @@ M6T3  ; Change to pen 3
 
 #### Drawing Operations
 
-- Import images through the built-in UI
+- Import SVG images through the built-in UI
 - Use the web interface for real-time control
 - Connect via serial, WiFi, or Bluetooth for remote operation
 
@@ -111,7 +111,7 @@ Perfect for:
 
 - Basic pen plotting functionality
 - Single tool operation
-- Limited connectivity options
+- Limited UI
 
 ## 🛠️ Technical Details
 
@@ -140,7 +140,7 @@ This project is part of the SSK initiative for educational tinkering labs. Contr
 
 - **FluidNC Project**: [bdring/FluidNC](https://github.com/bdring/FluidNC) for the base firmware
 - **Students and Educators**: Who will use and improve this system
-- **FabLab Kerala MTM team**: for build the project from ground up
+- **FabLab Kerala MTM team**: for building the project from ground up
 
 ---
 

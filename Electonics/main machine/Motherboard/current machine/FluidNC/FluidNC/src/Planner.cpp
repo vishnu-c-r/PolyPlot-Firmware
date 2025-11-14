@@ -237,6 +237,102 @@ plan_block_t* plan_get_current_block() {
     return &block_buffer[block_buffer_tail];
 }
 
+// Helper to iterate blocks without exposing internals
+static plan_block_t* plan_peek_block(uint8_t index) {
+    return &block_buffer[index];
+}
+
+// Very lightweight analytical estimate of remaining time across queued blocks.
+// Uses each block's millimeters, acceleration, nominal(feed-limited) speed derived from stored values.
+// For each block we approximate a trapezoidal or triangular velocity profile. Since the planner already
+// computed entry speed constraints, we can approximate effective time = distance / average_speed, where
+// average_speed derives from entry speed, achievable cruise (sqrt of max_entry_speed_sqr or limited by programmed_rate) and acceleration.
+// NOTE: This intentionally trades precision for very small computational cost.
+float plan_estimate_remaining_time_sec() {
+    if (block_buffer_head == block_buffer_tail) {
+        return 0.0f;
+    }
+    float totalSec = 0.0f;
+    uint8_t index  = block_buffer_tail;
+    // We'll walk until head (exclusive)
+    while (index != block_buffer_head) {
+        plan_block_t* b = plan_peek_block(index);
+        // Skip system motion blocks if any
+        if (!b->motion.systemMotion) {
+            float dist = b->millimeters;  // Already absolute distance of the block
+            if (dist > 0.0001f) {
+                // Derive entry speed
+                float entry_v = sqrtf(MAX(b->entry_speed_sqr, 0.0f));
+                // Estimate max reachable cruise speed limited by junction for this block
+                float max_entry = sqrtf(MAX(b->max_entry_speed_sqr, 0.0f));
+                // Programmed nominal feed (already limited by overrides when planned)
+                float nominal = plan_compute_profile_nominal_speed(b);
+                float targetCruise = MIN(nominal, max_entry);
+                if (targetCruise < entry_v) {
+                    // Pure decel block (triangle)
+                    // average speed approximated as (entry_v + targetCruise)/2 ; if targetCruise is zero at end
+                    float avg = (entry_v + targetCruise) * 0.5f;
+                    if (avg < 1e-3f) avg = MINIMUM_FEED_RATE;
+                    totalSec += dist / avg;
+                } else {
+                    // Accelerate (maybe reach cruise) then decel depending on distance & accel
+                    float a = b->acceleration;
+                    if (a < 1e-6f) a = 1e-6f;
+                    // Distance to accelerate from entry_v to targetCruise
+                    float d_accel = (targetCruise * targetCruise - entry_v * entry_v) / (2.0f * a);
+                    // For simplicity assume symmetric decel to next (unknown) so treat block as accel+cruise only
+                    if (d_accel > dist * 0.8f) {
+                        // Probably triangular (can't reach cruise)
+                        // Solve for peak velocity using dist and accel with entry_v start and assuming end speed unknown ~ entry_v (rough)
+                        // Simplify: average speed ~ (entry_v + targetCruise)*0.5 limited by distance
+                        float avg = (entry_v + targetCruise) * 0.5f;
+                        if (avg < 1e-3f) avg = MINIMUM_FEED_RATE;
+                        totalSec += dist / avg;
+                    } else {
+                        float d_cruise = dist - d_accel;  // ignore decel part for speed; conservative
+                        float t_accel  = (targetCruise - entry_v) / a;
+                        float avg_accel_speed = (entry_v + targetCruise) * 0.5f;
+                        float t_accel_dist = d_accel / avg_accel_speed;  // or just t_accel; keep simple
+                        float t_cruise = d_cruise / targetCruise;
+                        totalSec += t_accel + t_cruise;
+                    }
+                }
+            }
+        }
+        index = plan_next_block_index(index);
+    }
+    // Clamp insane values
+    if (totalSec < 0.0f) totalSec = 0.0f;
+    if (totalSec > 172800.0f) totalSec = 172800.0f;  // 48h cap
+    return totalSec;
+}
+
+// Forward declare minimal stepper prep struct access (duplicate minimal fields) to avoid tight coupling
+extern "C" {
+    // We'll reference the existing internal 'prep' via an accessor we add in Stepper.cpp if available.
+}
+
+// Weak reference accessor (we'll add a symbol in Stepper.cpp); if not present, linker will set nullptr.
+extern "C" float stepper_get_mm_remaining();
+extern "C" float stepper_get_current_block_nominal_speed_mm_per_min();
+
+float plan_estimate_remaining_time_with_current_sec() {
+    float queued = plan_estimate_remaining_time_sec();
+    // Attempt to get finer granularity for current executing block remainder
+    if (&stepper_get_mm_remaining) {
+        float mm_rem = stepper_get_mm_remaining();
+        if (mm_rem > 0.0005f) {
+            float v_mm_per_min = stepper_get_current_block_nominal_speed_mm_per_min();
+            if (v_mm_per_min > 1e-3f) {
+                float sec_current = (mm_rem / v_mm_per_min) * 60.0f;  // mm / (mm/min) = min *60
+                queued += sec_current;
+            }
+        }
+    }
+    if (queued > 172800.0f) queued = 172800.0f;
+    return queued;
+}
+
 float plan_get_exec_block_exit_speed_sqr() {
     uint8_t block_index = plan_next_block_index(block_buffer_tail);
     if (block_index == block_buffer_head) {

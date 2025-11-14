@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Art Generator</title>
+    <style>
+        :root {
+            --primary-start: #667eea;
+            --primary-end: #764ba2;
+            --secondary-start: #f093fb;
+            --secondary-end: #f5576c;
+            --bg-main: #f4f7f6;
+            --text-dark: #333;
+            --text-light: #666;
+            --border-color: #e0e0e0;
+            --shadow-light: rgba(0,0,0,0.1);
+            --shadow-dark: rgba(0,0,0,0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: row;
+            padding: 20px;
+        }
+        
+        .sidebar {
+            width: 380px;
+            background: white;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 5px 0 25px var(--shadow-light);
+            z-index: 10;
+        }
+
+        .sidebar-content {
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .actions-sticky {
+            margin-top: auto;
+            padding-top: 20px;
+            background: white;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            padding: 0 20px;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .control-section {
+            margin-bottom: 30px;
+        }
+        
+        .control-section h2 {
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            color: var(--text-dark);
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        
+        input, select {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        input[type="range"] {
+            padding: 0;
+        }
+        
+        .range-value {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .secondary-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .canvas-container {
+            background: #f8f8f8;
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+        }
+        
+        #svgCanvas {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .preset-btn {
+            padding: 10px;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            font-size: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .preset-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .generator-controls {
+            display: none;
+        }
+        .generator-controls.active {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
+        }
+
+        #customSize-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 900px) {
+            body {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 50vh;
+                box-shadow: 0 5px 15px var(--shadow-light);
+            }
+            .main-content {
+                padding: 20px;
+            }
+            #svgCanvas {
+                max-width: 100%;
+                height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="sidebar-content">
+            <h1>✨ SVG Art Generator</h1>
+            
+            <div class="control-section">
+                <h2>Generator</h2>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="generatorType">Algorithm</label>
+                        <select id="generatorType">
+                            <option value="cosmic">Cosmic Scene</option>
+                            <option value="flowfield">Flow Field</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h2>Canvas</h2>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="canvasSize">Canvas Size</label>
+                        <select id="canvasSize">
+                            <option value="800,800">Square (800x800)</option>
+                            <option value="1123,794">A4 Landscape</option>
+                            <option value="794,1123">A4 Portrait</option>
+                            <option value="1587,1123">A3 Landscape</option>
+                            <option value="1123,1587">A3 Portrait</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <div id="customSize-inputs" style="display: none;">
+                            <input type="number" id="customWidth" placeholder="Width">
+                            <input type="number" id="customHeight" placeholder="Height">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="margin">Margin</label>
+                        <input type="range" id="margin" min="0" max="100" step="5" value="30">
+                        <div class="range-value"><span id="marginValue">30</span> px</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="cosmic-controls" class="generator-controls active">
+                <div class="control-section">
+                    <h2>Presets</h2>
+                    <div class="preset-buttons">
+                        <button class="preset-btn" onclick="loadPreset('cosmic')">🌌 Cosmic</button>
+                        <button class="preset-btn" onclick="loadPreset('geometric')">💎 Geometric</button>
+                        <button class="preset-btn" onclick="loadPreset('organic')">🌿 Organic</button>
+                        <button class="preset-btn" onclick="loadPreset('minimal')">⚡ Minimal</button>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h2>Pattern</h2>
+                    <div class="controls">
+                        <div class="control-group">
+                            <label for="pathComplexity">Path Complexity</label>
+                            <input type="range" id="pathComplexity" min="3" max="25" value="8">
+                            <div class="range-value"><span id="pathComplexityValue">8</span></div>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="nodeCount">Node Count</label>
+                            <input type="range" id="nodeCount" min="10" max="150" value="40">
+                            <div class="range-value"><span id="nodeCountValue">40</span></div>
+                        </div>
+                        
+                        <div class="control-group">
+                            <label for="starDensity">Star Density</label>
+                            <input type="range" id="starDensity" min="0" max="500" value="200">
+                            <div class="range-value"><span id="starDensityValue">200</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="flowfield-controls" class="generator-controls">
+                <div class="control-section">
+                    <h2>Flow Field</h2>
+                    <div class="controls">
+                        <div class="control-group">
+                            <label for="particleCount">Particle Count</label>
+                            <input type="range" id="particleCount" min="100" max="10000" step="100" value="2000">
+                            <div class="range-value"><span id="particleCountValue">2000</span></div>
+                        </div>
+                        <div class="control-group">
+                            <label for="maxSteps">Max Steps</label>
+                            <input type="range" id="maxSteps" min="10" max="500" step="10" value="100">
+                            <div class="range-value"><span id="maxStepsValue">100</span></div>
+                        </div>
+                        <div class="control-group">
+                            <label for="noiseScale">Noise Scale</label>
+                            <input type="range" id="noiseScale" min="10" max="1000" step="10" value="300">
+                            <div class="range-value"><span id="noiseScaleValue">300</span></div>
+                        </div>
+                        <div class="control-group">
+                            <label for="stepLength">Step Length</label>
+                            <input type="range" id="stepLength" min="0.5" max="10" step="0.1" value="2">
+                            <div class="range-value"><span id="stepLengthValue">2</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h2>Style</h2>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="shapeType">Shape Type</label>
+                        <select id="shapeType">
+                            <option value="mixed">Mixed Shapes</option>
+                            <option value="crystals">Crystals</option>
+                            <option value="circles">Circles</option>
+                            <option value="polygons">Polygons</option>
+                            <option value="stars">Stars</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="colorScheme">Color Scheme</label>
+                        <select id="colorScheme">
+                            <option value="monochrome">Monochrome</option>
+                            <option value="pastel">Pastel</option>
+                            <option value="vibrant">Vibrant</option>
+                            <option value="gradient">Gradient</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label for="lineStyle">Line Style</label>
+                        <select id="lineStyle">
+                            <option value="smooth">Smooth Curves</option>
+                            <option value="angular">Angular</option>
+                            <option value="organic">Organic</option>
+                            <option value="chaotic">Chaotic</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="strokeWidth">Stroke Width</label>
+                        <input type="range" id="strokeWidth" min="0.2" max="5" step="0.1" value="1.2">
+                        <div class="range-value"><span id="strokeWidthValue">1.2</span> px</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions-sticky">
+            <div class="control-section">
+                <h2>Actions</h2>
+                <div class="button-group">
+                    <button class="main-btn" onclick="generatePattern()">🎨 Generate Pattern</button>
+                    <button onclick="animateGeneration()">✨ Animate</button>
+                    <button class="secondary-btn" onclick="downloadSVG()">💾 SVG</button>
+                    <button class="secondary-btn" onclick="downloadPerColor()">🖊️ By Color</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="canvas-container">
+            <svg id="svgCanvas" width="800" height="800" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+    </div>
+    
+    <script>
+        // DOM elements
+        const canvasSizeEl = document.getElementById('canvasSize');
+        const customSizeInputsEl = document.getElementById('customSize-inputs');
+        const customWidthEl = document.getElementById('customWidth');
+        const customHeightEl = document.getElementById('customHeight');
+        const generatorTypeEl = document.getElementById('generatorType');
+
+        // Update range display values
+        document.querySelectorAll('input[type="range"]').forEach(input => {
+            input.addEventListener('input', (e) => {
+                document.getElementById(e.target.id + 'Value').textContent = e.target.value;
+            });
+        });
+
+        // Generator type handler
+        generatorTypeEl.addEventListener('change', (e) => {
+            document.querySelectorAll('.generator-controls').forEach(el => el.classList.remove('active'));
+            document.getElementById(`${e.target.value}-controls`).classList.add('active');
+        });
+
+        // Canvas size handler
+        canvasSizeEl.addEventListener('change', (e) => {
+            if (e.target.value === 'custom') {
+                customSizeInputsEl.style.display = 'grid';
+            } else {
+                customSizeInputsEl.style.display = 'none';
+            }
+            updateCanvasSize();
+        });
+        customWidthEl.addEventListener('input', updateCanvasSize);
+        customHeightEl.addEventListener('input', updateCanvasSize);
+
+        function updateCanvasSize() {
+            const svg = document.getElementById('svgCanvas');
+            let width, height;
+            
+            if (canvasSizeEl.value === 'custom') {
+                width = parseInt(customWidthEl.value) || 800;
+                height = parseInt(customHeightEl.value) || 800;
+            } else {
+                [width, height] = canvasSizeEl.value.split(',').map(Number);
+            }
+            
+            svg.setAttribute('width', width);
+            svg.setAttribute('height', height);
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            generatePattern();
+        }
+        
+        // Utility functions
+        function random(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+        
+        function randomInt(min, max) {
+            return Math.floor(random(min, max + 1));
+        }
+        
+        // --- Perlin Noise Implementation ---
+        // (Ported from https://github.com/josephg/noisejs)
+        const noise = (function() {
+            const p = new Uint8Array(512);
+            let perm = new Uint8Array(256);
+            for(let i=0; i<256; i++) perm[i] = i;
+            for(let i=255; i>0; i--) {
+                const r = Math.floor(Math.random() * (i + 1));
+                [perm[i], perm[r]] = [perm[r], perm[i]];
+            }
+            for(let i=0; i<512; i++) p[i] = perm[i & 255];
+
+            function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+            function lerp(t, a, b) { return a + t * (b - a); }
+            function grad(hash, x, y) {
+                const h = hash & 7;
+                const u = h < 4 ? x : y;
+                const v = h < 4 ? y : x;
+                return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
+            }
+
+            return {
+                seed: function(s) {
+                    const prng = new Math.seedrandom(s);
+                    for(let i=255; i>0; i--) {
+                        const r = Math.floor(prng() * (i + 1));
+                        [perm[i], perm[r]] = [perm[r], perm[i]];
+                    }
+                    for(let i=0; i<512; i++) p[i] = perm[i & 255];
+                },
+                perlin2: function(x, y) {
+                    const X = Math.floor(x) & 255;
+                    const Y = Math.floor(y) & 255;
+                    x -= Math.floor(x);
+                    y -= Math.floor(y);
+                    const u = fade(x);
+                    const v = fade(y);
+                    const n00 = grad(p[X + p[Y]], x, y);
+                    const n01 = grad(p[X + p[Y + 1]], x, y - 1);
+                    const n10 = grad(p[X + 1 + p[Y]], x - 1, y);
+                    const n11 = grad(p[X + 1 + p[Y + 1]], x - 1, y - 1);
+                    return lerp(v, lerp(u, n00, n10), lerp(u, n01, n11));
+                }
+            };
+        })();
+
+        // Blue noise distribution for better spacing
+        function blueNoise(count, width, height, minDist = 20) {
+            const points = [];
+            const cellSize = minDist / Math.sqrt(2);
+            const grid = {};
+            
+            for (let i = 0; i < count * 10 && points.length < count; i++) {
+                const x = random(0, width);
+                const y = random(0, height);
+                const gridX = Math.floor(x / cellSize);
+                const gridY = Math.floor(y / cellSize);
+                const key = `${gridX},${gridY}`;
+                
+                let tooClose = false;
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const checkKey = `${gridX + dx},${gridY + dy}`;
+                        if (grid[checkKey]) {
+                            for (const p of grid[checkKey]) {
+                                const dist = Math.hypot(x - p.x, y - p.y);
+                                if (dist < minDist) {
+                                    tooClose = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (tooClose) break;
+                    }
+                    if (tooClose) break;
+                }
+                
+                if (!tooClose) {
+                    const point = { x, y };
+                    points.push(point);
+                    if (!grid[key]) grid[key] = [];
+                    grid[key].push(point);
+                }
+            }
+            
+            return points;
+        }
+        
+        // Color palettes for pens
+        function getPalette(scheme) {
+            switch (scheme) {
+                case 'pastel':
+                    return ['#6ec3ff', '#ffafcc', '#bde0fe', '#caffbf'];
+                case 'vibrant':
+                    return ['#e63946', '#457b9d', '#2a9d8f', '#f4a261'];
+                case 'gradient':
+                    // Will be handled per-position; fallback palette is two stops
+                    return ['#5b8def', '#f5576c'];
+                case 'monochrome':
+                default:
+                    return ['#111111'];
+            }
+        }
+
+        function lerpColor(a, b, t) {
+            const ah = a.replace('#', '');
+            const bh = b.replace('#', '');
+            const ar = parseInt(ah.substring(0,2), 16), ag = parseInt(ah.substring(2,4), 16), ab = parseInt(ah.substring(4,6), 16);
+            const br = parseInt(bh.substring(0,2), 16), bg = parseInt(bh.substring(2,4), 16), bb = parseInt(bh.substring(4,6), 16);
+            const rr = Math.round(ar + (br - ar) * t);
+            const rg = Math.round(ag + (bg - ag) * t);
+            const rb = Math.round(ab + (bb - ab) * t);
+            return `#${rr.toString(16).padStart(2,'0')}${rg.toString(16).padStart(2,'0')}${rb.toString(16).padStart(2,'0')}`;
+        }
+
+        // --- Cosmic Scene Generator ---
+        function generateCosmicScene(svg, { width, height, palette, ...params }) {
+            const { pathComplexity, nodeCount, starDensity, shapeType, lineStyle, strokeWidth, margin } = params;
+            
+            // Prepare layer buckets by color
+            const layers = {};
+            function pushToLayer(color, element) {
+                if (!layers[color]) layers[color] = [];
+                layers[color].push(element);
+            }
+            
+            // Generate background stars/decorations
+            if (starDensity > 0) {
+                const starPoints = blueNoise(starDensity, width - margin * 2, height - margin * 2, 15).map(p => ({x: p.x + margin, y: p.y + margin}));
+                const starStyles = ['dot', 'cross', 'star', 'circle'];
+                
+                starPoints.forEach(point => {
+                    const style = starStyles[randomInt(0, starStyles.length - 1)];
+                    const size = random(1, 4);
+                    let color = palette[0];
+                    if (params.colorScheme === 'gradient' && palette.length >= 2) {
+                        const t = point.y / height;
+                        color = lerpColor(palette[0], palette[1], Math.min(1, Math.max(0, t)));
+                    } else if (palette.length > 1) {
+                        color = palette[randomInt(0, palette.length - 1)];
+                    }
+                    pushToLayer(color, generateStar(point.x, point.y, size, style));
+                });
+            }
+            
+            // Generate main nodes
+            const nodes = blueNoise(nodeCount, width - margin * 2, height - margin * 2, 50).map(p => ({x: p.x + margin, y: p.y + margin}));
+            
+            // Generate shapes at nodes
+            nodes.forEach(node => {
+                const size = random(15, 40);
+                let color = palette[0];
+                if (params.colorScheme === 'gradient' && palette.length >= 2) {
+                    const t = node.y / height;
+                    color = lerpColor(palette[0], palette[1], Math.min(1, Math.max(0, t)));
+                } else if (palette.length > 1) {
+                    color = palette[randomInt(0, palette.length - 1)];
+                }
+                
+                if (shapeType === 'mixed' || shapeType === 'crystals') {
+                    pushToLayer(color, generateCrystal(node.x, node.y, size));
+                } else if (shapeType === 'circles') {
+                    pushToLayer(color, `<circle cx="${node.x}" cy="${node.y}" r="${size}" fill="none"/>`);
+                } else if (shapeType === 'polygons') {
+                    const sides = randomInt(3, 8);
+                    const points = [];
+                    for (let i = 0; i < sides; i++) {
+                        const angle = (i / sides) * Math.PI * 2;
+                        points.push(`${node.x + Math.cos(angle) * size},${node.y + Math.sin(angle) * size}`);
+                    }
+                    pushToLayer(color, `<polygon points="${points.join(' ')}" fill="none"/>`);
+                }
+            });
+            
+            // Generate flowing paths
+            for (let i = 0; i < pathComplexity; i++) {
+                const pathNodes = [];
+                const startIdx = randomInt(0, nodes.length - 1);
+                const pathLength = randomInt(3, Math.min(8, nodes.length));
+                
+                const visited = new Set();
+                let current = nodes[startIdx];
+                pathNodes.push(current);
+                visited.add(startIdx);
+                
+                for (let j = 1; j < pathLength; j++) {
+                    let bestNext = null;
+                    let bestDist = Infinity;
+                    
+                    nodes.forEach((node, idx) => {
+                        if (!visited.has(idx)) {
+                            const dist = Math.hypot(current.x - node.x, current.y - node.y);
+                            if (dist < bestDist && dist > 30) {
+                                bestDist = dist;
+                                bestNext = { node, idx };
+                            }
+                        }
+                    });
+                    
+                    if (bestNext) {
+                        pathNodes.push(bestNext.node);
+                        visited.add(bestNext.idx);
+                        current = bestNext.node;
+                    }
+                }
+                
+                if (pathNodes.length > 1) {
+                    let color = palette[0];
+                    if (params.colorScheme === 'gradient' && palette.length >= 2) {
+                        const avgY = pathNodes.reduce((a,p)=>a+p.y,0)/pathNodes.length;
+                        const t = avgY / height;
+                        color = lerpColor(palette[0], palette[1], Math.min(1, Math.max(0, t)));
+                    } else if (palette.length > 1) {
+                        color = palette[i % palette.length];
+                    }
+                    pushToLayer(color, generateFlowingPath(pathNodes, lineStyle));
+                }
+            }
+            return layers;
+        }
+
+        // --- Flow Field Generator ---
+        function generateFlowField(svg, { width, height, palette, ...params }) {
+            const { particleCount, maxSteps, noiseScale, stepLength, margin } = params;
+            noise.seed(Math.random());
+
+            const layers = {};
+            function pushToLayer(color, element) {
+                if (!layers[color]) layers[color] = [];
+                layers[color].push(element);
+            }
+
+            const particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: random(margin, width - margin),
+                    y: random(margin, height - margin),
+                    path: [],
+                    color: palette[i % palette.length]
+                });
+            }
+
+            for (let i = 0; i < maxSteps; i++) {
+                particles.forEach(p => {
+                    if (p.x === undefined) return; // Skip finished particles
+
+                    p.path.push([p.x, p.y]);
+
+                    const angle = noise.perlin2(p.x / noiseScale, p.y / noiseScale) * Math.PI * 2;
+                    
+                    p.x += Math.cos(angle) * stepLength;
+                    p.y += Math.sin(angle) * stepLength;
+
+                    // Boundary check
+                    if (p.x < margin || p.x > width - margin || p.y < margin || p.y > height - margin) {
+                        const pathData = "M" + p.path.map(pt => pt.join(',')).join('L');
+                        pushToLayer(p.color, `<path d="${pathData}" fill="none"/>`);
+                        p.x = undefined; // Mark as finished
+                    }
+                });
+            }
+
+            // Add any remaining particles that didn't go out of bounds
+            particles.forEach(p => {
+                if (p.x !== undefined && p.path.length > 1) {
+                    const pathData = "M" + p.path.map(pt => pt.join(',')).join('L');
+                    pushToLayer(p.color, `<path d="${pathData}" fill="none"/>`);
+                }
+            });
+
+            return layers;
+        }
+
+        // Generate crystal/geometric shape (stroke-only, inherit color)
+        function generateCrystal(x, y, size) {
+            const points = [];
+            const segments = randomInt(5, 8);
+            const innerRadius = size * random(0.3, 0.6);
+            
+            for (let i = 0; i < segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                const r = i % 2 === 0 ? size : innerRadius;
+                const px = x + Math.cos(angle) * r;
+                const py = y + Math.sin(angle) * r;
+                points.push(`${px},${py}`);
+            }
+            
+            // Add internal lines for crystal effect (no per-element stroke)
+            const path = [`<polygon points="${points.join(' ')}" fill="none" opacity="0.9"/>`];
+            
+            for (let i = 0; i < segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                if (Math.random() > 0.5) {
+                    path.push(`<line x1="${x}" y1="${y}" x2="${x + Math.cos(angle) * size}" y2="${y + Math.sin(angle) * size}" opacity="0.4"/>`);
+                }
+            }
+            
+            return path.join('');
+        }
+        
+        // Generate decorative stars (stroke-only for plotters)
+        function generateStar(x, y, size, style) {
+            if (style === 'dot') {
+                return `<circle cx="${x}" cy="${y}" r="${Math.max(0.6, size * 0.6)}" fill="none" opacity="0.5"/>`;
+            } else if (style === 'cross') {
+                const half = size;
+                return `<g opacity="0.4">
+                    <line x1="${x - half}" y1="${y}" x2="${x + half}" y2="${y}"/>
+                    <line x1="${x}" y1="${y - half}" x2="${x}" y2="${y + half}"/>
+                </g>`;
+            } else if (style === 'star') {
+                const points = [];
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                    const outerX = x + Math.cos(angle) * size;
+                    const outerY = y + Math.sin(angle) * size;
+                    points.push(`${outerX},${outerY}`);
+                    
+                    const innerAngle = ((i + 0.5) / 5) * Math.PI * 2 - Math.PI / 2;
+                    const innerX = x + Math.cos(innerAngle) * (size * 0.4);
+                    const innerY = y + Math.sin(innerAngle) * (size * 0.4);
+                    points.push(`${innerX},${innerY}`);
+                }
+                return `<polygon points="${points.join(' ')}" fill="none" opacity="0.5"/>`;
+            }
+            return `<circle cx="${x}" cy="${y}" r="${size}" fill="none" opacity="0.5"/>`;
+        }
+        
+        // Generate flowing path (lineStyle-aware, stroke-only)
+        function generateFlowingPath(nodes, style) {
+            if (nodes.length < 2) return '';
+            
+            let path = `M ${nodes[0].x} ${nodes[0].y}`;
+            
+            for (let i = 0; i < nodes.length - 1; i++) {
+                const current = nodes[i];
+                const next = nodes[i + 1];
+                if (style === 'angular') {
+                    path += ` L ${next.x} ${next.y}`;
+                } else {
+                    const jitter = style === 'chaotic' ? 35 : style === 'organic' ? 22 : 12;
+                    const cp1x = current.x + (next.x - current.x) * 0.3 + random(-jitter, jitter);
+                    const cp1y = current.y + (next.y - current.y) * 0.3 + random(-jitter, jitter);
+                    const cp2x = current.x + (next.x - current.x) * 0.7 + random(-jitter, jitter);
+                    const cp2y = current.y + (next.y - current.y) * 0.7 + random(-jitter, jitter);
+                    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
+                }
+            }
+            
+            return `<path d="${path}" fill="none" opacity="0.9"/>`;
+        }
+        
+        // Main pattern generation
+        function generatePattern() {
+            const svg = document.getElementById('svgCanvas');
+            const width = parseInt(svg.getAttribute('width'));
+            const height = parseInt(svg.getAttribute('height'));
+            
+            const generator = document.getElementById('generatorType').value;
+
+            const params = {
+                width,
+                height,
+                pathComplexity: parseInt(document.getElementById('pathComplexity').value),
+                nodeCount: parseInt(document.getElementById('nodeCount').value),
+                starDensity: parseInt(document.getElementById('starDensity').value),
+                shapeType: document.getElementById('shapeType').value,
+                lineStyle: document.getElementById('lineStyle').value,
+                strokeWidth: parseFloat(document.getElementById('strokeWidth').value),
+                margin: parseInt(document.getElementById('margin').value),
+                colorScheme: document.getElementById('colorScheme').value,
+                palette: getPalette(document.getElementById('colorScheme').value),
+                // Flowfield params
+                particleCount: parseInt(document.getElementById('particleCount').value),
+                maxSteps: parseInt(document.getElementById('maxSteps').value),
+                noiseScale: parseInt(document.getElementById('noiseScale').value),
+                stepLength: parseFloat(document.getElementById('stepLength').value),
+            };
+            
+            let layers = {};
+            if (generator === 'cosmic') {
+                layers = generateCosmicScene(svg, params);
+            } else if (generator === 'flowfield') {
+                layers = generateFlowField(svg, params);
+            }
+            
+            // Add background
+            let svgContent = `<rect width="${width}" height="${height}" fill="white"/>`;
+            
+            // Assemble layers with stroke attributes set per group
+            const layerOrder = Object.keys(layers);
+            layerOrder.forEach(col => {
+                const group = `<g data-pen="${col}" stroke="${col}" stroke-width="${params.strokeWidth}" stroke-linecap="round" stroke-linejoin="round" fill="none">${layers[col].join('')}</g>`;
+                svgContent += group;
+            });
+            svg.innerHTML = svgContent;
+        }
+        
+        // Animated generation
+        function animateGeneration() {
+            const svg = document.getElementById('svgCanvas');
+            generatePattern();
+            
+            const elements = svg.querySelectorAll('*');
+            elements.forEach((el, i) => {
+                el.style.opacity = '0';
+                el.style.animation = `fadeIn 0.5s ${i * 0.01}s forwards`;
+            });
+            
+            if (!document.getElementById('animationStyles')) {
+                const style = document.createElement('style');
+                style.id = 'animationStyles';
+                style.textContent = `
+                    @keyframes fadeIn {
+                        to { opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+        
+        // Download SVG
+        function downloadSVG() {
+            const svg = document.getElementById('svgCanvas');
+            const svgData = svg.outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `pattern_${Date.now()}.svg`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Download separate SVGs per color layer
+        function downloadPerColor() {
+            const svg = document.getElementById('svgCanvas');
+            const width = svg.getAttribute('width');
+            const height = svg.getAttribute('height');
+            const groups = svg.querySelectorAll('g[data-pen]');
+            groups.forEach((g, idx) => {
+                const col = g.getAttribute('data-pen').replace('#','');
+                const content = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="white"/>${g.outerHTML}</svg>`;
+                const blob = new Blob([content], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `pattern_${col}_${Date.now()}.svg`;
+                link.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        
+        // Presets
+        function loadPreset(preset) {
+            const presets = {
+                cosmic: {
+                    pathComplexity: 10,
+                    nodeCount: 50,
+                    starDensity: 300,
+                    shapeType: 'crystals',
+                    lineStyle: 'smooth'
+                },
+                geometric: {
+                    pathComplexity: 5,
+                    nodeCount: 30,
+                    starDensity: 100,
+                    shapeType: 'polygons',
+                    lineStyle: 'angular'
+                },
+                organic: {
+                    pathComplexity: 12,
+                    nodeCount: 60,
+                    starDensity: 200,
+                    shapeType: 'mixed',
+                    lineStyle: 'organic'
+                },
+                minimal: {
+                    pathComplexity: 3,
+                    nodeCount: 20,
+                    starDensity: 50,
+                    shapeType: 'circles',
+                    lineStyle: 'smooth'
+                }
+            };
+            
+            const settings = presets[preset];
+            Object.keys(settings).forEach(key => {
+                const element = document.getElementById(key);
+                element.value = settings[key];
+                if (element.type === 'range') {
+                    document.getElementById(key + 'Value').textContent = settings[key];
+                }
+            });
+            
+            generatePattern();
+        }
+        
+        // Generate initial pattern
+        updateCanvasSize();
+        // No, Math.seedrandom is not a standard JS function. I need to include it.
+        // A simple implementation or a CDN link is required.
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
+</body>
+</html>

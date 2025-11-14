@@ -34,7 +34,7 @@ axes:
         ms1_pin: NO_PIN
         ms2_pin: NO_PIN
         ms3_pin: NO_PIN
-  shared_stepper_disable_pin: gpio.25
+  shared_stepper_disable_pin: gpio.25:low
   shared_stepper_reset_pin: NO_PIN
   y:
     steps_per_mm: 160

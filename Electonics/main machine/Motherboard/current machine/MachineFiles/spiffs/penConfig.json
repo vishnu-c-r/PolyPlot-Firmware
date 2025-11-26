@@ -1,0 +1,58 @@
+  {
+  "pens": [
+    {
+      "color": "#000000",
+      "name": "black",
+      "zValue": "-20",
+      "penPick": ["; Gray", "M6T1"],
+      "penDrop": ["; Gray Finished"],
+      "feedRate": "8000",
+      "skipped": "false"
+    },
+    {
+      "color": "#ffff00",
+      "name": "Yellow",
+      "zValue": "-20",
+      "penPick": ["; Yellow", "M6T2"],
+      "penDrop": ["; Yellow Finished"],
+      "feedRate": "8000",
+      "skipped": "false"
+    },
+    {
+      "color": "#008000",
+      "name": "Green",
+      "zValue": "-20",
+      "penPick": ["; Green", "M6T3"],
+      "penDrop": ["; Green Finished"],
+      "feedRate": "8000",
+      "skipped": "false"
+    },
+    {
+      "color": "#227fe3",
+      "name": "Blue",
+      "zValue": "-20",
+      "penPick": ["; Blue", "M6T4"],
+      "penDrop": ["; Blue Finished"],
+      "feedRate": "8000",
+      "skipped": "false"
+    },
+    {
+      "color": "#a020f0",
+      "name": "Purple",
+      "zValue": "-20",
+      "penPick": ["; Purple", "M6T5"],
+      "penDrop": ["; Purple Finished"],
+      "feedRate": "8000",
+      "skipped": "false"
+    },
+    {
+      "color": "#ffc0cb",
+      "name": "Pink",
+      "zValue": "-20",
+      "penPick": ["; Pink", "M6T6"],
+      "penDrop": ["; Pink Finished"],
+      "feedRate": "8000",
+      "skipped": "false"
+    }
+  ]
+}

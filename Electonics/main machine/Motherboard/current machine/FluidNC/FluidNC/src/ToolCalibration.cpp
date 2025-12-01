@@ -164,7 +164,11 @@ namespace ToolCalibration {
     _stage         = 0;
     sys.step_control.executeSysMotion = false;
     set_state(State::Idle);
-    moveToOriginAfterCalibration();
+    // moveToOriginAfterCalibration();
+    if (Machine::Axes::homingMask) {
+        log_info("ToolCalibration: Homing machine after calibration...");
+        Machine::Homing::run_cycles(Machine::Axes::homingMask);
+    }
     }
 
     void onLimit(Machine::LimitPin* limit) {

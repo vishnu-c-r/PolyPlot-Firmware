@@ -12,11 +12,15 @@
 #include "WebUI/Commands.h"
 #include "GCode.h"  // gc_sync_position
 
+#include "Machine/Homing.h"
+
 #include <algorithm>
 #include <tuple>
 #include <cmath>
 #include <string>
 #include <cstdio>
+
+#include "WebUI/JSONEncoder.h"
 
 using namespace Machine;
 
@@ -29,10 +33,96 @@ namespace {
     PassData pass1x, pass1y, pass2x, pass2y;
     bool softLimitsPrev = false;
 
-    constexpr float ORIGIN_INSET = 0.02f; // mm inward from chosen bound
+    constexpr float ORIGIN_INSET = 0.1f; // mm inward from chosen bound
+    const char* tempCalibFile = "/spiffs/calib_temp.json";
 
     inline float round01(float v) {
         return floorf(v * 10.0f + 0.5f) / 10.0f;
+    }
+
+    // Helper to parse a float from JSON string given a key
+    float parseJsonFloat(const std::string& json, const std::string& key) {
+        std::string qKey = "\"" + key + "\":";
+        size_t pos = json.find(qKey);
+        if (pos == std::string::npos) return 0.0f;
+        pos += qKey.length();
+        // Skip optional quote if the encoder added one
+        if (pos < json.length() && json[pos] == '"') pos++;
+        return std::strtof(json.substr(pos).c_str(), nullptr);
+    }
+
+    // Helper to parse bool
+    bool parseJsonBool(const std::string& json, const std::string& key) {
+        std::string qKey = "\"" + key + "\":";
+        size_t pos = json.find(qKey);
+        if (pos == std::string::npos) return false;
+        pos += qKey.length();
+        // Skip optional quote
+        if (pos < json.length() && json[pos] == '"') pos++;
+        // check for "true"
+        if (json.substr(pos, 4) == "true") return true;
+        return false;
+    }
+
+    void saveCalibrationState() {
+        std::string output;
+        WebUI::JSONencoder j(&output);
+        j.begin();
+        j.begin_member_object("pass1");
+        j.member("captured", (pass1x.captured && pass1y.captured) ? "true" : "false");
+        j.fmember("limit_x", pass1x.limit_mpos);
+        j.fmember("start_x", pass1x.start_mpos);
+        j.fmember("limit_y", pass1y.limit_mpos);
+        j.fmember("start_y", pass1y.start_mpos);
+        j.end_object();
+
+        j.begin_member_object("pass2");
+        j.member("captured", (pass2x.captured && pass2y.captured) ? "true" : "false");
+        j.fmember("limit_x", pass2x.limit_mpos);
+        j.fmember("start_x", pass2x.start_mpos);
+        j.fmember("limit_y", pass2y.limit_mpos);
+        j.fmember("start_y", pass2y.start_mpos);
+        j.end_object();
+        j.end();
+
+        FileStream file(tempCalibFile, "w", "");
+        if (file) {
+            file.write((const uint8_t*)output.c_str(), output.length());
+        }
+    }
+
+    void loadCalibrationState() {
+        FileStream file(tempCalibFile, "r", "");
+        if (!file) return;
+        std::string json;
+        char buf[128];
+        size_t len;
+        while ((len = file.read(buf, sizeof(buf))) > 0) {
+            json.append(buf, len);
+        }
+
+        // Parse Pass 1
+        size_t p1 = json.find("\"pass1\"");
+        if (p1 != std::string::npos) {
+            std::string sub = json.substr(p1);
+            pass1x.limit_mpos = parseJsonFloat(sub, "limit_x");
+            pass1x.start_mpos = parseJsonFloat(sub, "start_x");
+            pass1y.limit_mpos = parseJsonFloat(sub, "limit_y");
+            pass1y.start_mpos = parseJsonFloat(sub, "start_y");
+            bool cap = parseJsonBool(sub, "captured");
+            pass1x.captured = cap; pass1y.captured = cap;
+        }
+        // Parse Pass 2
+        size_t p2 = json.find("\"pass2\"");
+        if (p2 != std::string::npos) {
+            std::string sub = json.substr(p2);
+            pass2x.limit_mpos = parseJsonFloat(sub, "limit_x");
+            pass2x.start_mpos = parseJsonFloat(sub, "start_x");
+            pass2y.limit_mpos = parseJsonFloat(sub, "limit_y");
+            pass2y.start_mpos = parseJsonFloat(sub, "start_y");
+            bool cap = parseJsonBool(sub, "captured");
+            pass2x.captured = cap; pass2y.captured = cap;
+        }
     }
 
     // Plan a long move along a single axis toward the homing-direction limit as a system motion
@@ -103,9 +193,9 @@ namespace {
         pass1x = PassData{}; pass1y = PassData{}; pass2x = PassData{}; pass2y = PassData{};
     }
 
-    void persistAndRestart() {
-    auto axX = config->_axes->_axis[X_AXIS];
-    auto axY = config->_axes->_axis[Y_AXIS];
+    void commitConfigAndRestart() {
+        auto axX = config->_axes->_axis[X_AXIS];
+        auto axY = config->_axes->_axis[Y_AXIS];
 
         // Compute per-axis using both passes. For each axis we seek the same limit both passes.
         struct AxisResult {
@@ -127,8 +217,7 @@ namespace {
         auto computeAxis = [&](const PassData& p1, const PassData& p2, Machine::Axis* axs) -> AxisResult {
             AxisResult r{};
             // Use both passes: each pass starts with mpos reset to 0, so limit_mpos is the distance from the current physical
-            // starting position to the same limit direction. The larger of the two distances approximates the full span to that
-            // limit from the opposite side; the smaller is the short clearance from near that limit.
+            // starting position to the same limit direction.
             const float L1 = p1.limit_mpos;
             const float L2 = p2.limit_mpos;
             r.L       = L1;  // keep for logging
@@ -137,22 +226,43 @@ namespace {
             r.pulloff = axs->commonPulloff();
             r.pos     = axs->_homing ? axs->_homing->_positiveDirection : true;
 
-            const float Lmin   = std::min(L1, L2);
-            const float Lmax   = std::max(L1, L2);
-            const float nearNoPul = Lmin;             // near the homed limit; do NOT subtract pulloff
-            const float spanP     = Lmax - r.pulloff; // far side gets inward pulloff for safety
+            // Override direction based on measured values if they are consistent
+            // If we moved positive to hit limits, we are homing to Max -> Positive Homing
+            if (L1 > 0 && L2 > 0) {
+                r.pos = true;
+            } 
+            // If we moved negative to hit limits, we are homing to Min -> Negative Homing
+            else if (L1 < 0 && L2 < 0) {
+                r.pos = false;
+            }
 
-            // Mirror ToolCalibration semantics:
-            //  - For positive homing direction, map axis into negative space: more negative is farther from the homed limit.
-            //  - For negative homing direction, map axis into positive space: more positive is farther from the homed limit.
+            float nearDist, farDist;
             if (r.pos) {
-                // Positive homing: whole work area lives in negative coordinates.
-                r.minRaw = -spanP;        // far side (pulled in)
-                r.maxRaw = -nearNoPul;    // near the homed limit (no pulloff here)
+                nearDist = std::min(L1, L2); // e.g. 5
+                farDist  = std::max(L1, L2); // e.g. 300
             } else {
-                // Negative homing: whole work area lives in positive coordinates.
-                r.minRaw = nearNoPul;     // near the homed limit (no pulloff)
-                r.maxRaw = spanP;         // far side (pulled in)
+                nearDist = std::max(L1, L2); // e.g. -5 (larger value, smaller magnitude)
+                farDist  = std::min(L1, L2); // e.g. -300 (smaller value, larger magnitude)
+            }
+
+            // We define the coordinate system such that the "Start" of the Short Pass (near limit) is 0.0.
+            // This corresponds to the machine position after pull-off (assuming the user started P1/P2 from there).
+            
+            if (r.pos) {
+                // Positive Homing. Limit is at +nearDist.
+                // Soft Max (near Limit) = Limit - pulloff
+                r.maxRaw = nearDist - r.pulloff;
+                
+                // Soft Min (Far side) = Limit - farDist + pulloff
+                // (Assuming Far Start was at the physical limit)
+                r.minRaw = nearDist - farDist + r.pulloff;
+            } else {
+                // Negative Homing. Limit is at nearDist (negative).
+                // Soft Min (near Limit) = Limit + pulloff
+                r.minRaw = nearDist + r.pulloff;
+                
+                // Soft Max (Far side) = Limit - farDist - pulloff
+                r.maxRaw = nearDist - farDist - r.pulloff;
             }
 
             // Place origin near the bound closer to zero and inset slightly inward.
@@ -333,6 +443,16 @@ namespace {
         replaceKeyInBlock("max_y", yr.max);
         replaceKeyInBlock("origin_y", yr.origin);
 
+        // Update in-memory config
+        if (config->_workArea) {
+            config->_workArea->_minX = xr.min;
+            config->_workArea->_maxX = xr.max;
+            config->_workArea->_originX = xr.origin;
+            config->_workArea->_minY = yr.min;
+            config->_workArea->_maxY = yr.max;
+            config->_workArea->_originY = yr.origin;
+        }
+
         // Write back in-place to the existing config.yaml
         // Clean up any stale temp file from older firmware versions
         {
@@ -361,10 +481,20 @@ namespace {
 
 namespace WorkAreaCalibration {
     void startPass(int pass) {
-    if (isCalibrating()) return; // don't re-enter
+        if (pass == 3) {
+            // Commit command
+            loadCalibrationState();
+            commitConfigAndRestart();
+            return;
+        }
+
+        if (isCalibrating()) return; // don't re-enter
+        
         // Only fully reset before pass 1 so we keep pass 1 measurements for pass 2
         if (pass == 1) {
             reset();
+        } else if (pass == 2) {
+            loadCalibrationState(); // Restore P1 if needed
         }
         currentPass = pass;
     // Enter calibration state up-front so protocol knows to run system motion
@@ -407,7 +537,7 @@ namespace WorkAreaCalibration {
         if (currentPass == 1) {
             if (axis == X_AXIS && !pass1x.captured) { pass1x.captured = true; pass1x.limit_mpos = m; }
             if (axis == Y_AXIS && !pass1y.captured) { pass1y.captured = true; pass1y.limit_mpos = m; }
-        } else if (currentPass == 2) {
+        } else if (currentPass == 2 || currentPass == 3) {
             if (axis == X_AXIS && !pass2x.captured) { pass2x.captured = true; pass2x.limit_mpos = m; }
             if (axis == Y_AXIS && !pass2y.captured) { pass2y.captured = true; pass2y.limit_mpos = m; }
         }
@@ -420,15 +550,12 @@ namespace WorkAreaCalibration {
             // Finish pass; re-enable soft limits
             if (config->_axes->_numberAxis > 0) config->_axes->_axis[X_AXIS]->_softLimits = true;
             if (config->_axes->_numberAxis > 1) config->_axes->_axis[Y_AXIS]->_softLimits = true;
-            if (currentPass == 2) {
-                // On pass 2, compute, persist, then fully reset state
-                persistAndRestart();
-                reset();
-            } else {
-                // On pass 1, keep captured values; just return to idle state
-                set_state(State::Idle);
-                stage = Stage::Idle;
-            }
+            
+            // Save current state (P1 or P2)
+            saveCalibrationState();
+            
+            set_state(State::Idle);
+            stage = Stage::Idle;
         }
     }
 

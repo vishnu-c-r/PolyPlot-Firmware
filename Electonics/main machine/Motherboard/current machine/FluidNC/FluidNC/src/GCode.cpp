@@ -1770,7 +1770,7 @@ Error gc_execute_line(char* line) {
                 if (pass == 0) {
                     pass = 1;
                 }
-                if (pass != 1 && pass != 2) {
+                if (pass != 1 && pass != 2 && pass != 3) {
                     FAIL(Error::GcodeValueWordMissing);
                 }
                 log_info("Starting work area calibration pass " << pass);

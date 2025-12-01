@@ -508,15 +508,17 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     currentPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, currentPos))
         return false;
-    if (current_loaded_pen > 0 && (current_loaded_pen == nextPen || nextPen == 0)) {
+    if (current_loaded_pen > 0 && (current_loaded_pen == nextPen == 0)) {
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
             return false;
         current_loaded_pen = 0;
-        log_info("Pen redocked and cleared: " << nextPen);
+        toolConfig.saveCurrentState(current_loaded_pen);
+        // log_info("Pen redocked and cleared: " << nextPen);
     } else if (current_loaded_pen == 0 && nextPen > 0) {
         if (!mc_pick_pen(pl_data, nextPen, startPos))
             return false;
         current_loaded_pen = nextPen;
+        toolConfig.saveCurrentState(current_loaded_pen);
     } else if (current_loaded_pen > 0 && nextPen > 0 && current_loaded_pen != nextPen) {
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
             return false;
@@ -524,6 +526,7 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         if (!mc_pick_pen(pl_data, nextPen, startPos))
             return false;
         current_loaded_pen = nextPen;
+        toolConfig.saveCurrentState(current_loaded_pen);
     }
 
     // Restore original feed rate
@@ -582,13 +585,13 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    targetPos[X_AXIS] = -480.0f;
-    if (!safeMove(pl_data, targetPos))
-        return false;
+    // targetPos[X_AXIS] = -480.0f;
+    // if (!safeMove(pl_data, targetPos))
+    //     return false;
 
-    targetPos[Z_AXIS] = 0.0f;
-    if (!safeMove(pl_data, targetPos))
-        return false;
+    // targetPos[Z_AXIS] = 0.0f;
+    // if (!safeMove(pl_data, targetPos))
+    //     return false;
 
     targetPos[X_AXIS] = -440.0f;
     if (!safeMove(pl_data, targetPos))

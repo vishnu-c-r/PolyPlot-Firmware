@@ -39,8 +39,8 @@ This project is part of a government initiative undertaken by **SSK** to establi
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/your-repo/ssk-mtm-academic-internship.git
-   cd ssk-mtm-academic-internship
+   https://github.com/vishnu-c-r/PolyPlot-Firmware.git
+   cd PolyPlot-Firmware
    ```
 
 2. **Install Firmware**

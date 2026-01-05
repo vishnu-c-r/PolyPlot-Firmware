@@ -115,22 +115,22 @@ namespace ToolCalibration {
             // If tool 1 is negative, search Negative.
             _movingPositiveX = (cfg.getTool(1)->x >= 0);
         } else if (config->_axes->_axis[X_AXIS] && config->_axes->_axis[X_AXIS]->_homing) {
-            // Search AWAY from Home? Or TOWARDS Home?
-            // Usually calibration implies finding Home/Ref.
-            // But logic above suggests we are finding the tool bank.
-            // Let's assume standard behavior: Calibration = Find Homing Switches.
-            _movingPositiveX = config->_axes->_axis[X_AXIS]->_homing->_positiveDirection;
+            // Search AWAY from Home.
+            // For this machine, Home is at 0 (Positive Limit), and Tools are at Negative Limit (-500).
+            // So we must move opposite to the homing direction to find the tool bank.
+            _movingPositiveX = !config->_axes->_axis[X_AXIS]->_homing->_positiveDirection;
         } else {
-            _movingPositiveX = true; // Default
+            _movingPositiveX = false; // Default to Negative for typical plotter X-
         }
 
         // Decide Y direction
         if (useToolConfig && cfg.getTool(1)) {
             _movingPositiveY = (cfg.getTool(1)->y >= 0);
         } else if (config->_axes->_axis[Y_AXIS] && config->_axes->_axis[Y_AXIS]->_homing) {
-            _movingPositiveY = config->_axes->_axis[Y_AXIS]->_homing->_positiveDirection;
+            // Search AWAY from Home.
+            _movingPositiveY = !config->_axes->_axis[Y_AXIS]->_homing->_positiveDirection;
         } else {
-            _movingPositiveY = true;
+            _movingPositiveY = false; // Default to Negative
         }
 
         log_info("ToolCalibration: Direction X=" << (_movingPositiveX ? "Pos" : "Neg") << " Y=" << (_movingPositiveY ? "Pos" : "Neg"));

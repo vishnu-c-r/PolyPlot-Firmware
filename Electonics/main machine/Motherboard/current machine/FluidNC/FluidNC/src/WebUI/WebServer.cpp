@@ -1930,6 +1930,10 @@ namespace WebUI {
         if (_upload_status != UploadStatus::FAILED) {
             //Create file for writing
             try {
+                if (_uploadFile) {
+                    delete _uploadFile;
+                    _uploadFile = nullptr;
+                }
                 _uploadFile    = new FileStream(fpath, "w");
                 _upload_status = UploadStatus::ONGOING;
             } catch (const Error err) {

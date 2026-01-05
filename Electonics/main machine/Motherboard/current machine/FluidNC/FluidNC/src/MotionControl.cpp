@@ -478,7 +478,6 @@ void mc_critical(ExecAlarm alarm) {
 // Implements the pen change sequence using mc_pen_change, mc_pick_pen, and mc_drop_pen.
 // -----------------------------------------------------------------------------
 bool mc_pen_change(plan_line_data_t* pl_data) {
-    static int current_loaded_pen = 0;
     int        nextPen            = pl_data->penNumber;
 
     float original_feed_rate = pl_data->feed_rate;
@@ -490,6 +489,9 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
         log_error("Failed to load tool config");
         return false;
     }
+
+    // Always trust the persistent state instead of a static variable
+    int current_loaded_pen = toolConfig.getLastKnownState();
 
     float currentPos[MAX_N_AXIS], startPos[MAX_N_AXIS];
     copyAxes(currentPos, gc_state.position);
@@ -508,7 +510,8 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     currentPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, currentPos))
         return false;
-    if (current_loaded_pen > 0 && (current_loaded_pen == nextPen == 0)) {
+
+    if (current_loaded_pen > 0 && nextPen == 0) {
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
             return false;
         current_loaded_pen = 0;

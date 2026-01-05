@@ -17,6 +17,8 @@ namespace ToolCalibration {
     static float _xLimitMpos[MAX_N_AXIS];
     static float _yLimitMpos[MAX_N_AXIS];
     static float _pendingZ      = 0.0f;     // user-specified Z capture
+    static bool  _movingPositiveX = true;   // Track direction for math
+    static bool  _movingPositiveY = true;
 
     static const int REPORT_LINE_NUMBER = 0;
 
@@ -59,13 +61,19 @@ namespace ToolCalibration {
         }
     }
 
-    static void planAxisTowardPositiveLimit(size_t axis) {
+    static void planAxisTowardLimit(size_t axis, bool positive) {
         float target[MAX_N_AXIS];
         float* current_mpos = get_mpos();
         copyAxes(target, current_mpos);
         float travel_distance = config->_axes->_axis[axis] ? config->_axes->_axis[axis]->_maxTravel * 1.2f : 1000.0f;
-        target[axis] += travel_distance; // move positive
-        log_info("ToolCalibration: Planning +limit move for axis " << axis << " from " << current_mpos[axis] << " to " << target[axis]);
+
+        if (positive) {
+            target[axis] += travel_distance;
+        } else {
+            target[axis] -= travel_distance;
+        }
+
+        log_info("ToolCalibration: Planning limit move for axis " << axis << " (" << (positive ? "Pos" : "Neg") << ") from " << current_mpos[axis] << " to " << target[axis]);
 
         plan_line_data_t plan_data = {};
         plan_data.motion                = {};
@@ -89,8 +97,43 @@ namespace ToolCalibration {
 
     void startCalibration() {
         if (_isCalibrating) return;
-        log_info("ToolCalibration: Starting tool calibration toward +limits...");
+        log_info("ToolCalibration: Starting tool calibration...");
         set_state(State::ToolCalibration);
+
+        // Determine directions.
+        // Default to checking Homing direction.
+        // If Homing is Positive, we assume Home is at the "safe" end and Tools are at the "other" end (Negative).
+        // If Homing is Negative, we assume Tools are at Positive.
+        // This is a heuristic because we don't have explicit "Tool Bank Direction" config.
+        // We can check existing tool config to see where tools are.
+
+        auto& cfg = WebUI::ToolConfig::getInstance();
+        bool useToolConfig = cfg.ensureLoaded();
+
+        // Decide X direction
+        if (useToolConfig && cfg.getTool(1)) {
+            // If tool 1 is negative, search Negative.
+            _movingPositiveX = (cfg.getTool(1)->x >= 0);
+        } else if (config->_axes->_axis[X_AXIS] && config->_axes->_axis[X_AXIS]->_homing) {
+            // Search AWAY from Home? Or TOWARDS Home?
+            // Usually calibration implies finding Home/Ref.
+            // But logic above suggests we are finding the tool bank.
+            // Let's assume standard behavior: Calibration = Find Homing Switches.
+            _movingPositiveX = config->_axes->_axis[X_AXIS]->_homing->_positiveDirection;
+        } else {
+            _movingPositiveX = true; // Default
+        }
+
+        // Decide Y direction
+        if (useToolConfig && cfg.getTool(1)) {
+            _movingPositiveY = (cfg.getTool(1)->y >= 0);
+        } else if (config->_axes->_axis[Y_AXIS] && config->_axes->_axis[Y_AXIS]->_homing) {
+            _movingPositiveY = config->_axes->_axis[Y_AXIS]->_homing->_positiveDirection;
+        } else {
+            _movingPositiveY = true;
+        }
+
+        log_info("ToolCalibration: Direction X=" << (_movingPositiveX ? "Pos" : "Neg") << " Y=" << (_movingPositiveY ? "Pos" : "Neg"));
 
         float* mpos = get_mpos();
         for (size_t i = 0; i < config->_axes->_numberAxis; ++i) _startMpos[i] = mpos[i];
@@ -100,7 +143,7 @@ namespace ToolCalibration {
 
         _isCalibrating = true;
         _stage = 1;
-        planAxisTowardPositiveLimit(X_AXIS);
+        planAxisTowardLimit(X_AXIS, _movingPositiveX);
     }
 
     bool isCalibrating() { return _isCalibrating; }
@@ -120,23 +163,20 @@ namespace ToolCalibration {
         if (config->_axes->_numberAxis > 1) config->_axes->_axis[Y_AXIS]->_softLimits = true;
         float tool1x;
         float tool1y;
-        if (config->_workArea) {
-            float xPul = getAxisPulloff(X_AXIS);
-            float yPul = getAxisPulloff(Y_AXIS);
-            // X: keep negative-space mapping (origin referenced, pulloff removed, then negated)
-            float diffX = _xLimitMpos[X_AXIS] - config->_workArea->_originX - xPul;
-            tool1x      = -diffX;
-            // Y: now also map into negative space like X (origin referenced, pulloff removed, then negated)
-            float diffY = _yLimitMpos[Y_AXIS] - config->_workArea->_originY - yPul;
-            tool1y      = -diffY;
-            log_info("ToolCalibration: mapped tool1 (limitX=" << _xLimitMpos[X_AXIS] << ", originX=" << config->_workArea->_originX << ", pulloffX=" << xPul
-                     << ") => X=" << tool1x << "; (limitY=" << _yLimitMpos[Y_AXIS] << ", originY=" << config->_workArea->_originY << ", pulloffY=" << yPul
-                     << ") => Y=" << tool1y);
-        } else {
-            // Fallback to start position if no work area defined
-            tool1x = _startMpos[X_AXIS];
-            tool1y = _startMpos[Y_AXIS];
-        }
+
+        // Calculate tool positions based on limits found.
+        // Assume Tool Position = Limit Position - (Direction * Pulloff)
+        float xPul = getAxisPulloff(X_AXIS);
+        float yPul = getAxisPulloff(Y_AXIS);
+
+        float dirX = (_movingPositiveX ? 1.0f : -1.0f);
+        float dirY = (_movingPositiveY ? 1.0f : -1.0f);
+
+        tool1x = _xLimitMpos[X_AXIS] - (dirX * xPul);
+        tool1y = _yLimitMpos[Y_AXIS] - (dirY * yPul);
+
+        log_info("ToolCalibration: mapped tool1 X=" << tool1x << " (Limit=" << _xLimitMpos[X_AXIS] << ", Pulloff=" << xPul << ", Dir=" << dirX << ")");
+        log_info("ToolCalibration: mapped tool1 Y=" << tool1y << " (Limit=" << _yLimitMpos[Y_AXIS] << ", Pulloff=" << yPul << ", Dir=" << dirY << ")");
 
         // If user already provided a Z (via subsequent M155 Z<val>) keep it, else 0
         float tool1z = _pendingZ;
@@ -183,9 +223,9 @@ namespace ToolCalibration {
             plan_reset();
             float* mpos = get_mpos();
             for (size_t i = 0; i < config->_axes->_numberAxis; ++i) _xLimitMpos[i] = mpos[i];
-            log_info("ToolCalibration: X +limit captured @ " << _xLimitMpos[X_AXIS]);
+            log_info("ToolCalibration: X limit captured @ " << _xLimitMpos[X_AXIS]);
             _stage = 2;
-            planAxisTowardPositiveLimit(Y_AXIS); // Queue Y approach
+            planAxisTowardLimit(Y_AXIS, _movingPositiveY); // Queue Y approach
             return;
         } else if (_stage == 2) {
             if (limit->_axis != Y_AXIS) {

@@ -61,6 +61,28 @@ namespace Machine {
         ~Start() = default;
     };
 
+    class ToolBank : public Configuration::Configurable {
+    public:
+        float _approachX  = -440.0f;  // X boundary where slow/precise approach begins
+        float _insertX    = -480.0f;  // X position for pen insertion into holder
+        float _spacing    = 42.0f;    // mm between successive tools along -Y
+        float _zDefault   = -9.5f;    // default Z for all tools
+        int   _count      = 6;        // total number of tool slots
+
+    public:
+        ToolBank() {}
+
+        void group(Configuration::HandlerBase& handler) {
+            handler.item("approach_x", _approachX);
+            handler.item("insert_x", _insertX);
+            handler.item("spacing", _spacing, 0.1, 500.0);
+            handler.item("z_default", _zDefault);
+            handler.item("count", _count, 1, 12);
+        }
+
+        ~ToolBank() = default;
+    };
+
     class WorkArea : public Configuration::Configurable {
     public:
         float _minX                    = -1000.0f;  // Default to very large area if not configured
@@ -69,8 +91,8 @@ namespace Machine {
         float _maxY                    = 1000.0f;
         float _originX                 = 0.0f;  // The X coordinate to move to after homing
         float _originY                 = 0.0f;  // The Y coordinate to move to after homing
-        bool  _enabled                 = true;  // Add enable/disable flag
-        bool  _moveToOriginAfterHoming = true;  // Whether to move to origin after homing
+        bool  _enabled                 = false; // Default disabled unless explicitly configured
+        bool  _moveToOriginAfterHoming = false; // Whether to move to origin after homing
 
     public:
         WorkArea() {}
@@ -107,6 +129,7 @@ namespace Machine {
         Macros*                   _macros         = nullptr;
         Start*                    _start          = nullptr;
         WorkArea*                 _workArea       = nullptr;
+        ToolBank*                 _toolBank       = nullptr;
         Parking*                  _parking        = nullptr;
         OLED*                     _oled           = nullptr;
         Status_Outputs*           _stat_out       = nullptr;

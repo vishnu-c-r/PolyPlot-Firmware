@@ -29,6 +29,9 @@ namespace ToolCalibration {
     // Returns true while calibration is in progress
     bool isCalibrating();
 
+    // Call from protocol loop to detect stalled axis seeks (limit switch failure)
+    void checkTimeout();
+
     // Abort calibration and restore machine state
     void abortCalibration();
 

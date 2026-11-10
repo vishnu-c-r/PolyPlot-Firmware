@@ -40,9 +40,6 @@ struct plan_line_data_t {
     float precise_feedrate;   // Slower precise movement feed rate for actual pen change
 };
 
-// Now safe to include pen.h
-#include "pen.h"
-
 #include <cstdint>
 
 // This struct stores a linear movement of a g-code block motion with its critical "nominal" values

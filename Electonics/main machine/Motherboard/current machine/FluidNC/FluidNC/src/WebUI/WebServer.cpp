@@ -44,6 +44,7 @@
 #    include "src/MotionControl.h"  // for mc_drop_pen and motion helpers
 
 extern volatile bool pen_change;
+extern void          feed_watchdog();
 
 namespace WebUI {
     const byte DNS_PORT = 53;
@@ -734,9 +735,10 @@ namespace WebUI {
         std::error_code ec;
         // Serving policy:
         // - During an active job: avoid SD entirely (prevent VFS FD exhaustion); use LocalFS only.
-        // - When idle (no active job): prefer SD first; fall back to LocalFS if not present.
+        // - When idle (no active job): SD first (web UI lives on SD card), then LocalFS fallback.
 
         if (Job::active()) {
+            // Job running: LocalFS only to avoid SD SPI contention
             FluidPath spiffsPath { path, localfsName, ec };
             if (!ec) {
                 return streamFileFromPath(spiffsPath, download);
@@ -744,8 +746,8 @@ namespace WebUI {
             return false;
         }
 
-        // No active job: SD first
-        {
+        // No active job: SD first (index.html.gz and web UI assets are on SD)
+        if (config->_sdCard && config->_sdCard->config_ok) {
             FluidPath sdPath { path, sdName, ec };
             if (!ec) {
                 if (streamFileFromPath(sdPath, download)) {
@@ -753,7 +755,8 @@ namespace WebUI {
                 }
             }
         }
-        // Fallback to LocalFS (SPIFFS)
+
+        // Fallback to LocalFS (config files, favicon, etc.)
         {
             FluidPath spiffsPath { path, localfsName, ec };
             if (!ec) {
@@ -860,7 +863,8 @@ namespace WebUI {
                     break;
                 }
                 bytesRemaining -= bytesToRead;
-                delay(0);  // Prevent watchdog trigger and free CPU
+                feed_watchdog();
+                vTaskDelay(1);
             }
         } catch (const Error err) { success = false; }
 

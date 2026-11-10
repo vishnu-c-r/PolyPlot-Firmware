@@ -47,3 +47,11 @@ void disable_core0_WDT() {
         log_error("Failed to remove Core 0 IDLE task from WDT " << err);
     }
 }
+
+void feed_watchdog() {
+    esp_task_wdt_reset();
+}
+
+void add_watchdog_to_task() {
+    esp_task_wdt_add(NULL);  // NULL means current task
+}

@@ -24,7 +24,7 @@ namespace Kinematics {
     // circle plane axis, caxes[1] is the second circle plane axis, and caxes[2] is the
     // orthogonal plane.  So for G17 mode, caxes[] is { 0, 1, 2} for { X, Y, Z}.  G18 is {2, 0, 1} i.e. {Z, X, Y}, and G19 is {1, 2, 0} i.e. {Y, Z, X}
     bool Cartesian::invalid_arc(
-        float* target, plan_line_data_t* pl_data, float* position, float center[3], float radius, size_t caxes[3], bool is_clockwise_arc) {
+        float* target, plan_line_data_t* pl_data, float* position, float center[3], float radius, size_t caxes[3], bool is_clockwise_arc, uint32_t rotations) {
         pl_data->limits_checked = true;
 
         auto axes = config->_axes;
@@ -50,6 +50,18 @@ namespace Kinematics {
             return false;
         }
 
+        // Axis crossings - plus and minus caxes[0] and caxes[1]
+        bool p[2] = { false, false };
+        bool m[2] = { false, false };
+
+        if (rotations > 1) {
+            // The arc does at least a full circle around the center before arriving at
+            // the target position, so we need to check all axis crossings.
+            p[0] = p[1] = m[0] = m[1] = true;
+        } else {
+            // The arc does less than a full circle before arriving at the target position,
+            // so the axis crossings are determined by the arc direction and the start and end points.
+
         // The origin for this calculation's coordinate system is at the center of the arc.
         // The 0 and 1 entries are for the circle plane
         // and the 2 entry is the orthogonal (linear) direction
@@ -70,10 +82,6 @@ namespace Kinematics {
             e[0] = target[caxes[0]] - center[0];
             e[1] = target[caxes[1]] - center[1];
         }
-
-        // Axis crossings - plus and minus caxes[0] and caxes[1]
-        bool p[2] = { false, false };
-        bool m[2] = { false, false };
 
         // The following decision tree determines whether the arc crosses
         // the horizontal and vertical axes of the circular plane in the
@@ -152,6 +160,7 @@ namespace Kinematics {
                 }
             }
         }
+        } // else (rotations <= 1)
         // Now check limits based on arc endpoints and axis crossings
         for (size_t a = 0; a < 2; ++a) {
             the_axis = caxes[a];

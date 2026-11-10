@@ -15,4 +15,7 @@ namespace WorkAreaCalibration {
 
     bool isCalibrating();
     void abortCalibration();
+
+    // Call from protocol loop to detect stalled axis seeks (limit switch failure)
+    void checkTimeout();
 }

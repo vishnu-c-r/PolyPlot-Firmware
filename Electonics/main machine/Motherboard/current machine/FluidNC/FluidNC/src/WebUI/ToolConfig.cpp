@@ -2,6 +2,7 @@
 #include "../FileStream.h"
 #include "../GCode.h"  // For MAX_PENS
 #include "JSONEncoder.h"
+#include <filesystem>
 
 namespace WebUI {
 
@@ -35,11 +36,18 @@ namespace WebUI {
 
     bool ToolConfig::saveConfig() {
         try {
-            {  // Scope for automatic file closure
-                FileStream  file(configPath, "w");
-                std::string jsonStr = toJSON();
+            std::string jsonStr = toJSON();
+            {  // Write to temp file first
+                FileStream file(configTmpPath, "w");
                 file.write(reinterpret_cast<const uint8_t*>(jsonStr.c_str()), jsonStr.length());
-            }  // File closed automatically here
+            }  // File closed before rename
+            // Atomic rename: if power is lost here, the old config survives intact
+            std::error_code ec;
+            std::filesystem::rename(configTmpPath, configPath, ec);
+            if (ec) {
+                log_error("Failed to rename temp tool config: " << ec.message().c_str());
+                return false;
+            }
             return true;
         } catch (const Error err) {
             log_error("Failed to save tool config");
@@ -248,16 +256,22 @@ namespace WebUI {
 
     bool ToolConfig::saveCurrentState(int currentPen) {
         try {
-            {  // Scope for automatic file closure
-                FileStream  file(stateFile, "w");
-                std::string output;
-                JSONencoder j(&output);  // Fix: Pass string pointer to constructor
-                j.begin();
-                j.member("currentPen", std::to_string(currentPen).c_str());
-                j.member("timestamp", std::to_string(esp_timer_get_time()).c_str());
-                j.end();
-                file.write(reinterpret_cast<const uint8_t*>(output.c_str()), output.length());  // Fix: Use output string
-            }  // File closed automatically here
+            std::string output;
+            JSONencoder j(&output);
+            j.begin();
+            j.member("currentPen", std::to_string(currentPen).c_str());
+            j.member("timestamp", std::to_string(esp_timer_get_time()).c_str());
+            j.end();
+            {  // Write to temp file first
+                FileStream file(stateTmpFile, "w");
+                file.write(reinterpret_cast<const uint8_t*>(output.c_str()), output.length());
+            }  // File closed before rename
+            std::error_code ec;
+            std::filesystem::rename(stateTmpFile, stateFile, ec);
+            if (ec) {
+                log_error("Failed to rename temp pen state: " << ec.message().c_str());
+                return false;
+            }
             return true;
         } catch (const Error err) {
             log_error("Failed to save pen state");

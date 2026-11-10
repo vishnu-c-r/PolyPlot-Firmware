@@ -9,7 +9,6 @@
 #include "Planner.h"
 #include "Config.h"
 #include "Probe.h"
-#include "Pen.h"  // Make sure this is included
 
 #include <cstdint>
 

@@ -47,7 +47,7 @@ namespace WebUI {
     static const char* DEFAULT_STA_IP     = "0.0.0.0";
     static const char* DEFAULT_STA_GW     = "0.0.0.0";
     static const char* DEFAULT_STA_MK     = "0.0.0.0";
-    static const char* DEFAULT_AP_SSID    = "PenPlotter";
+    static const char* DEFAULT_AP_SSID    = "WaterPlot";
     static const char* DEFAULT_AP_PWD     = "12345678";
     static const char* DEFAULT_AP_IP      = "192.168.0.1";
     static const char* DEFAULT_AP_MK      = "255.255.255.0";
@@ -110,7 +110,7 @@ namespace WebUI {
         static bool _events_registered;
 
         static std::string _hostname;
-        
+
         // NEW: Static variables for WiFi heap corruption fix test
         static bool _delayed_fallback_pending;   // Flag for deferred AP fallback
         static bool _fallback_in_progress;       // Race condition protection

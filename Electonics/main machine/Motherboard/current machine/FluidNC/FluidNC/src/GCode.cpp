@@ -17,7 +17,6 @@
 #include "Platform.h"             // WEAK_LINK
 #include "Job.h"
 #include "ToolCalibration.h"      // Tool calibration functionality
-#include "Pen.h"
 #include "WebUI/ToolConfig.h"
 #include "WorkAreaCalibration.h"
 

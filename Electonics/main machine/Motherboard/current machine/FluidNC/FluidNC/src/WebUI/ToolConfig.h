@@ -67,8 +67,10 @@ namespace WebUI {
         bool                 cacheValid   = false;
         std::vector<Tool>    tools;
         std::string          cachedJson;
-        const char*          configPath = "/spiffs/toolconfig.json";
-        const char*          stateFile  = "/spiffs/penstate.json";
-        static constexpr int MAX_TOOLS  = 6;
+        const char*          configPath    = "/spiffs/toolconfig.json";
+        const char*          configTmpPath = "/spiffs/toolconfig.tmp";
+        const char*          stateFile     = "/spiffs/penstate.json";
+        const char*          stateTmpFile  = "/spiffs/penstate.tmp";
+        static constexpr int MAX_TOOLS     = 6;
     };
 }

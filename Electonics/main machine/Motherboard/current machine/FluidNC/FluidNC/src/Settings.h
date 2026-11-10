@@ -245,7 +245,7 @@ public:
     // Return a pointer to the array
     const float* get() { return _currentValue; }
     // Get an individual component
-    const float get(int axis) { return _currentValue[axis]; }
+    float get(int axis) { return _currentValue[axis]; }
     // Set an individual component
     void set(int axis, float value) { _currentValue[axis] = value; }
 

@@ -154,8 +154,8 @@ namespace Machine {
         auto axes   = config->_axes;
         auto n_axis = axes->_numberAxis;
 
-        float rates[n_axis]    = { 0 };
-        float distance[n_axis] = { 0 };
+        float rates[MAX_N_AXIS]    = { 0 };
+        float distance[MAX_N_AXIS] = { 0 };
 
         bool seeking  = phase == Machine::Homing::Phase::FastApproach;
         bool approach = seeking || phase == Machine::Homing::Phase::SlowApproach;

@@ -64,6 +64,9 @@ namespace Machine {
         // Add work area configuration
         handler.section("work_area", _workArea);
 
+        // Tool bank configuration (approach/insert positions, spacing, Z default)
+        handler.section("tool_bank", _toolBank);
+
         handler.section("control", _control);
         handler.section("coolant", _coolant);
         handler.section("probe", _probe);
@@ -133,6 +136,10 @@ namespace Machine {
 
         if (_workArea == nullptr) {
             _workArea = new WorkArea();
+        }
+
+        if (_toolBank == nullptr) {
+            _toolBank = new ToolBank();
         }
 
         if (_parking == nullptr) {

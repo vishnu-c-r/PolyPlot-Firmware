@@ -24,6 +24,10 @@
 #include "ToolCalibration.h"
 #include "WorkAreaCalibration.h"
 
+// Watchdog functions defined in esp32/wdt.cpp
+extern void feed_watchdog();
+extern void add_watchdog_to_task();
+
 volatile ExecAlarm lastAlarm;  // The most recent alarm code
 
 volatile const char* unwind_cause = nullptr;
@@ -110,8 +114,9 @@ char activeLine[Channel::maxLine];
 
 bool pollingPaused = false;
 void polling_loop(void* unused) {
+    add_watchdog_to_task();
     // Poll the input sources waiting for a complete line to arrive
-    for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
+    for (; true; feed_watchdog(), vTaskDelay(1)) {
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
             vTaskDelay(100);
@@ -250,13 +255,14 @@ uint32_t heapLowWaterReported   = UINT_MAX;
 int32_t  heapLowWaterReportTime = 0;
 
 void protocol_main_loop() {
+    add_watchdog_to_task();
     start_polling();
 
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
     // This is also where the system idles while waiting for something to do.
     // ---------------------------------------------------------------------------------
-    for (;; vTaskDelay(0)) {
+    for (;; vTaskDelay(1)) {
         if (activeChannel) {
             // The input polling task has collected a line of input
             if (gcode_echo->get()) {
@@ -435,7 +441,7 @@ static void protocol_do_start() {
 }
 
 static void protocol_do_alarm(void* alarmVoid) {
-    lastAlarm = (ExecAlarm)((int)alarmVoid);
+    lastAlarm = (ExecAlarm)((int)(intptr_t)alarmVoid);
     alarm_msg(lastAlarm);
     if (lastAlarm == ExecAlarm::HardLimit || lastAlarm == ExecAlarm::HardStop) {
         set_state(State::Critical);  // Set system alarm state
@@ -485,8 +491,10 @@ void protocol_do_motion_cancel() {
     // will handle and clear multiple planner block motions.
     switch (sys.state) {
         case State::Alarm:
+        case State::Critical:
         case State::ConfigAlarm:
         case State::CheckMode:
+        case State::PenChange:
             return;  // Do not set motionCancel
 
         case State::Idle:
@@ -508,6 +516,8 @@ void protocol_do_motion_cancel() {
         case State::Sleep:
         case State::Hold:
         case State::SafetyDoor:
+        case State::ToolCalibration:
+        case State::WorkAreaCalibration:
             break;
     }
     sys.suspend.bit.motionCancel = true;
@@ -523,9 +533,13 @@ static void protocol_do_feedhold() {
     switch (sys.state) {
         case State::ConfigAlarm:
         case State::Alarm:
+        case State::Critical:
         case State::CheckMode:
         case State::SafetyDoor:
         case State::Sleep:
+        case State::PenChange:
+        case State::ToolCalibration:
+        case State::WorkAreaCalibration:
             return;  // Do not change the state to Hold
 
         case State::Homing:
@@ -562,8 +576,12 @@ static void protocol_do_safety_door() {
         case State::ConfigAlarm:
             return;
         case State::Alarm:
+        case State::Critical:
         case State::CheckMode:
         case State::Sleep:
+        case State::PenChange:
+        case State::ToolCalibration:
+        case State::WorkAreaCalibration:
             rtSafetyDoor = false;
             return;  // Do not change the state to SafetyDoor
 
@@ -615,6 +633,7 @@ static void protocol_do_sleep() {
     switch (sys.state) {
         case State::ConfigAlarm:
         case State::Alarm:
+        case State::Critical:
             sys.suspend.bit.retractComplete = true;
             sys.suspend.bit.holdComplete    = true;
             break;
@@ -634,6 +653,9 @@ static void protocol_do_sleep() {
         case State::Hold:
         case State::Homing:
         case State::SafetyDoor:
+        case State::PenChange:
+        case State::ToolCalibration:
+        case State::WorkAreaCalibration:
             break;
     }
     set_state(State::Sleep);
@@ -721,10 +743,12 @@ static void protocol_do_cycle_start() {
             break;
         case State::ConfigAlarm:
         case State::Alarm:
+        case State::Critical:
         case State::CheckMode:
         case State::Sleep:
         case State::Cycle:
         case State::Jog:
+        case State::PenChange:
             break;
     }
 }
@@ -784,6 +808,8 @@ void protocol_do_cycle_stop() {
             // Fall through
         case State::ConfigAlarm:
         case State::Alarm:
+        case State::Critical:
+        case State::PenChange:
             break;
         case State::CheckMode:
         case State::Idle:
@@ -811,7 +837,8 @@ void protocol_do_cycle_stop() {
             Machine::Homing::cycleStop();
             break;
         case State::ToolCalibration:
-            break; // rollback: nothing extra on cycle stop
+        case State::WorkAreaCalibration:
+            break;
     }
 }
 
@@ -848,19 +875,28 @@ void protocol_exec_rt_system() {
     switch (sys.state) {
         case State::ConfigAlarm:
         case State::Alarm:
+        case State::Critical:
         case State::CheckMode:
         case State::Idle:
         case State::Sleep:
+        case State::PenChange:
             break;
-    case State::Cycle:
-    case State::Hold:
-    case State::SafetyDoor:
-    case State::Homing:
-    case State::ToolCalibration:
-    case State::WorkAreaCalibration:
-    case State::Jog:
+        case State::Cycle:
+        case State::Hold:
+        case State::SafetyDoor:
+        case State::Homing:
+        case State::ToolCalibration:
+        case State::WorkAreaCalibration:
+        case State::Jog:
             Stepper::prep_buffer();
             break;
+    }
+
+    // Check for calibration seek timeouts (limit switch failure safety net)
+    if (state_is(State::ToolCalibration)) {
+        ToolCalibration::checkTimeout();
+    } else if (state_is(State::WorkAreaCalibration)) {
+        WorkAreaCalibration::checkTimeout();
     }
 }
 
@@ -1044,7 +1080,10 @@ const ArgEvent rapidOverrideEvent { protocol_do_rapid_override };
 const ArgEvent accessoryOverrideEvent { protocol_do_accessory_override };
 const ArgEvent limitEvent { protocol_do_limit };
 const ArgEvent faultPinEvent { protocol_do_fault_pin };
-const ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
+static void protocol_do_status_report(void* channelVoid) {
+    report_realtime_status(*reinterpret_cast<Channel*>(channelVoid));
+}
+const ArgEvent reportStatusEvent { protocol_do_status_report };
 
 const NoArgEvent safetyDoorEvent { request_safety_door };
 const NoArgEvent feedHoldEvent { protocol_do_feedhold };
@@ -1065,8 +1104,8 @@ const ArgEvent alarmEvent { (void (*)(void*))protocol_do_alarm };
 xQueueHandle event_queue;
 
 void protocol_init() {
-    event_queue   = xQueueCreate(10, sizeof(EventItem));
-    message_queue = xQueueCreate(10, sizeof(LogMessage));
+    event_queue   = xQueueCreate(50, sizeof(EventItem));
+    message_queue = xQueueCreate(15, sizeof(LogMessage));
 }
 
 void IRAM_ATTR protocol_send_event_from_ISR(const Event* evt, void* arg) {
@@ -1078,9 +1117,11 @@ void protocol_send_event(const Event* evt, void* arg) {
     xQueueSend(event_queue, &item, 0);
 }
 void protocol_handle_events() {
+    feed_watchdog();
     EventItem item;
     while (xQueueReceive(event_queue, &item, 0)) {
         item.event->run(item.arg);
+        feed_watchdog();
     }
 }
 void send_alarm(ExecAlarm alarm) {

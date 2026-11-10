@@ -18,7 +18,6 @@
 #include "I2SOut.h"            // I2S motor output support
 #include "Platform.h"          // Core-specific functions and macros
 #include "Settings.h"          // Global coordinate system information
-#include "Pen.h"               // Pen flags and routines
 
 #include <cmath>
 
@@ -145,7 +144,7 @@ void mc_arc(float*            target,
 
     // The first two axes are the circle plane and the third is the orthogonal plane
     size_t caxes[3] = { axis_0, axis_1, axis_linear };
-    if (config->_kinematics->invalid_arc(target, pl_data, position, center, radius, caxes, is_clockwise_arc)) {
+    if (config->_kinematics->invalid_arc(target, pl_data, position, center, radius, caxes, is_clockwise_arc, pword_rotations)) {
         return;
     }
 
@@ -155,7 +154,7 @@ void mc_arc(float*            target,
 
     auto n_axis = config->_axes->_numberAxis;
 
-    float previous_position[n_axis] = { 0.0 };
+    float previous_position[MAX_N_AXIS] = { 0.0 };
     for (size_t i = 0; i < n_axis; i++) {
         previous_position[i] = position[i];
     }
@@ -196,7 +195,7 @@ void mc_arc(float*            target,
             pl_data->motion.inverseTime = 0;  // Force as feed absolute mode over arc segments.
         }
         float theta_per_segment = angular_travel / segments;
-        float linear_per_segment[n_axis];
+        float linear_per_segment[MAX_N_AXIS];
         linear_per_segment[axis_linear] = (target[axis_linear] - position[axis_linear]) / segments;
         for (size_t i = A_AXIS; i < n_axis; i++) {
             linear_per_segment[i] = (target[i] - position[i]) / segments;
@@ -493,6 +492,14 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     // Always trust the persistent state instead of a static variable
     int current_loaded_pen = toolConfig.getLastKnownState();
 
+    // Check for collision risk between current and target pen
+    if (current_loaded_pen > 0 && nextPen > 0 && current_loaded_pen != nextPen) {
+        if (toolConfig.checkCollisionRisk(current_loaded_pen, nextPen)) {
+            log_error("Pen change aborted: collision risk between pen " << current_loaded_pen << " and pen " << nextPen);
+            return false;
+        }
+    }
+
     float currentPos[MAX_N_AXIS], startPos[MAX_N_AXIS];
     copyAxes(currentPos, gc_state.position);
     copyAxes(startPos, currentPos);
@@ -510,7 +517,10 @@ bool mc_pen_change(plan_line_data_t* pl_data) {
     currentPos[Z_AXIS] = 0;
     if (!safeMove(pl_data, currentPos))
         return false;
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
     if (current_loaded_pen > 0 && nextPen == 0) {
         if (!mc_drop_pen(pl_data, current_loaded_pen, startPos))
             return false;
@@ -562,6 +572,8 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     protocol_buffer_synchronize();
     plan_sync_position();
 
+    float approachX = config->_toolBank->_approachX;
+
     targetPos[Z_AXIS] = -1.0f;
     if (!safeMove(pl_data, targetPos))
         return false;
@@ -570,11 +582,11 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    targetPos[X_AXIS] = -440.0f;
+    targetPos[X_AXIS] = approachX;
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    // Switch to precise_feedrate when moving past X=-440 boundary
+    // Switch to precise_feedrate when moving past approach boundary
     pl_data->use_exact_feedrate = true;
     pl_data->feed_rate          = precise_feedrate;
     protocol_buffer_synchronize();
@@ -588,15 +600,7 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    // targetPos[X_AXIS] = -480.0f;
-    // if (!safeMove(pl_data, targetPos))
-    //     return false;
-
-    // targetPos[Z_AXIS] = 0.0f;
-    // if (!safeMove(pl_data, targetPos))
-    //     return false;
-
-    targetPos[X_AXIS] = -440.0f;
+    targetPos[X_AXIS] = approachX;
     if (!safeMove(pl_data, targetPos))
         return false;
 
@@ -605,10 +609,6 @@ bool mc_pick_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     pl_data->feed_rate          = approach_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
-
-    // targetPos[X_AXIS] = -440.0f;
-    // if (!safeMove(pl_data, targetPos))
-    //     return false;
 
     pl_data->feed_rate = original_feed_rate;
     return true;
@@ -629,6 +629,8 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     }
 
     // Pen drop sequence:
+    float approachX = config->_toolBank->_approachX;
+    float insertX   = config->_toolBank->_insertX;
 
     // Use approach_feedrate for initial moves
     pl_data->use_exact_feedrate = false;
@@ -644,17 +646,17 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    targetPos[X_AXIS] = -440.0f;
+    targetPos[X_AXIS] = approachX;
     if (!safeMove(pl_data, targetPos))
         return false;
 
-    // Switch to precise_feedrate when moving past X=-440 boundary
+    // Switch to precise_feedrate when moving past approach boundary
     pl_data->use_exact_feedrate = true;
     pl_data->feed_rate          = precise_feedrate;
     protocol_buffer_synchronize();
     plan_sync_position();
 
-    targetPos[X_AXIS] = -480.0f;
+    targetPos[X_AXIS] = insertX;
     if (!safeMove(pl_data, targetPos))
         return false;
 
@@ -676,7 +678,7 @@ bool mc_drop_pen(plan_line_data_t* pl_data, int penNumber, float startPos[MAX_N_
     protocol_buffer_synchronize();
     plan_sync_position();
 
-    targetPos[X_AXIS] = -440.0f;
+    targetPos[X_AXIS] = approachX;
     if (!safeMove(pl_data, targetPos))
         return false;
 

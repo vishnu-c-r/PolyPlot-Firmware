@@ -68,31 +68,10 @@ def deploy():
 
     # 4. Extract and restart services
     print("[4/6] Extracting files and restarting systemd services...", flush=True)
-    worker_service_unit = """[Unit]
-Description=Plotter Studio Auto Mode Worker
-After=network.target plotter-studio.service
-Wants=plotter-studio.service
-
-[Service]
-Type=simple
-User=rpi3b
-WorkingDirectory=/opt/spirit/water-plot
-Environment=NODE_ENV=production
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-ExecStart=/usr/local/bin/node /opt/spirit/water-plot/dist/worker.cjs
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-"""
-    cmd = f"""
+    cmd = """
     echo pi3b | sudo -S tar -xzf /tmp/deploy_update.tar.gz -C /opt/spirit/water-plot
     rm -f /tmp/deploy_update.tar.gz
-    echo '{worker_service_unit}' | sudo tee /etc/systemd/system/plotter-worker.service > /dev/null
-    sudo systemctl daemon-reload
-    sudo systemctl enable plotter-worker.service
-    sudo systemctl restart spirit.service plotter-studio.service plotter-worker.service
+    echo pi3b | sudo -S systemctl restart plotter-studio.service
     """
     stdin, stdout, stderr = client.exec_command(cmd, timeout=120)
     out = stdout.read().decode().strip()

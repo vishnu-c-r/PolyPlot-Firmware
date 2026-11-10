@@ -1,12 +1,14 @@
 import "server-only";
 
 import { AiConfigError, getAiConfig, type AiConfig } from "./config";
+import { generateLineArtImage } from "./imageGen";
 import { buildInput, buildInstructions, buildRepairInput } from "./prompts";
 import { createGeminiProvider } from "./providers/gemini";
 import { createGroqProvider } from "./providers/groq";
 import { DesignError, FAILED, type DesignProvider } from "./providers/shared";
 import { fitBox, sanitizeSvg } from "./sanitizeSvg";
 import { FONT_IDS, type Design, type DesignRequest, type DesignResponse, type ModelDesign } from "./schema";
+import { traceImageToSvg } from "./vectorize";
 import { shouldOfferWebSearch } from "./webSearch";
 
 /** The provider chosen by AI_PROVIDER (gemini by default). */
@@ -17,11 +19,11 @@ function createProvider(config: AiConfig): DesignProvider {
 function toDesign(model: ModelDesign, config: AiConfig, illustration: Design["illustration"]): Design {
     const text = model.text
         ? {
-              lines: model.text.lines.map((line) => line.trim()).filter(Boolean),
-              font: model.text.font,
-              fontId: FONT_IDS[model.text.font],
-              box: fitBox(config.area, model.text.box),
-          }
+            lines: model.text.lines.map((line) => line.trim()).filter(Boolean),
+            font: model.text.font,
+            fontId: FONT_IDS[model.text.font],
+            box: fitBox(config.area, model.text.box),
+        }
         : null;
 
     return {
@@ -71,6 +73,35 @@ export async function generateDesign(request: DesignRequest): Promise<{ body: De
         const usedWebSearch = found !== null;
 
         const category = request.mode === "refine" ? request.previous!.category : request.category;
+
+        // Route A: If generating line art, attempt native AI image generation + vector tracing (Potrace)
+        if (request.mode === "generate" && (category === "line_art" || category === "auto")) {
+            try {
+                console.info("[AI] Attempting Route A: AI Image Generation + Vector Trace...");
+                const imgBuffer = await generateLineArtImage(request.prompt, config.apiKey);
+                const rawSvg = await traceImageToSvg(imgBuffer);
+                const sanitized = sanitizeSvg(rawSvg, config.area, null);
+                if (sanitized.ok) {
+                    const illustration = { svg: sanitized.svg, box: sanitized.box };
+                    const autoDesign: ModelDesign = {
+                        status: "success",
+                        title: request.prompt.slice(0, 32),
+                        description: `Clean vector line art of ${request.prompt}`,
+                        category: "line_art",
+                        text: null,
+                        clarification: null,
+                        message: null,
+                        illustration,
+                    };
+                    return ok({ status: "success", design: toDesign(autoDesign, config, illustration), sources: [], usedWebSearch: false });
+                } else {
+                    console.warn("[AI] Route A trace rejected by sanitizer:", sanitized.reasons);
+                }
+            } catch (err) {
+                console.warn("[AI] Route A image generation / trace bypassed:", err instanceof Error ? err.message : err);
+            }
+        }
+
         const instructions = buildInstructions(config.area, category, Boolean(found?.notes));
         const input = buildInput(request, previousSvg, found?.notes || null);
 

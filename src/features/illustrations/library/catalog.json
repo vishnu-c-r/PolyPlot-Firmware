@@ -1,5 +1,65 @@
 [
   {
+    "id": "picasso-face",
+    "name": "One-Line Face",
+    "category": "single_line",
+    "file": "picasso-face.svg"
+  },
+  {
+    "id": "woman-and-dog",
+    "name": "Woman & Dog",
+    "category": "single_line",
+    "file": "woman-and-dog.svg"
+  },
+  {
+    "id": "rose-blossom",
+    "name": "Single-Line Rose",
+    "category": "single_line",
+    "file": "rose-blossom.svg"
+  },
+  {
+    "id": "curled-cat",
+    "name": "Curled Cat",
+    "category": "single_line",
+    "file": "curled-cat.svg"
+  },
+  {
+    "id": "hummingbird",
+    "name": "Hummingbird",
+    "category": "single_line",
+    "file": "hummingbird.svg"
+  },
+  {
+    "id": "monstera-leaf",
+    "name": "Monstera Leaf",
+    "category": "single_line",
+    "file": "monstera-leaf.svg"
+  },
+  {
+    "id": "one-line-butterfly",
+    "name": "Butterfly",
+    "category": "single_line",
+    "file": "one-line-butterfly.svg"
+  },
+  {
+    "id": "mountain-sun",
+    "name": "Mountain & Sun",
+    "category": "single_line",
+    "file": "mountain-sun.svg"
+  },
+  {
+    "id": "mandala-lotus",
+    "name": "Lotus Mandala",
+    "category": "mandalas",
+    "file": "mandala-lotus.svg"
+  },
+  {
+    "id": "mandala-sacred",
+    "name": "Sacred Geometry",
+    "category": "mandalas",
+    "file": "mandala-sacred.svg"
+  },
+  {
     "id": "bloop",
     "name": "Bloop",
     "category": "characters",

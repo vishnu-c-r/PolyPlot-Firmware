@@ -1,6 +1,6 @@
 allowBuilds:
   better-sqlite3: true
-  canvas: set this to true or false
+  canvas: false
   esbuild: true
   protobufjs: false
   sharp: false

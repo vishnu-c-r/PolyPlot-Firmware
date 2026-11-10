@@ -13,7 +13,7 @@ import { formatDuration } from "./format";
 
 /** Plotter connection as a dot and a word. */
 export function PlotterStatus({ className = "" }: { className?: string }) {
-    const { link, gatewayConnected, telemetry } = usePlotter();
+    const { link, gatewayConnected, telemetry, unlock } = usePlotter();
 
     const [tone, label]: [Tone, string] =
         link !== "online"
@@ -28,6 +28,19 @@ export function PlotterStatus({ className = "" }: { className?: string }) {
         <span className={cn("inline-flex items-center gap-1.5 text-caption text-muted", className)}>
             <StatusDot tone={tone} live={link !== "online"} />
             {label}
+            {gatewayConnected && telemetry?.state === "Alarm" && (
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void unlock();
+                    }}
+                    className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-700 hover:bg-amber-500/25 active:scale-95 transition-all"
+                    title="Clear Alarm ($X)"
+                >
+                    Unlock ($X)
+                </button>
+            )}
         </span>
     );
 }
@@ -100,10 +113,10 @@ export function PlotterHud({
                     {running && progress
                         ? `Line ${progress.current_line.toLocaleString()} / ${progress.total_lines.toLocaleString()}`
                         : job.result
-                          ? `Took ${formatDuration(job.result.duration_seconds)}`
-                          : running
-                            ? "Starting…"
-                            : ""}
+                            ? `Took ${formatDuration(job.result.duration_seconds)}`
+                            : running
+                                ? "Starting…"
+                                : ""}
                 </span>
                 {running && progress && <span className="numeric">{formatDuration(progress.estimated_remaining_seconds)} left</span>}
             </div>

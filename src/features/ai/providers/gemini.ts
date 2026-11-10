@@ -56,7 +56,7 @@ function checkFinished(interaction: Interaction, what: string) {
         console.warn(`[AI] Gemini ${what} hit the token limit (${usage?.total_output_tokens ?? "?"} out, ${usage?.total_thought_tokens ?? 0} thinking)${idNote(interaction)}`);
         throw new DesignError(TOO_DETAILED, 502);
     }
-    const codes = (interaction.errors ?? []).map((error) => error.code).filter(Boolean).join(", ");
+    const codes = ((interaction.errors ?? []) as Array<{ code?: string }>).map((error) => error.code).filter(Boolean).join(", ");
     console.warn(`[AI] Gemini ${what} ended with status ${interaction.status}${codes ? ` (${codes})` : ""}${idNote(interaction)}`);
     throw new DesignError(FAILED, 502);
 }

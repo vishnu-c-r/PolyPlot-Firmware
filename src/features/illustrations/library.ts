@@ -7,7 +7,7 @@ import path from "node:path";
  * catalog.json (only artwork you have the rights to).
  */
 
-export type IllustrationCategory = "characters" | "decorative";
+export type IllustrationCategory = "single_line" | "mandalas" | "characters" | "decorative";
 
 export interface Illustration {
     id: string;

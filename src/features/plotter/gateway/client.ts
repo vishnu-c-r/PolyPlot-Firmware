@@ -28,7 +28,16 @@ export function gatewayUrl(): string {
 
 /** The gateway's telemetry WebSocket URL. */
 export function gatewaySocketUrl(): string {
-    return `${gatewayUrl().replace(/^http/, "ws")}/ws`;
+    const custom = process.env.GATEWAY_WS_URL?.trim();
+    if (custom) return custom;
+    const base = gatewayUrl();
+    try {
+        const u = new URL(base);
+        if (u.port === "8080") {
+            return `ws://${u.hostname}:8081`;
+        }
+    } catch { }
+    return `${base.replace(/^http/, "ws")}/ws`;
 }
 
 async function request<T>(path: string, init: RequestInit = {}, timeout = REQUEST_TIMEOUT_MS): Promise<T> {
@@ -77,6 +86,12 @@ export const resume = () => post<{ status: string }>("/api/control/resume");
 
 /** Abort and reset (Ctrl-X). */
 export const abort = () => post<{ status: string }>("/api/control/abort");
+
+/** Clear alarm / unlock ($X). */
+export const unlock = () => post<{ status: string }>("/api/control/unlock");
+
+/** Execute homing cycle ($H). */
+export const home = () => post<{ status: string }>("/api/control/home");
 
 export const jog = (move: JogRequest) => post<{ status: string }>("/api/control/jog", move);
 

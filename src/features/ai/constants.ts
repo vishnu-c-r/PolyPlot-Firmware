@@ -19,7 +19,7 @@ export const LIMITS = {
     refinementMax: 300,
     textLinesMax: 6,
     textLineMax: 80,
-    svgMax: 60_000,
+    svgMax: 500_000,
     titleMax: 80,
     descriptionMax: 240,
     questionMax: 200,

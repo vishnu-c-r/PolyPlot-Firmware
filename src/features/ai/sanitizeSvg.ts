@@ -1,5 +1,6 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 
+import { PLOTTER_PROFILE } from "../plotter/profile";
 import { MARGIN_MM } from "./constants";
 
 /**
@@ -14,9 +15,9 @@ import { MARGIN_MM } from "./constants";
  */
 
 export const SVG_LIMITS = {
-    maxBytes: 200_000,
-    maxElements: 500,
-    maxPathChars: 60_000,
+    maxBytes: 500_000,
+    maxElements: 2_000,
+    maxPathChars: 400_000,
     maxDepth: 6,
     marginMm: MARGIN_MM,
     /** Boxes smaller than this (mm) are ignored in favour of the whole working area. */
@@ -72,6 +73,8 @@ const DROPPED_ATTRIBUTES = new Set([
     "stroke-linejoin",
     "stroke-miterlimit",
     "stroke-opacity",
+    "stroke-dasharray",
+    "stroke-dashoffset",
     "vector-effect",
     "id",
     "class",
@@ -81,7 +84,7 @@ const DROPPED_ATTRIBUTES = new Set([
 const DANGEROUS_VALUE = /url\s*\(|javascript:|data:|@import|expression\s*\(|<|&#/i;
 const NUMBER = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?(?:px)?$/;
 
-class Rejection extends Error {}
+class Rejection extends Error { }
 
 function parseNumber(value: string, name: string): number {
     const trimmed = value.trim();
@@ -502,7 +505,28 @@ export function sanitizeSvg(svg: string, area: { width: number; height: number }
         const height = maxY - minY;
         if (width <= 0 && height <= 0) throw new Rejection("the SVG has nothing to draw");
 
-        const scale = Math.min(width > 0 ? box.width / width : Infinity, height > 0 ? box.height / height : Infinity);
+        let scale = Math.min(width > 0 ? box.width / width : Infinity, height > 0 ? box.height / height : Infinity);
+
+        // Water plotter speed safeguard: clamp scale so total physical stroke length plots
+        // in under 45 seconds (target 15-30 seconds) before water evaporates from slate canvas.
+        const coords = body.match(/[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?/g);
+        if (coords && coords.length >= 4) {
+            let unscaledLen = 0;
+            for (let i = 2; i + 1 < coords.length; i += 2) {
+                const dx = parseFloat(coords[i]) - parseFloat(coords[i - 2]);
+                const dy = parseFloat(coords[i + 1]) - parseFloat(coords[i - 1]);
+                const d = Math.hypot(dx, dy);
+                if (Number.isFinite(d)) unscaledLen += d;
+            }
+            // At target feedrate (e.g. 10000 mm/min = 166.7 mm/s), 30s corresponds to ~5000mm.
+            // Strict 30-40s ceiling ensures drawing completes before water evaporates (< 45s).
+            const targetSeconds = 30;
+            const maxStrokeMm = Math.round((PLOTTER_PROFILE.feedRate / 60) * targetSeconds);
+            if (unscaledLen > 0 && unscaledLen * scale > maxStrokeMm) {
+                scale = maxStrokeMm / unscaledLen;
+            }
+        }
+
         const tx = box.x + (box.width - width * scale) / 2 - minX * scale;
         const ty = box.y + (box.height - height * scale) / 2 - minY * scale;
         const fitted = { x: box.x + (box.width - width * scale) / 2, y: box.y + (box.height - height * scale) / 2, width: width * scale, height: height * scale };

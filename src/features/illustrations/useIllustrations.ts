@@ -6,10 +6,13 @@ import type { Illustration, IllustrationCategory } from "./library";
 import useCanvas from "../workspace/canvas/CanvasContext";
 import { addSvgToPage } from "../workspace/canvas/insertSvg";
 import { useEditor } from "../workspace/editor/EditorContext";
+import { optimizeSvgPathLifts } from "../export/pathOptimizer";
 
 export const ILLUSTRATION_CATEGORIES: { id: IllustrationCategory; label: string }[] = [
+    { id: "single_line", label: "Single-Line Art (Minimal Lifts)" },
+    { id: "mandalas", label: "Mandalas & Sacred Geometry" },
     { id: "characters", label: "Characters" },
-    { id: "decorative", label: "Decorative" },
+    { id: "decorative", label: "Decorative & Frames" },
 ];
 
 export const illustrationUrl = (id: string) => `/api/illustrations/${encodeURIComponent(id)}`;
@@ -73,4 +76,38 @@ export function useInsertIllustration() {
     };
 
     return { inserting, error, insert, clearError: () => setError(null) };
+}
+
+/** Imports user's custom SVG artwork, optimizes it for minimal pen lifts, and places it on canvas. */
+export function useImportCustomArtwork() {
+    const canvasContext = useCanvas();
+    const { setTool } = useEditor();
+    const [importing, setImporting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const importSvg = async (svgText: string, forceSingleLine = false) => {
+        const { canvas, workspace } = canvasContext ?? {};
+        if (!canvas || !workspace || importing) return false;
+
+        setImporting(true);
+        setError(null);
+        setTool("Select");
+        try {
+            // Run through optimizer to eliminate pen lifts and order paths via nearest-neighbor TSP
+            const optimized = optimizeSvgPathLifts(svgText, {
+                joinTolerance: 2.0,
+                forceSingleLine,
+            });
+            await addSvgToPage(canvas, workspace, optimized.svg);
+            return true;
+        } catch (cause) {
+            console.error("Unable to import SVG artwork:", cause);
+            setError("Couldn't import this SVG artwork. Please verify format.");
+            return false;
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    return { importSvg, importing, error, clearError: () => setError(null) };
 }

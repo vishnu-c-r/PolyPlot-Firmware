@@ -87,8 +87,8 @@ export const MODEL_DESIGN_JSON_SCHEMA = {
     type: "object",
     properties: {
         status: { type: "string", enum: ["success", "needs_clarification", "error"] },
-        title: { type: ["string", "null"] },
-        description: { type: ["string", "null"] },
+        title: nullable({ type: "string" }),
+        description: nullable({ type: "string" }),
         category: nullable({ type: "string", enum: [...DESIGN_CATEGORIES] }),
         text: nullable({
             type: "object",
@@ -118,7 +118,7 @@ export const MODEL_DESIGN_JSON_SCHEMA = {
             required: ["question", "suggestions"],
             additionalProperties: false,
         }),
-        message: { type: ["string", "null"] },
+        message: nullable({ type: "string" }),
     },
     required: ["status", "title", "description", "category", "text", "illustration", "clarification", "message"],
     additionalProperties: false,

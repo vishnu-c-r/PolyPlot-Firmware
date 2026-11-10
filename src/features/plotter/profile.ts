@@ -12,8 +12,8 @@ export const PLOTTER_PROFILE = {
     zTravel: -0.5,
     /** No Z move may be faster than this. */
     zFeedMax: 1000,
-    /** Drawing feed. */
-    feedRate: 1400,
+    /** Drawing feed. Utilizing physical machine speed (up to 15000 mm/min, targeting 8000-12000 mm/min). */
+    feedRate: 10000,
     tolerance: 0.3,
 } as const;
 

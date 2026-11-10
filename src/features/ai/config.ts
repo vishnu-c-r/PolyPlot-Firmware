@@ -41,7 +41,7 @@ const SharedSchema = z.object({
         .trim()
         .toLowerCase()
         .optional()
-        .transform((value) => value || "gemini")
+        .transform((value) => value || (process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY ? "groq" : "gemini"))
         .pipe(z.enum(AI_PROVIDERS, { error: "AI_PROVIDER must be gemini or groq" })),
     AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(256).max(64_000),
     AI_ENABLE_WEB_SEARCH: booleanFlag.default(false),
@@ -100,9 +100,9 @@ export function getAiConfig(): AiConfig {
 
     if (shared.AI_PROVIDER === "groq") {
         const env = parse(GroqSchema);
-        if (!warnedAboutGroqKey && !env.GROQ_API_KEY.startsWith("gsk_")) {
+        if (!warnedAboutGroqKey && !env.GROQ_API_KEY.startsWith("gsk_") && !env.GROQ_API_KEY.startsWith("AQ.") && !env.GROQ_API_KEY.startsWith("AIza")) {
             warnedAboutGroqKey = true;
-            console.warn("[AI] GROQ_API_KEY doesn't look like a Groq key (expected the gsk_ prefix).");
+            console.warn("[AI] GROQ_API_KEY doesn't look like a standard key (expected gsk_, AQ., or AIza).");
         }
         return {
             provider: "groq",

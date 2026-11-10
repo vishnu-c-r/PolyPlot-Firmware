@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CaretDown, CaretUp } from "@phosphor-icons/react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CaretDown, CaretUp, House, LockOpen } from "@phosphor-icons/react";
 
 import { Field, Input } from "@/components/ui/field";
 import { SegmentedControl } from "@/components/ui/segmented";
@@ -12,18 +12,19 @@ import { usePlotter } from "../plotter/PlotterContext";
 const STEPS = [0.1, 1, 10] as const;
 type Step = (typeof STEPS)[number];
 const STEP_OPTIONS = STEPS.map((value) => ({ value: String(value), label: String(value) }));
-const DEFAULT_FEED = 3000;
+const DEFAULT_FEED = 10000;
 
 /**
  * Live machine position and a jog pad. Jogging is relative (mm) at the chosen step;
  * the server holds any move with Z to the Z feed ceiling.
  */
 export function MachinePanel() {
-    const { telemetry, gatewayConnected, busy, jog } = usePlotter();
+    const { telemetry, gatewayConnected, busy, jog, unlock, home } = usePlotter();
     const [step, setStep] = useState<Step>(1);
     const [feed, setFeed] = useState(DEFAULT_FEED);
 
     const live = gatewayConnected && telemetry !== null;
+    const isAlarm = telemetry?.state === "Alarm";
     const canJog = live && !busy;
     const move = (axis: "x" | "y" | "z", direction: 1 | -1) => () => void jog({ [axis]: step * direction, feed });
 
@@ -38,9 +39,43 @@ export function MachinePanel() {
                         </div>
                     ))}
                 </dl>
-                <p className="mt-2 text-caption text-muted">
-                    Feed <span className="numeric text-text">{live ? telemetry.feed.toLocaleString() : "—"}</span> mm/min
-                </p>
+                <div className="mt-2 flex items-center justify-between text-caption text-muted">
+                    <p>
+                        Feed <span className="numeric text-text">{live ? telemetry.feed.toLocaleString() : "—"}</span> mm/min
+                    </p>
+                    <span className="font-mono text-micro text-subtle">
+                        State: <span className={cn("font-semibold", isAlarm ? "text-danger" : "text-text")}>{live ? telemetry.state : "Offline"}</span>
+                    </span>
+                </div>
+            </div>
+
+            {/* Hardware Commands: Home Machine & Unlock */}
+            <div className="grid grid-cols-2 gap-2">
+                <button
+                    type="button"
+                    onClick={() => void home()}
+                    disabled={!live || busy}
+                    className="focus-ring flex h-8 items-center justify-center gap-1.5 rounded-control bg-surface-raised font-sans text-caption font-semibold text-text shadow-hairline transition-all hover:not-disabled:bg-surface-hover active:not-disabled:scale-98 disabled:opacity-40"
+                    title="Run homing cycle on all axes ($H)"
+                >
+                    <House size={15} weight="bold" />
+                    <span>Home Machine</span>
+                </button>
+                <button
+                    type="button"
+                    onClick={() => void unlock()}
+                    disabled={!live}
+                    className={cn(
+                        "focus-ring flex h-8 items-center justify-center gap-1.5 rounded-control font-sans text-caption font-semibold transition-all active:not-disabled:scale-98 disabled:opacity-40",
+                        isAlarm
+                            ? "bg-danger text-white shadow-hairline hover:brightness-110 ring-2 ring-danger/40 animate-pulse"
+                            : "bg-surface-raised text-text shadow-hairline hover:not-disabled:bg-surface-hover"
+                    )}
+                    title="Unlock machine and clear Alarm state ($X)"
+                >
+                    <LockOpen size={15} weight="bold" />
+                    <span>Unlock ($X)</span>
+                </button>
             </div>
 
             <div className="grid grid-cols-[1fr_auto] gap-2">

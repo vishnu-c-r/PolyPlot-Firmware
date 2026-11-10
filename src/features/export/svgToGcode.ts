@@ -1,6 +1,7 @@
 import { Converter, type ConverterSettings } from "svg-to-gcode";
 
 import { PLOTTER_PROFILE, appendPark, applyPenSafety, plotterConverterSettings, plotterParkPosition } from "../plotter/profile";
+import { optimizeSvgPathLifts } from "./pathOptimizer";
 
 export interface GcodeResult {
     gcode: string;
@@ -40,10 +41,13 @@ function finish(gcode: string, settings: ConverterSettings) {
  * Converts an SVG (user units read as 96 dpi px) to plotter-safe G-code using the
  * plotter profile, with optional setting overrides. The program ends with the pen
  * parked (see plotterParkPosition).
+ * Automatically runs path optimization to eliminate unnecessary pen lifts.
  */
 export async function convertSvgToGcode(svg: string, overrides: ConverterSettings = {}): Promise<GcodeResult> {
     const settings = { ...plotterConverterSettings(), ...overrides };
-    const result = await new Converter(settings).convert(svg);
+    // Optimize stroke continuity & reorder paths before converting
+    const optimized = optimizeSvgPathLifts(svg, { joinTolerance: 3.0 });
+    const result = await new Converter(settings).convert(optimized.svg);
     const gcode = finish(result.gcode, settings);
 
     return { gcode, time: result.time, lines: countLines(gcode) };

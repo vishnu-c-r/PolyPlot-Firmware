@@ -61,6 +61,8 @@ interface PlotterContextValue {
     hold: () => Promise<void>;
     resume: () => Promise<void>;
     abort: () => Promise<void>;
+    unlock: () => Promise<void>;
+    home: () => Promise<void>;
     jog: (move: { x?: number; y?: number; z?: number; feed: number }) => Promise<void>;
     /** Hides a finished job and clears the error. */
     dismiss: () => void;
@@ -267,7 +269,7 @@ export function PlotterProvider({ children }: PropsWithChildren) {
         input.click();
     }, [startJob]);
 
-    const control = useCallback(async (action: "hold" | "resume" | "abort") => {
+    const control = useCallback(async (action: "hold" | "resume" | "abort" | "unlock" | "home") => {
         setError(null);
         try {
             await postJson(`/api/plotter/control/${action}`);
@@ -279,6 +281,10 @@ export function PlotterProvider({ children }: PropsWithChildren) {
                 setJob((current) =>
                     current?.phase === "running" ? { ...current, phase: "aborted", percent: lastPercent.current } : current,
                 );
+            } else if (action === "unlock") {
+                logEvent("info", "Alarm unlocked ($X)");
+            } else if (action === "home") {
+                logEvent("info", "Homing triggered ($H)");
             }
         } catch (err) {
             const message = err instanceof Error ? err.message : `Couldn't ${action}.`;
@@ -327,6 +333,8 @@ export function PlotterProvider({ children }: PropsWithChildren) {
             hold: () => control("hold"),
             resume: () => control("resume"),
             abort: () => control("abort"),
+            unlock: () => control("unlock"),
+            home: () => control("home"),
             jog,
             dismiss,
         }),

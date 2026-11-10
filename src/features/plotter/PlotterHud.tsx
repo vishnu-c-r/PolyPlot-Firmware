@@ -19,10 +19,10 @@ export function PlotterStatus({ className = "" }: { className?: string }) {
         link !== "online"
             ? ["neutral", link === "connecting" ? "Connecting…" : "App offline"]
             : !gatewayConnected
-              ? ["danger", "Plotter offline"]
-              : telemetry?.state === "Alarm"
-                ? ["warn", "Alarm"]
-                : ["ok", telemetry?.state ?? "Online"];
+                ? ["danger", "Plotter offline"]
+                : telemetry?.state === "Alarm"
+                    ? ["warn", "Alarm"]
+                    : ["ok", telemetry?.state ?? "Online"];
 
     return (
         <span className={cn("inline-flex items-center gap-1.5 text-caption text-muted", className)}>
@@ -81,10 +81,10 @@ export function PlotterHud({
             ? ["Paused", "warn"]
             : ["Plotting", "accent"]
         : job.phase === "done"
-          ? ["Plot finished", "ok"]
-          : job.phase === "aborted"
-            ? ["Plot aborted", "neutral"]
-            : ["Plot failed", "danger"];
+            ? ["Plot finished", "ok"]
+            : job.phase === "aborted"
+                ? ["Plot aborted", "neutral"]
+                : ["Plot failed", "danger"];
 
     const onAbort = () => {
         if (!confirmAbort) {

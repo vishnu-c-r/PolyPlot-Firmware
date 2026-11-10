@@ -109,10 +109,10 @@ export function createGeminiProvider(config: AiConfig): DesignProvider {
                 const status = statusOf(error);
                 const reason =
                     status === 503 ? "is busy (503)"
-                    : status === 429 ? "is out of requests (429)"
-                    : status === 404 ? "isn't available (404)"
-                    : isTimeout(error) ? "is too slow"
-                    : null;
+                        : status === 429 ? "is out of requests (429)"
+                            : status === 404 ? "isn't available (404)"
+                                : isTimeout(error) ? "is too slow"
+                                    : null;
                 if (last || !reason) throw error;
                 console.warn(`[AI] ${model} ${reason}; trying ${config.models[index + 1]}`);
             }

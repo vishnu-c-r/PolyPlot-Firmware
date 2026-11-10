@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CaretDown, CaretUp, House, LockOpen } from "@phosphor-icons/react";
 
 import { Field, Input } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -51,31 +52,27 @@ export function MachinePanel() {
 
             {/* Hardware Commands: Home Machine & Unlock */}
             <div className="grid grid-cols-2 gap-2">
-                <button
-                    type="button"
+                <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => void home()}
                     disabled={!live || busy}
-                    className="focus-ring flex h-8 items-center justify-center gap-1.5 rounded-control bg-surface-raised font-sans text-caption font-semibold text-text shadow-hairline transition-all hover:not-disabled:bg-surface-hover active:not-disabled:scale-98 disabled:opacity-40"
                     title="Run homing cycle on all axes ($H)"
                 >
-                    <House size={15} weight="bold" />
+                    <House weight="bold" />
                     <span>Home Machine</span>
-                </button>
-                <button
-                    type="button"
+                </Button>
+                <Button
+                    size="sm"
+                    variant={isAlarm ? "danger-solid" : "secondary"}
+                    className={cn(isAlarm && "animate-pulse ring-2 ring-danger/40")}
                     onClick={() => void unlock()}
                     disabled={!live}
-                    className={cn(
-                        "focus-ring flex h-8 items-center justify-center gap-1.5 rounded-control font-sans text-caption font-semibold transition-all active:not-disabled:scale-98 disabled:opacity-40",
-                        isAlarm
-                            ? "bg-danger text-white shadow-hairline hover:brightness-110 ring-2 ring-danger/40 animate-pulse"
-                            : "bg-surface-raised text-text shadow-hairline hover:not-disabled:bg-surface-hover"
-                    )}
                     title="Unlock machine and clear Alarm state ($X)"
                 >
-                    <LockOpen size={15} weight="bold" />
+                    <LockOpen weight="bold" />
                     <span>Unlock ($X)</span>
-                </button>
+                </Button>
             </div>
 
             <div className="grid grid-cols-[1fr_auto] gap-2">
